@@ -20,23 +20,27 @@ type OutboundMessage =
   | { type: 'webview-ready' }
   | { type: 'request-new-session'; payload?: { cols: number; rows: number } }
   | { type: 'terminal-input'; payload: { sessionId: string; data: string } }
-  | { type: 'terminal-resize'; payload: { sessionId: string; cols: number; rows: number } };
+  | { type: 'terminal-resize'; payload: { sessionId: string; cols: number; rows: number } }
+  | { type: 'dispose-session'; payload: { sessionId: string } };
 
 type ViewState = {
   activeSessionId?: string;
   totalSessions: number;
+  sessionIds: string[];
 };
 
 const vscode = acquireVsCodeApi<ViewState>();
 
 const statusEl = document.querySelector('[data-session-status]') as HTMLSpanElement | null;
 const logEl = document.querySelector('[data-session-log]') as HTMLUListElement | null;
-const buttonEl = document.querySelector('[data-action="new-session"]') as HTMLButtonElement | null;
+const newSessionButton = document.querySelector('[data-action="new-session"]') as HTMLButtonElement | null;
+const disposeSessionButton = document.querySelector('[data-action="dispose-session"]') as HTMLButtonElement | null;
 const terminalRoot = document.getElementById('terminal-root') as HTMLDivElement | null;
 
-const savedState = vscode.getState() ?? { totalSessions: 0 };
+const savedState = vscode.getState() ?? { totalSessions: 0, sessionIds: [] };
 let activeSessionId = savedState.activeSessionId;
 let totalSessions = savedState.totalSessions ?? 0;
+let sessionIds = Array.isArray(savedState.sessionIds) ? [...savedState.sessionIds] : [];
 let pendingSessionRequest = false;
 
 const terminal = new Terminal({
@@ -79,12 +83,25 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
   switch (message.type) {
     case 'session-count':
       totalSessions = message.payload.total;
+      if (totalSessions === 0) {
+        sessionIds = [];
+        if (activeSessionId) {
+          activeSessionId = undefined;
+          terminal.reset();
+        }
+        setStatus('セッションがありません');
+      } else {
+        setStatus(`登録済みセッション: ${totalSessions} 件`);
+      }
       persistState();
-      setStatus(`登録済みセッション: ${totalSessions} 件`);
+      updateDisposeButtonState();
       break;
     case 'session-created':
       pendingSessionRequest = false;
-      setButtonBusy(false);
+      setNewSessionButtonBusy(false);
+      sessionIds = sessionIds.filter((id) => id !== message.payload.id);
+      sessionIds.push(message.payload.id);
+      persistState();
       activateSession(message.payload.id, message.payload.shell);
       appendLog(
         `${message.payload.shell} の新しいセッション (${message.payload.id}) を開始しました`
@@ -94,26 +111,36 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
       if (!activeSessionId) {
         activeSessionId = message.payload.sessionId;
         persistState();
+        updateDisposeButtonState();
       }
       if (message.payload.sessionId === activeSessionId) {
         terminal.write(message.payload.data);
       }
       break;
     case 'session-exited':
+      sessionIds = sessionIds.filter((id) => id !== message.payload.sessionId);
+      persistState();
       appendLog(
         `${message.payload.sessionId} が終了しました (code: ${
           message.payload.code ?? '―'
         }, signal: ${message.payload.signal ?? '―'})`
       );
       if (message.payload.sessionId === activeSessionId) {
-        activeSessionId = undefined;
-        persistState();
-        setStatus('セッションが終了しました');
+        const fallbackId = sessionIds[sessionIds.length - 1];
+        if (fallbackId) {
+          switchActiveSession(fallbackId, `セッション ${fallbackId} に切り替えました`);
+        } else {
+          activeSessionId = undefined;
+          persistState();
+          terminal.reset();
+          setStatus('セッションが終了しました');
+          updateDisposeButtonState();
+        }
       }
       break;
     case 'session-error':
       pendingSessionRequest = false;
-      setButtonBusy(false);
+      setNewSessionButtonBusy(false);
       setStatus(`エラー: ${message.payload.message}`);
       appendLog(`エラー: ${message.payload.message}`);
       break;
@@ -122,10 +149,21 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
   }
 });
 
-buttonEl?.addEventListener('click', () => {
+newSessionButton?.addEventListener('click', () => {
   requestNewSession();
 });
 
+disposeSessionButton?.addEventListener('click', () => {
+  if (!activeSessionId || pendingSessionRequest) {
+    return;
+  }
+  setStatus('セッションを終了しています…');
+  updateDisposeButtonState();
+  vscode.postMessage<OutboundMessage>({
+    type: 'dispose-session',
+    payload: { sessionId: activeSessionId }
+  });
+});
 window.addEventListener(
   'resize',
   debounce(() => {
@@ -141,13 +179,14 @@ if (!activeSessionId) {
   setStatus(`セッション ${activeSessionId} を復元中…`);
   notifyResize();
 }
+updateDisposeButtonState();
 
 function requestNewSession() {
   if (pendingSessionRequest) {
     return;
   }
   pendingSessionRequest = true;
-  setButtonBusy(true);
+  setNewSessionButtonBusy(true);
   setStatus('新しいセッションを初期化しています…');
   fitTerminal();
   vscode.postMessage<OutboundMessage>({
@@ -164,6 +203,19 @@ function activateSession(sessionId: string, shell?: string) {
   notifyResize();
   terminal.focus();
   setStatus(`${shell ?? 'シェル'} セッション ${sessionId} に接続しました`);
+  updateDisposeButtonState();
+}
+
+function switchActiveSession(sessionId: string, message: string) {
+  activeSessionId = sessionId;
+  persistState();
+  terminal.reset();
+  fitTerminal();
+  notifyResize();
+  terminal.focus();
+  setStatus(message);
+  appendLog(message);
+  updateDisposeButtonState();
 }
 
 function notifyResize() {
@@ -209,16 +261,24 @@ function appendLog(text: string) {
   }
 }
 
-function setButtonBusy(isBusy: boolean) {
-  if (!buttonEl) {
+function setNewSessionButtonBusy(isBusy: boolean) {
+  if (!newSessionButton) {
     return;
   }
-  buttonEl.disabled = isBusy;
-  buttonEl.textContent = isBusy ? '接続中…' : '新しいセッション';
+  newSessionButton.disabled = isBusy;
+  newSessionButton.textContent = isBusy ? '接続中…' : '新しいセッション';
+  updateDisposeButtonState();
+}
+
+function updateDisposeButtonState() {
+  if (!disposeSessionButton) {
+    return;
+  }
+  disposeSessionButton.disabled = !activeSessionId || pendingSessionRequest;
 }
 
 function persistState() {
-  vscode.setState({ activeSessionId, totalSessions });
+  vscode.setState({ activeSessionId, totalSessions, sessionIds });
 }
 
 function debounce<T extends (...args: never[]) => void>(fn: T, delay: number) {

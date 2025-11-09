@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { SessionManager } from './terminal/sessionManager';
 
@@ -104,6 +105,11 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
           );
         }
         break;
+      case 'dispose-session':
+        if (message.payload?.sessionId) {
+          this.sessionManager.disposeSession(message.payload.sessionId);
+        }
+        break;
       default:
         break;
     }
@@ -119,7 +125,8 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
         shell,
         cols: dimensions?.cols,
         rows: dimensions?.rows,
-        startupCommands
+        startupCommands,
+        cwd: this.resolveWorkingDirectory()
       });
 
       this.postMessage({ type: 'session-created', payload: info });
@@ -158,6 +165,45 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
     }
   }
 
+  private resolveWorkingDirectory(): string | undefined {
+    const activeEditor = vscode.window.activeTextEditor;
+    if (activeEditor) {
+      const workspaceFolder = vscode.workspace.getWorkspaceFolder(activeEditor.document.uri);
+      if (workspaceFolder?.uri.scheme === 'file') {
+        return workspaceFolder.uri.fsPath;
+      }
+
+      if (activeEditor.document.uri.scheme === 'file') {
+        return path.dirname(activeEditor.document.uri.fsPath);
+      }
+    }
+
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders?.length) {
+      const preferred = workspaceFolders.find((folder) => folder.uri.scheme === 'file');
+      return (preferred ?? workspaceFolders[0]).uri.fsPath;
+    }
+
+    const envCandidates = [
+      process.env.CURSOR_PROJECT_PATH,
+      process.env.CURSOR_WORKSPACE_DIR,
+      process.env.CURSOR_CWD,
+      process.env.PWD,
+      process.env.INIT_CWD
+    ];
+    for (const candidate of envCandidates) {
+      if (candidate && candidate.trim().length > 0) {
+        return candidate;
+      }
+    }
+
+    try {
+      return process.cwd();
+    } catch {
+      return undefined;
+    }
+  }
+
   private getHtml(webview: vscode.Webview): string {
     const nonce = getNonce();
     const iconUri = webview.asWebviewUri(
@@ -182,9 +228,14 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
             :root {
               color-scheme: light dark;
             }
+            html,
+            body {
+              height: 100%;
+            }
             body {
               padding: 12px;
               margin: 0;
+              box-sizing: border-box;
               font-family: var(--vscode-font-family);
               font-size: var(--vscode-font-size);
               color: var(--vscode-foreground);
@@ -193,15 +244,31 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
               flex-direction: column;
               gap: 0.75rem;
             }
+            .header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              gap: 0.5rem;
+            }
+            .terminal-shell {
+              flex: 1 1 auto;
+              display: flex;
+              flex-direction: column;
+              min-height: 280px;
+            }
             #terminal-root {
+              flex: 1 1 auto;
               border-radius: 6px;
               border: 1px solid color-mix(in srgb, var(--vscode-descriptionForeground) 50%, transparent);
               background: color-mix(in srgb, var(--vscode-editor-background) 80%, transparent);
-              min-height: 220px;
+              min-height: 320px;
               padding: 0.25rem;
+              overflow: hidden;
+            }
+            section {
+              flex: 0 0 auto;
             }
             button {
-              align-self: center;
               padding: 0.4rem 1rem;
               border-radius: 4px;
               border: 1px solid var(--vscode-button-border, transparent);
@@ -209,10 +276,14 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
               color: var(--vscode-button-foreground);
               cursor: pointer;
             }
-            .header {
+            button:disabled {
+              opacity: 0.65;
+              cursor: default;
+            }
+            .actions {
               display: flex;
-              justify-content: space-between;
-              align-items: center;
+              flex-wrap: wrap;
+              justify-content: flex-end;
               gap: 0.5rem;
             }
           </style>
@@ -225,14 +296,19 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
             </div>
             <span data-session-status>初期化中…</span>
           </header>
-          <div id="terminal-root" aria-label="ターミナル"></div>
+          <div class="terminal-shell">
+            <div id="terminal-root" aria-label="ターミナル"></div>
+          </div>
           <section>
             <h3 style="font-size:0.85rem;margin:0 0 0.25rem;">イベントログ</h3>
             <ul data-session-log style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:0.25rem;font-size:0.85rem;">
               <li>拡張機能が読み込まれました</li>
             </ul>
           </section>
-          <button data-action="new-session">新しいセッション</button>
+          <div class="actions">
+            <button data-action="dispose-session" disabled>セッションを終了</button>
+            <button data-action="new-session">新しいセッション</button>
+          </div>
           <script nonce="${nonce}" src="${scriptUri}"></script>
         </body>
       </html>`;

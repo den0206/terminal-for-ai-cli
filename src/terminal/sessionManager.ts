@@ -361,7 +361,36 @@ export class SessionManager implements vscode.Disposable {
   }
 
   private getDefaultCwd(): string {
-    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+    const workspaceFolder = vscode.workspace.workspaceFolders
+      ?.find((folder) => folder.uri.scheme === 'file')
+      ?.uri.fsPath;
+    if (workspaceFolder) {
+      return workspaceFolder;
+    }
+
+    const envCandidates = [
+      process.env.CURSOR_PROJECT_PATH,
+      process.env.CURSOR_WORKSPACE_DIR,
+      process.env.CURSOR_CWD,
+      process.env.PWD,
+      process.env.INIT_CWD
+    ];
+    for (const candidate of envCandidates) {
+      if (candidate && candidate.trim().length > 0) {
+        return candidate;
+      }
+    }
+
+    try {
+      const cwd = process.cwd();
+      if (cwd && cwd.trim().length > 0) {
+        return cwd;
+      }
+    } catch {
+      // ignore
+    }
+
+    return os.homedir();
   }
 
   private generateSessionId() {
