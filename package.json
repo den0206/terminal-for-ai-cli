@@ -74,6 +74,8 @@
   "devDependencies": {
     "@types/node": "^24.10.0",
     "@types/vscode": "^1.105.0",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
     "esbuild": "^0.26.0",
     "eslint": "^9.39.1",
     "typescript": "^5.9.3",

@@ -1,0 +1,394 @@
+import {
+  ChildProcessWithoutNullStreams,
+  spawn,
+  spawnSync,
+  SpawnOptions
+} from 'node:child_process';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { Writable } from 'node:stream';
+import * as vscode from 'vscode';
+
+const PYTHON_PTY_BRIDGE = String.raw`
+import fcntl
+import json
+import os
+import pty
+import select
+import struct
+import sys
+import termios
+
+
+def set_winsize(fd, rows, cols):
+    fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', rows, cols, 0, 0))
+
+
+def main():
+    argv = sys.argv[1:]
+    if not argv:
+        sys.stderr.write('No shell specified for PTY bridge\n')
+        sys.stderr.flush()
+        sys.exit(1)
+
+    rows = int(os.environ.get('AI_TERM_ROWS', '24') or '24')
+    cols = int(os.environ.get('AI_TERM_COLS', '80') or '80')
+
+    master_fd, slave_fd = pty.openpty()
+    pid = os.fork()
+    if pid == 0:
+        try:
+            os.setsid()
+        except OSError:
+            pass
+        os.close(master_fd)
+        os.dup2(slave_fd, 0)
+        os.dup2(slave_fd, 1)
+        os.dup2(slave_fd, 2)
+        if slave_fd > 2:
+            os.close(slave_fd)
+        try:
+            os.execvp(argv[0], argv)
+        except OSError as exc:
+            sys.stderr.write(f'Failed to launch {argv[0]}: {exc}\n')
+            sys.stderr.flush()
+            os._exit(1)
+
+    os.close(slave_fd)
+    set_winsize(master_fd, rows, cols)
+    control_fd = 3
+    control_buffer = b''
+
+    while True:
+        read_fds = [master_fd, sys.stdin.fileno()]
+        if control_fd >= 0:
+            read_fds.append(control_fd)
+        rlist, _, _ = select.select(read_fds, [], [])
+
+        if master_fd in rlist:
+            data = os.read(master_fd, 4096)
+            if not data:
+                break
+            os.write(sys.stdout.fileno(), data)
+
+        if sys.stdin.fileno() in rlist:
+            data = os.read(sys.stdin.fileno(), 4096)
+            if not data:
+                os.close(master_fd)
+                break
+            os.write(master_fd, data)
+
+        if control_fd >= 0 and control_fd in rlist:
+            chunk = os.read(control_fd, 4096)
+            if not chunk:
+                os.close(control_fd)
+                control_fd = -1
+            else:
+                control_buffer += chunk
+                while b'\n' in control_buffer:
+                    line, control_buffer = control_buffer.split(b'\n', 1)
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        cmd = json.loads(line.decode('utf-8'))
+                    except Exception:
+                        continue
+                    if cmd.get('type') == 'resize':
+                        rows = int(cmd.get('rows', rows) or rows)
+                        cols = int(cmd.get('cols', cols) or cols)
+                        set_winsize(master_fd, rows, cols)
+
+    try:
+        os.waitpid(pid, 0)
+    finally:
+        os.close(master_fd)
+
+
+if __name__ == '__main__':
+    main()
+`;
+
+type SessionOptions = {
+  shell?: string;
+  cols?: number;
+  rows?: number;
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  startupCommands?: string[];
+};
+
+type SessionInfo = {
+  id: string;
+  pid?: number;
+  shell: string;
+  createdAt: number;
+};
+
+type SessionDataEvent = { id: string; data: string };
+type SessionExitEvent = { id: string; code: number | null; signal: NodeJS.Signals | null };
+
+type Dimensions = { cols: number; rows: number };
+
+type LaunchResult = {
+  child: ChildProcessWithoutNullStreams;
+  usesPtyHelper: boolean;
+  resizeControl?: Writable;
+};
+
+class ShellSession implements vscode.Disposable {
+  private readonly stdin = this.child.stdin;
+
+  constructor(
+    public readonly id: string,
+    private readonly child: ChildProcessWithoutNullStreams,
+    private readonly usesPtyHelper: boolean,
+    private readonly resizeControl?: Writable
+  ) {}
+
+  write(data: string) {
+    if (!this.stdin.destroyed) {
+      this.stdin.write(data);
+    }
+  }
+
+  resize(cols: number, rows: number) {
+    if (this.resizeControl && !this.resizeControl.destroyed) {
+      try {
+        this.resizeControl.write(
+          `${JSON.stringify({ type: 'resize', cols, rows })}\n`,
+          'utf8'
+        );
+      } catch {
+        // ignore resize errors
+      }
+      return;
+    }
+    // When we rely on the OS helper a SIGWINCH is enough to notify the wrapped shell.
+    if (!this.usesPtyHelper || !this.child.pid || process.platform === 'win32') {
+      return;
+    }
+    try {
+      process.kill(this.child.pid, 'SIGWINCH');
+    } catch {
+      // ignore resize errors
+    }
+  }
+
+  dispose() {
+    if (!this.child.killed) {
+      this.child.kill();
+    }
+    if (this.resizeControl && !this.resizeControl.destroyed) {
+      this.resizeControl.end();
+    }
+  }
+}
+
+export class SessionManager implements vscode.Disposable {
+  private readonly sessions = new Map<string, ShellSession>();
+  private readonly onDataEmitter = new vscode.EventEmitter<SessionDataEvent>();
+  private readonly onExitEmitter = new vscode.EventEmitter<SessionExitEvent>();
+  private pythonExecutable: string | null | undefined;
+
+  readonly onDidWriteData = this.onDataEmitter.event;
+  readonly onDidExit = this.onExitEmitter.event;
+
+  createSession(options: SessionOptions = {}): SessionInfo {
+    const id = this.generateSessionId();
+    const shell = options.shell?.trim() || this.getDefaultShell();
+    const dimensions: Dimensions = {
+      cols: Math.max(2, options.cols ?? 80),
+      rows: Math.max(1, options.rows ?? 24)
+    };
+    const { child, usesPtyHelper, resizeControl } = this.launchShellProcess(
+      shell,
+      dimensions,
+      options
+    );
+
+    const session = new ShellSession(id, child, usesPtyHelper, resizeControl);
+    this.sessions.set(id, session);
+
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+
+    child.stdout.on('data', (data: string) => {
+      this.onDataEmitter.fire({ id, data });
+    });
+
+    child.stderr.on('data', (data: string) => {
+      this.onDataEmitter.fire({ id, data });
+    });
+
+    child.on('close', (code, signal) => {
+      this.sessions.delete(id);
+      this.onExitEmitter.fire({ id, code, signal });
+    });
+
+    for (const cmd of options.startupCommands ?? []) {
+      if (cmd.trim().length > 0) {
+        session.write(`${cmd}\r`);
+      }
+    }
+
+    return {
+      id,
+      pid: child.pid ?? undefined,
+      shell,
+      createdAt: Date.now()
+    };
+  }
+
+  write(id: string, data: string) {
+    this.sessions.get(id)?.write(data);
+  }
+
+  resize(id: string, cols: number, rows: number) {
+    this.sessions.get(id)?.resize(Math.max(cols, 2), Math.max(rows, 1));
+  }
+
+  getSessionCount() {
+    return this.sessions.size;
+  }
+
+  disposeSession(id: string) {
+    const session = this.sessions.get(id);
+    if (session) {
+      session.dispose();
+      this.sessions.delete(id);
+    }
+  }
+
+  dispose() {
+    for (const session of this.sessions.values()) {
+      session.dispose();
+    }
+    this.sessions.clear();
+    this.onDataEmitter.dispose();
+    this.onExitEmitter.dispose();
+  }
+
+  private launchShellProcess(
+    shell: string,
+    dimensions: Dimensions,
+    options: SessionOptions
+  ): LaunchResult {
+    const cwd = options.cwd ?? this.getDefaultCwd();
+    const env = this.buildEnv(options.env, dimensions);
+    const shellArgs = this.getShellArgs(shell);
+    const stdio: SpawnOptions['stdio'] = 'pipe';
+
+    const python = this.getPythonExecutable();
+    if (python && process.platform !== 'win32') {
+      const pythonEnv = {
+        ...env,
+        AI_TERM_ROWS: String(dimensions.rows),
+        AI_TERM_COLS: String(dimensions.cols)
+      };
+      const child = spawn(
+        python,
+        ['-u', '-c', PYTHON_PTY_BRIDGE, shell, ...shellArgs],
+        {
+          cwd,
+          env: pythonEnv,
+          stdio: ['pipe', 'pipe', 'pipe', 'pipe']
+        }
+      ) as ChildProcessWithoutNullStreams;
+      const resizeControl = child.stdio?.[3] as Writable | undefined;
+      if (resizeControl) {
+        resizeControl.setDefaultEncoding?.('utf8');
+        resizeControl.write(
+          `${JSON.stringify({ type: 'resize', cols: dimensions.cols, rows: dimensions.rows })}\n`
+        );
+      }
+      return { child, usesPtyHelper: true, resizeControl };
+    }
+
+    const child = spawn(shell, shellArgs, {
+      cwd,
+      env,
+      stdio
+    }) as ChildProcessWithoutNullStreams;
+    return { child: child as ChildProcessWithoutNullStreams, usesPtyHelper: false };
+  }
+
+  private buildEnv(
+    additionalEnv: NodeJS.ProcessEnv | undefined,
+    dimensions: Dimensions
+  ): NodeJS.ProcessEnv {
+    const merged = {
+      ...process.env,
+      ...additionalEnv,
+      TERM: additionalEnv?.TERM || process.env.TERM || 'xterm-256color',
+      COLUMNS: String(dimensions.cols),
+      LINES: String(dimensions.rows)
+    };
+
+    const sanitized: NodeJS.ProcessEnv = {};
+    for (const [key, value] of Object.entries(merged)) {
+      if (typeof value === 'string') {
+        sanitized[key] = value;
+      }
+    }
+    return sanitized;
+  }
+
+  private getShellArgs(shell: string): string[] {
+    if (process.platform === 'win32') {
+      const normalized = shell.toLowerCase();
+      if (normalized.includes('powershell')) {
+        return ['-NoLogo', '-NoExit'];
+      }
+      return ['/d', '/q', '/k'];
+    }
+    const shellName = path.basename(shell);
+    if (shellName === 'bash' || shellName === 'zsh' || shellName === 'fish') {
+      return ['-i'];
+    }
+    return [];
+  }
+
+  private getDefaultShell(): string {
+    if (process.platform === 'win32') {
+      return process.env.COMSPEC || 'C:\\Windows\\System32\\cmd.exe';
+    }
+    const userShell = process.env.SHELL;
+    if (userShell && userShell.trim().length > 0) {
+      return userShell;
+    }
+    return '/bin/bash';
+  }
+
+  private getDefaultCwd(): string {
+    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+  }
+
+  private generateSessionId() {
+    return `session-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  private getPythonExecutable(): string | null {
+    if (this.pythonExecutable !== undefined) {
+      return this.pythonExecutable;
+    }
+    if (process.platform === 'win32') {
+      this.pythonExecutable = null;
+      return null;
+    }
+    const candidates = ['python3', 'python'];
+    for (const cmd of candidates) {
+      try {
+        const result = spawnSync(cmd, ['-c', 'import pty'], { stdio: 'ignore' });
+        if (result.status === 0) {
+          this.pythonExecutable = cmd;
+          return cmd;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    this.pythonExecutable = null;
+    return null;
+  }
+}
