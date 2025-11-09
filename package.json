@@ -60,6 +60,33 @@
           },
           "default": [],
           "description": "セッション作成時に順番に送信されるコマンドのリスト。"
+        },
+        "aiTerminal.themePreset": {
+          "type": "string",
+          "default": "modern",
+          "enum": [
+            "modern",
+            "basic",
+            "clearDark",
+            "clearLight",
+            "grass",
+            "homebrew",
+            "manPage",
+            "ocean",
+            "pro"
+          ],
+          "enumDescriptions": [
+            "（おすすめ）VS Code のテーマに馴染む落ち着いた配色",
+            "黒地に白文字のシンプルなクラシックターミナル",
+            "暗めの背景に柔らかいシアン系文字色",
+            "明るい背景にダークグレーの文字色",
+            "緑基調のレトロな配色",
+            "黒背景 × ネオングリーンの Homebrew 風スタイル",
+            "マニュアル風の淡い背景と濃い文字色",
+            "青と白のコントラストが強い配色",
+            "シルバーの筐体風ダークグレー配色"
+          ],
+          "description": "Webview 内のターミナルテーマ。AI Terminal ビュー内でも選択できます。"
         }
       }
     }

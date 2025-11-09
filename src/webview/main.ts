@@ -9,24 +9,47 @@ interface VSCodeApi<State = unknown> {
 
 declare const acquireVsCodeApi: <State = undefined>() => VSCodeApi<State>;
 
+type ThemePalette = {
+  background: string;
+  foreground: string;
+  cursor: string;
+  selection: string;
+};
+
+type ThemePresetInfo = {
+  key: string;
+  label: string;
+  description: string;
+  preview: { background: string; foreground: string };
+};
+
+type ThemeUpdatePayload = {
+  presetKey: string;
+  palette: ThemePalette;
+  presets: ThemePresetInfo[];
+};
+
 type InboundMessage =
   | { type: 'session-count'; payload: { total: number } }
   | { type: 'session-created'; payload: { id: string; shell: string; pid?: number } }
   | { type: 'session-data'; payload: { sessionId: string; data: string } }
   | { type: 'session-exited'; payload: { sessionId: string; code: number | null; signal: string | null } }
-  | { type: 'session-error'; payload: { message: string } };
+  | { type: 'session-error'; payload: { message: string } }
+  | { type: 'theme-update'; payload: ThemeUpdatePayload };
 
 type OutboundMessage =
   | { type: 'webview-ready' }
   | { type: 'request-new-session'; payload?: { cols: number; rows: number } }
   | { type: 'terminal-input'; payload: { sessionId: string; data: string } }
   | { type: 'terminal-resize'; payload: { sessionId: string; cols: number; rows: number } }
-  | { type: 'dispose-session'; payload: { sessionId: string } };
+  | { type: 'dispose-session'; payload: { sessionId: string } }
+  | { type: 'theme-select'; payload: { presetKey: string } };
 
 type ViewState = {
   activeSessionId?: string;
   totalSessions: number;
   sessionIds: string[];
+  terminalHeight?: number;
 };
 
 const vscode = acquireVsCodeApi<ViewState>();
@@ -36,12 +59,21 @@ const logEl = document.querySelector('[data-session-log]') as HTMLUListElement |
 const newSessionButton = document.querySelector('[data-action="new-session"]') as HTMLButtonElement | null;
 const disposeSessionButton = document.querySelector('[data-action="dispose-session"]') as HTMLButtonElement | null;
 const terminalRoot = document.getElementById('terminal-root') as HTMLDivElement | null;
+const terminalShell = document.querySelector('[data-terminal-shell]') as HTMLDivElement | null;
+const resizerEl = document.querySelector('[data-terminal-resizer]') as HTMLDivElement | null;
+const themeSelectEl = document.querySelector('[data-theme-select]') as HTMLSelectElement | null;
+const themeActiveLabel = document.querySelector('[data-theme-active-label]') as HTMLSpanElement | null;
+const themePreviewText = document.querySelector('[data-theme-preview-text]') as HTMLSpanElement | null;
+const themePreviewSwatch = document.querySelector('[data-theme-swatch]') as HTMLSpanElement | null;
 
 const savedState = vscode.getState() ?? { totalSessions: 0, sessionIds: [] };
 let activeSessionId = savedState.activeSessionId;
 let totalSessions = savedState.totalSessions ?? 0;
 let sessionIds = Array.isArray(savedState.sessionIds) ? [...savedState.sessionIds] : [];
+let terminalHeight = typeof savedState.terminalHeight === 'number' ? savedState.terminalHeight : 640;
 let pendingSessionRequest = false;
+let currentThemeKey: string | undefined;
+let availablePresets: ThemePresetInfo[] = [];
 
 const terminal = new Terminal({
   allowTransparency: true,
@@ -65,6 +97,8 @@ if (terminalRoot) {
   fitTerminal();
   terminal.focus();
 }
+applyTerminalHeight(terminalHeight, false);
+refreshTerminalTheme();
 
 terminal.onData((data) => {
   if (activeSessionId) {
@@ -144,6 +178,12 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
       setStatus(`エラー: ${message.payload.message}`);
       appendLog(`エラー: ${message.payload.message}`);
       break;
+    case 'theme-update':
+      applyTheme(message.payload.palette);
+      currentThemeKey = message.payload.presetKey;
+      availablePresets = message.payload.presets;
+      renderThemeDropdown();
+      break;
     default:
       break;
   }
@@ -172,12 +212,49 @@ window.addEventListener(
   }, 150)
 );
 
+resizerEl?.addEventListener('pointerdown', (event) => {
+  event.preventDefault();
+  const pointerId = event.pointerId;
+  const startY = event.clientY;
+  const startHeight = terminalHeight;
+
+  const onMove = (moveEvent: PointerEvent) => {
+    if (moveEvent.pointerId !== pointerId) {
+      return;
+    }
+    const delta = moveEvent.clientY - startY;
+    applyTerminalHeight(startHeight + delta, false);
+  };
+
+  const cleanup = (moveEvent: PointerEvent) => {
+    if (moveEvent.pointerId !== pointerId) {
+      return;
+    }
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', cleanup);
+    window.removeEventListener('pointercancel', cleanup);
+    persistState();
+  };
+
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', cleanup);
+  window.addEventListener('pointercancel', cleanup);
+});
+
+themeSelectEl?.addEventListener('change', () => {
+  const presetKey = themeSelectEl.value;
+  if (!presetKey || presetKey === currentThemeKey) {
+    return;
+  }
+  vscode.postMessage<OutboundMessage>({ type: 'theme-select', payload: { presetKey } });
+});
+
 vscode.postMessage<OutboundMessage>({ type: 'webview-ready' });
-if (!activeSessionId) {
-  requestNewSession();
-} else {
+if (activeSessionId) {
   setStatus(`セッション ${activeSessionId} を復元中…`);
   notifyResize();
+} else {
+  setStatus('セッションを初期化しています…');
 }
 updateDisposeButtonState();
 
@@ -278,7 +355,7 @@ function updateDisposeButtonState() {
 }
 
 function persistState() {
-  vscode.setState({ activeSessionId, totalSessions, sessionIds });
+  vscode.setState({ activeSessionId, totalSessions, sessionIds, terminalHeight });
 }
 
 function debounce<T extends (...args: never[]) => void>(fn: T, delay: number) {
@@ -310,4 +387,74 @@ function getComputedVar(
     }
   }
   return fallbackValue ?? '';
+}
+
+function applyTerminalHeight(value: number, persist = true) {
+  const clamped = Math.min(Math.max(value, 220), 1000);
+  terminalHeight = clamped;
+  if (terminalShell) {
+    terminalShell.style.setProperty('--terminal-height', `${clamped}px`);
+  }
+  fitTerminal();
+  notifyResize();
+  if (persist) {
+    persistState();
+  }
+}
+
+function refreshTerminalTheme() {
+  terminal.options.theme = {
+    background: getComputedVar('--ai-terminal-bg', '--vscode-editor-background', '#1e1e1e'),
+    foreground: getComputedVar('--ai-terminal-fg', '--vscode-editor-foreground', '#cccccc'),
+    cursor: getComputedVar('--ai-terminal-cursor', '--vscode-terminalCursor-foreground', '#ffffff'),
+    selection: getComputedVar(
+      '--ai-terminal-selection',
+      '--vscode-editor-selectionBackground',
+      'rgba(255,255,255,0.15)'
+    )
+  };
+}
+
+function applyTheme(palette: ThemePalette) {
+  const root = document.documentElement;
+  root.style.setProperty('--ai-terminal-bg', palette.background);
+  root.style.setProperty('--ai-terminal-fg', palette.foreground);
+  root.style.setProperty('--ai-terminal-cursor', palette.cursor);
+  root.style.setProperty('--ai-terminal-selection', palette.selection);
+  refreshTerminalTheme();
+}
+
+function renderThemeDropdown() {
+  if (!themeSelectEl) {
+    return;
+  }
+  themeSelectEl.innerHTML = '';
+  availablePresets.forEach((preset) => {
+    const option = document.createElement('option');
+    option.value = preset.key;
+    option.textContent = preset.label;
+    themeSelectEl.appendChild(option);
+  });
+  if (currentThemeKey) {
+    themeSelectEl.value = currentThemeKey;
+  }
+  const active = availablePresets.find((preset) => preset.key === currentThemeKey);
+  if (themeActiveLabel) {
+    themeActiveLabel.textContent = active ? active.description : '―';
+  }
+  updateThemePreview(active ?? null);
+}
+
+function updateThemePreview(preset: ThemePresetInfo | null) {
+  if (!themePreviewText || !themePreviewSwatch) {
+    return;
+  }
+  if (preset) {
+    themePreviewText.textContent = preset.label;
+    themePreviewSwatch.style.background = preset.preview.background;
+    themePreviewSwatch.style.color = preset.preview.foreground;
+  } else {
+    themePreviewText.textContent = 'プレビュー';
+    themePreviewSwatch.style.background = '';
+  }
 }

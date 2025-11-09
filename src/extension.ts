@@ -4,6 +4,130 @@ import { SessionManager } from './terminal/sessionManager';
 
 const VIEW_ID = 'ai-terminal-view';
 const CONTAINER_COMMAND = 'workbench.view.extension.ai-terminal';
+type ThemePresetKey =
+  | 'modern'
+  | 'basic'
+  | 'clearDark'
+  | 'clearLight'
+  | 'grass'
+  | 'homebrew'
+  | 'manPage'
+  | 'ocean'
+  | 'pro';
+
+type ThemePreset = {
+  label: string;
+  description: string;
+  palette: {
+    background: string;
+    foreground: string;
+    cursor: string;
+    selection: string;
+  };
+  preview: { background: string; foreground: string };
+};
+
+const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
+  modern: {
+    label: 'Modern',
+    description: 'VS Code テーマに馴染む落ち着いた配色',
+    palette: {
+      background: `color-mix(in srgb, var(--vscode-editor-background) 85%, transparent)`,
+      foreground: `var(--vscode-foreground)`,
+      cursor: `var(--vscode-terminalCursor-foreground, #ffffff)`,
+      selection: `color-mix(in srgb, var(--vscode-editor-selectionBackground, rgba(255,255,255,0.15)) 80%, transparent)`
+    },
+    preview: { background: '#1f1f1f', foreground: '#f0f0f0' }
+  },
+  basic: {
+    label: 'Basic',
+    description: '黒地に白文字のクラシック',
+    palette: {
+      background: '#050505',
+      foreground: '#f8f8f2',
+      cursor: '#fefefe',
+      selection: 'rgba(255,255,255,0.2)'
+    },
+    preview: { background: '#050505', foreground: '#f8f8f2' }
+  },
+  clearDark: {
+    label: 'Clear Dark',
+    description: 'ダークグレー + 水色アクセント',
+    palette: {
+      background: '#2b303b',
+      foreground: '#c0c5ce',
+      cursor: '#8fa1b3',
+      selection: 'rgba(143,161,179,0.45)'
+    },
+    preview: { background: '#2b303b', foreground: '#c0c5ce' }
+  },
+  clearLight: {
+    label: 'Clear Light',
+    description: '明るい背景と柔らかい文字色',
+    palette: {
+      background: '#f4f4f2',
+      foreground: '#2b2b2b',
+      cursor: '#000000',
+      selection: 'rgba(0,0,0,0.2)'
+    },
+    preview: { background: '#f4f4f2', foreground: '#2b2b2b' }
+  },
+  grass: {
+    label: 'Grass',
+    description: 'グリーン基調のレトロターミナル',
+    palette: {
+      background: '#253120',
+      foreground: '#d4fcbc',
+      cursor: '#c8ff91',
+      selection: 'rgba(212,252,188,0.35)'
+    },
+    preview: { background: '#2c3a27', foreground: '#d4fcbc' }
+  },
+  homebrew: {
+    label: 'Homebrew',
+    description: 'ネオングリーンの Homebrew 風',
+    palette: {
+      background: '#000000',
+      foreground: '#39ff14',
+      cursor: '#39ff14',
+      selection: 'rgba(57,255,20,0.35)'
+    },
+    preview: { background: '#000000', foreground: '#39ff14' }
+  },
+  manPage: {
+    label: 'Man Page',
+    description: 'マニュアルのような淡色',
+    palette: {
+      background: '#fdf6e3',
+      foreground: '#584b24',
+      cursor: '#657b83',
+      selection: 'rgba(60,60,60,0.25)'
+    },
+    preview: { background: '#fdf6e3', foreground: '#584b24' }
+  },
+  ocean: {
+    label: 'Ocean',
+    description: '青と白の高コントラスト',
+    palette: {
+      background: '#001f3f',
+      foreground: '#d0ebff',
+      cursor: '#7fdbff',
+      selection: 'rgba(127,219,255,0.35)'
+    },
+    preview: { background: '#001f3f', foreground: '#d0ebff' }
+  },
+  pro: {
+    label: 'Pro',
+    description: 'シルバーの筐体を意識したダークグレー',
+    palette: {
+      background: '#262626',
+      foreground: '#e5e5e5',
+      cursor: '#ffffff',
+      selection: 'rgba(229,229,229,0.3)'
+    },
+    preview: { background: '#262626', foreground: '#e5e5e5' }
+  }
+};
 
 export function activate(context: vscode.ExtensionContext) {
   const sessionManager = new SessionManager();
@@ -46,6 +170,14 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
       this.sessionManager.onDidExit(({ id, code, signal }) => {
         this.postMessage({ type: 'session-exited', payload: { sessionId: id, code, signal } });
         this.postSessionCount();
+      }),
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (
+          event.affectsConfiguration('aiTerminal.webviewBackground') ||
+          event.affectsConfiguration('aiTerminal.webviewForeground')
+        ) {
+          this.postThemeUpdate();
+        }
       })
     );
   }
@@ -87,6 +219,8 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
         this.webviewReady = true;
         this.postSessionCount();
         this.flushQueuedMessages();
+        this.postThemeUpdate();
+        this.ensureInitialSession();
         break;
       case 'request-new-session':
         this.handleSessionRequest(message.payload);
@@ -108,6 +242,11 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
       case 'dispose-session':
         if (message.payload?.sessionId) {
           this.sessionManager.disposeSession(message.payload.sessionId);
+        }
+        break;
+      case 'theme-select':
+        if (message.payload?.presetKey) {
+          this.updateThemePreset(message.payload.presetKey);
         }
         break;
       default:
@@ -153,6 +292,19 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
     this.webviewView.webview.postMessage(message);
   }
 
+  private postThemeUpdate() {
+    this.postMessage({ type: 'theme-update', payload: this.getThemeValues() });
+  }
+
+  private async updateThemePreset(presetKey: string) {
+    if (!isValidPresetKey(presetKey)) {
+      return;
+    }
+    const config = vscode.workspace.getConfiguration('aiTerminal');
+    await config.update('themePreset', presetKey, vscode.ConfigurationTarget.Global);
+    this.postThemeUpdate();
+  }
+
   private flushQueuedMessages() {
     if (!this.webviewView || !this.webviewReady || this.messageQueue.length === 0) {
       return;
@@ -162,6 +314,12 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
       if (message) {
         this.webviewView.webview.postMessage(message);
       }
+    }
+  }
+
+  private ensureInitialSession() {
+    if (this.sessionManager.getSessionCount() === 0) {
+      this.handleSessionRequest();
     }
   }
 
@@ -206,6 +364,7 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
 
   private getHtml(webview: vscode.Webview): string {
     const nonce = getNonce();
+    const theme = this.getThemeValues();
     const iconUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'media', 'terminal.svg')
     );
@@ -227,6 +386,8 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
           <style>
             :root {
               color-scheme: light dark;
+              --ai-terminal-bg: ${theme.palette.background};
+              --ai-terminal-fg: ${theme.palette.foreground};
             }
             html,
             body {
@@ -238,7 +399,7 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
               box-sizing: border-box;
               font-family: var(--vscode-font-family);
               font-size: var(--vscode-font-size);
-              color: var(--vscode-foreground);
+              color: var(--ai-terminal-fg);
               background: var(--vscode-sideBar-background);
               display: flex;
               flex-direction: column;
@@ -251,19 +412,72 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
               gap: 0.5rem;
             }
             .terminal-shell {
-              flex: 1 1 auto;
+              flex: 0 0 auto;
               display: flex;
               flex-direction: column;
-              min-height: 280px;
+              min-height: 240px;
+              height: var(--terminal-height, 640px);
             }
             #terminal-root {
               flex: 1 1 auto;
               border-radius: 6px;
-              border: 1px solid color-mix(in srgb, var(--vscode-descriptionForeground) 50%, transparent);
-              background: color-mix(in srgb, var(--vscode-editor-background) 80%, transparent);
-              min-height: 320px;
+              border: 1px solid color-mix(in srgb, var(--ai-terminal-fg) 30%, transparent);
+              background: var(--ai-terminal-bg);
               padding: 0.25rem;
               overflow: hidden;
+            }
+            .terminal-resizer {
+              flex: 0 0 auto;
+              height: 8px;
+              cursor: row-resize;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: color-mix(in srgb, var(--ai-terminal-fg) 70%, transparent);
+            }
+            .terminal-resizer::after {
+              content: '';
+              width: 60px;
+              height: 2px;
+              border-radius: 999px;
+              background: currentColor;
+              opacity: 0.6;
+            }
+            .theme-picker {
+              display: flex;
+              flex-direction: column;
+              gap: 0.25rem;
+            }
+            .theme-picker__control {
+              display: flex;
+              align-items: center;
+              gap: 0.5rem;
+            }
+            select[data-theme-select] {
+              flex: 0 0 220px;
+              background: var(--vscode-dropdown-background);
+              color: var(--vscode-dropdown-foreground);
+              border: 1px solid var(--vscode-dropdown-border, transparent);
+              border-radius: 4px;
+              padding: 0.2rem 0.5rem;
+              font-size: 0.85rem;
+            }
+            .theme-preview {
+              display: inline-flex;
+              align-items: center;
+              gap: 0.4rem;
+              padding: 0.35rem 0.5rem;
+              border-radius: 4px;
+              border: 1px solid color-mix(in srgb, var(--ai-terminal-fg) 25%, transparent);
+              background: color-mix(in srgb, var(--ai-terminal-bg) 70%, transparent);
+              font-size: 0.75rem;
+              width: fit-content;
+            }
+            .theme-preview__swatch {
+              width: 32px;
+              height: 16px;
+              border-radius: 999px;
+              box-shadow: inset 0 0 0 1px rgba(0,0,0,0.3);
             }
             section {
               flex: 0 0 auto;
@@ -296,9 +510,23 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
             </div>
             <span data-session-status>初期化中…</span>
           </header>
-          <div class="terminal-shell">
+          <div class="terminal-shell" data-terminal-shell>
             <div id="terminal-root" aria-label="ターミナル"></div>
+            <div class="terminal-resizer" data-terminal-resizer aria-label="高さを調整"></div>
           </div>
+          <section class="theme-picker" aria-label="テーマ選択">
+            <label style="font-size:0.85rem;display:flex;flex-direction:column;gap:0.35rem;">
+              テーマ
+              <div class="theme-picker__control">
+                <select data-theme-select></select>
+                <span data-theme-active-label style="font-size:0.75rem;opacity:0.8;">―</span>
+              </div>
+            </label>
+            <div class="theme-preview" data-theme-preview>
+              <span class="theme-preview__swatch" data-theme-swatch></span>
+              <span data-theme-preview-text>プレビュー</span>
+            </div>
+          </section>
           <section>
             <h3 style="font-size:0.85rem;margin:0 0 0.25rem;">イベントログ</h3>
             <ul data-session-log style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:0.25rem;font-size:0.85rem;">
@@ -313,6 +541,20 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
         </body>
       </html>`;
   }
+
+  private getThemeValues() {
+    const config = vscode.workspace.getConfiguration('aiTerminal');
+    const presetKey = (config.get<string>('themePreset') as ThemePresetKey) ?? 'modern';
+    const activePreset = THEME_PRESETS[presetKey] ?? THEME_PRESETS.modern;
+    const palette = activePreset.palette;
+    const presets = Object.entries(THEME_PRESETS).map(([key, value]) => ({
+      key,
+      label: value.label,
+      description: value.description,
+      preview: value.preview
+    }));
+    return { presetKey, palette, presets };
+  }
 }
 
 function getNonce() {
@@ -322,4 +564,8 @@ function getNonce() {
     text += possible.charAt(Math.floor(Math.random() * possible.length));
   }
   return text;
+}
+
+function isValidPresetKey(key: string): key is ThemePresetKey {
+  return Object.prototype.hasOwnProperty.call(THEME_PRESETS, key);
 }
