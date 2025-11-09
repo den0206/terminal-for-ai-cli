@@ -467,11 +467,11 @@ function applyTerminalHeight(value: number, persist = true) {
 
 function refreshTerminalTheme() {
   terminal.options.theme = {
-    background: getComputedVar('--ai-terminal-bg', '--vscode-editor-background', '#1e1e1e'),
-    foreground: getComputedVar('--ai-terminal-fg', '--vscode-editor-foreground', '#cccccc'),
-    cursor: getComputedVar('--ai-terminal-cursor', '--vscode-terminalCursor-foreground', '#ffffff'),
+    background: getComputedVar('--terminal-bg', '--vscode-editor-background', '#1e1e1e'),
+    foreground: getComputedVar('--terminal-fg', '--vscode-editor-foreground', '#cccccc'),
+    cursor: getComputedVar('--terminal-cursor', '--vscode-terminalCursor-foreground', '#ffffff'),
     selection: getComputedVar(
-      '--ai-terminal-selection',
+      '--terminal-selection',
       '--vscode-editor-selectionBackground',
       'rgba(255,255,255,0.15)'
     )
@@ -480,10 +480,10 @@ function refreshTerminalTheme() {
 
 function applyTheme(palette: ThemePalette) {
   const root = document.documentElement;
-  root.style.setProperty('--ai-terminal-bg', palette.background);
-  root.style.setProperty('--ai-terminal-fg', palette.foreground);
-  root.style.setProperty('--ai-terminal-cursor', palette.cursor);
-  root.style.setProperty('--ai-terminal-selection', palette.selection);
+  root.style.setProperty('--terminal-bg', palette.background);
+  root.style.setProperty('--terminal-fg', palette.foreground);
+  root.style.setProperty('--terminal-cursor', palette.cursor);
+  root.style.setProperty('--terminal-selection', palette.selection);
   refreshTerminalTheme();
 }
 

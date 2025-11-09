@@ -1,6 +1,6 @@
 {
-  "name": "ai-terminal",
-  "displayName": "AI Terminal",
+  "name": "terminal-for-ai-cli",
+  "displayName": "Terminal For AI CLI",
   "description": "Terminal view in the Cursor secondary sidebar.",
   "version": "0.0.1",
   "publisher": "yuukisakai",
@@ -12,41 +12,41 @@
     "Other"
   ],
   "activationEvents": [
-    "onView:ai-terminal-view",
-    "onCommand:ai-terminal.focus"
+    "onView:terminal-for-ai-cli-view",
+    "onCommand:terminal-for-ai-cli.focus"
   ],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "ai-terminal",
-          "title": "AI Terminal",
+          "id": "terminal-for-ai-cli",
+          "title": "Terminal For AI",
           "icon": "media/terminal.svg"
         }
       ]
     },
     "views": {
-      "ai-terminal": [
+      "terminal-for-ai-cli": [
         {
           "type": "webview",
-          "id": "ai-terminal-view",
+          "id": "terminal-for-ai-cli-view",
           "name": "Terminal"
         }
       ]
     },
     "commands": [
       {
-        "command": "ai-terminal.focus",
-        "title": "AI Terminal: フォーカス"
+        "command": "terminal-for-ai-cli.focus",
+        "title": "Terminal For AI CLI: フォーカス"
       },
       {
-        "command": "ai-terminal.newSession",
-        "title": "AI Terminal: 新しいセッション"
+        "command": "terminal-for-ai-cli.newSession",
+        "title": "Terminal For AI CLI: 新しいセッション"
       }
     ],
     "configuration": {
-      "title": "AI Terminal",
+      "title": "Terminal For AI CLI",
       "properties": {
         "aiTerminal.defaultShell": {
           "type": "string",
@@ -86,7 +86,7 @@
             "青と白のコントラストが強い配色",
             "シルバーの筐体風ダークグレー配色"
           ],
-          "description": "Webview 内のターミナルテーマ。AI Terminal ビュー内でも選択できます。"
+          "description": "Webview 内のターミナルテーマ。Terminal For AI CLI ビュー内でも選択できます。"
         }
       }
     }

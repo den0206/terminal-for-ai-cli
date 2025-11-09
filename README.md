@@ -1,6 +1,6 @@
-# AI Terminal
+# Terminal for AI CLI
 
-AI Terminal は Cursor / VS Code のセカンダリサイドバーに常駐する多機能ターミナル拡張です。`xterm.js` をベースに、セッション管理やテーマのプリセット選択などを提供し、IDE 内で複数シェルを素早く切り替えられるようにします。
+Terminal for AI CLI は Cursor / VS Code のセカンダリサイドバーに常駐する多機能ターミナル拡張です。`xterm.js` をベースに、セッション管理やテーマのプリセット選択などを提供し、IDE 内で複数シェルを素早く切り替えられるようにします。
 
 ---
 
@@ -29,7 +29,7 @@ AI Terminal は Cursor / VS Code のセカンダリサイドバーに常駐す�
    ```
 3. **開発ホストでデバッグ**
    - VS Code / Cursor で `F5` を押し、Extension Development Host を起動
-   - サイドバーの「AI Terminal」ビューを開くと自動的にセッションが 1 つ作成されます
+   - サイドバーの「Terminal For AI CLI」ビューを開くと自動的にセッションが 1 つ作成されます
 4. **操作**
    - 上部のドロップダウンで既存セッションを選択
    - `+` ボタンで新しいセッションを追加
@@ -53,30 +53,30 @@ AI Terminal は Cursor / VS Code のセカンダリサイドバーに常駐す�
 
 ## 今後のステップ
 
-1. **Windows 向け擬似コンソール対応**  
+1. **Windows 向け擬似コンソール対応**
    - PowerShell の Pseudo Console API や `winpty` 互換レイヤーを採用し、等幅描画を改善
-2. **セッション復元の強化**  
+2. **セッション復元の強化**
    - Extension host 側でセッション状態を永続化し、IDE 再起動後も同じシェルを再生成
-3. **カスタムテーマの導入**  
+3. **カスタムテーマの導入**
    - `settings.json` で任意のテーマオブジェクトを指定できるようにする
-4. **コマンド履歴 / スニペット連携**  
+4. **コマンド履歴 / スニペット連携**
    - よく使うコマンドをプリセット化し、ボタン一つで送信
-5. **テレメトリ / ログ出力の整備**  
+5. **テレメトリ / ログ出力の整備**
    - エラー復旧を容易にするため、Output チャンネルに詳細ログを書き出す
 
 ---
 
 ## 開発メモ
 
-- **ビルドコマンド**  
+- **ビルドコマンド**
   - `npm run bundle:webview`：Webview JavaScript の IIFE バンドル
   - `npm run compile`：上記 + `tsc` による extension/server 側のビルド
-- **依存関係**  
-  - `@xterm/xterm` / `@xterm/addon-fit`（Webview）  
-  - `python3`（Unix のみ、PTY ブリッジ用）  
+- **依存関係**
+  - `@xterm/xterm` / `@xterm/addon-fit`（Webview）
+  - `python3`（Unix のみ、PTY ブリッジ用）
   - VS Code API (`vscode`), Node.js 18+
-- **出力先**  
-  - Extension code: `dist/extension.js`  
+- **出力先**
+  - Extension code: `dist/extension.js`
   - Webview bundle: `media/webview.js`, `media/xterm.css`
 
 開発の際は `README` に記載の手順でビルドし、Extension Development Host で確認してください。質問や改善要望があれば issue へどうぞ。

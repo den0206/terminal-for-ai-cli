@@ -1,9 +1,9 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { SessionManager } from './terminal/sessionManager';
+import {SessionManager} from './terminal/sessionManager';
 
-const VIEW_ID = 'ai-terminal-view';
-const CONTAINER_COMMAND = 'workbench.view.extension.ai-terminal';
+const VIEW_ID = 'terminal-for-ai-cli-view';
+const CONTAINER_COMMAND = 'workbench.view.extension.terminal-for-ai-cli';
 type ThemePresetKey =
   | 'modern'
   | 'basic'
@@ -24,7 +24,7 @@ type ThemePreset = {
     cursor: string;
     selection: string;
   };
-  preview: { background: string; foreground: string };
+  preview: {background: string; foreground: string};
 };
 
 const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
@@ -35,9 +35,9 @@ const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
       background: `color-mix(in srgb, var(--vscode-editor-background) 85%, transparent)`,
       foreground: `var(--vscode-foreground)`,
       cursor: `var(--vscode-terminalCursor-foreground, #ffffff)`,
-      selection: `color-mix(in srgb, var(--vscode-editor-selectionBackground, rgba(255,255,255,0.15)) 80%, transparent)`
+      selection: `color-mix(in srgb, var(--vscode-editor-selectionBackground, rgba(255,255,255,0.15)) 80%, transparent)`,
     },
-    preview: { background: '#1f1f1f', foreground: '#f0f0f0' }
+    preview: {background: '#1f1f1f', foreground: '#f0f0f0'},
   },
   basic: {
     label: 'Basic',
@@ -46,9 +46,9 @@ const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
       background: '#050505',
       foreground: '#f8f8f2',
       cursor: '#fefefe',
-      selection: 'rgba(255,255,255,0.2)'
+      selection: 'rgba(255,255,255,0.2)',
     },
-    preview: { background: '#050505', foreground: '#f8f8f2' }
+    preview: {background: '#050505', foreground: '#f8f8f2'},
   },
   clearDark: {
     label: 'Clear Dark',
@@ -57,9 +57,9 @@ const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
       background: '#2b303b',
       foreground: '#c0c5ce',
       cursor: '#8fa1b3',
-      selection: 'rgba(143,161,179,0.45)'
+      selection: 'rgba(143,161,179,0.45)',
     },
-    preview: { background: '#2b303b', foreground: '#c0c5ce' }
+    preview: {background: '#2b303b', foreground: '#c0c5ce'},
   },
   clearLight: {
     label: 'Clear Light',
@@ -68,9 +68,9 @@ const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
       background: '#f4f4f2',
       foreground: '#2b2b2b',
       cursor: '#000000',
-      selection: 'rgba(0,0,0,0.2)'
+      selection: 'rgba(0,0,0,0.2)',
     },
-    preview: { background: '#f4f4f2', foreground: '#2b2b2b' }
+    preview: {background: '#f4f4f2', foreground: '#2b2b2b'},
   },
   grass: {
     label: 'Grass',
@@ -79,9 +79,9 @@ const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
       background: '#253120',
       foreground: '#d4fcbc',
       cursor: '#c8ff91',
-      selection: 'rgba(212,252,188,0.35)'
+      selection: 'rgba(212,252,188,0.35)',
     },
-    preview: { background: '#2c3a27', foreground: '#d4fcbc' }
+    preview: {background: '#2c3a27', foreground: '#d4fcbc'},
   },
   homebrew: {
     label: 'Homebrew',
@@ -90,9 +90,9 @@ const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
       background: '#000000',
       foreground: '#39ff14',
       cursor: '#39ff14',
-      selection: 'rgba(57,255,20,0.35)'
+      selection: 'rgba(57,255,20,0.35)',
     },
-    preview: { background: '#000000', foreground: '#39ff14' }
+    preview: {background: '#000000', foreground: '#39ff14'},
   },
   manPage: {
     label: 'Man Page',
@@ -101,9 +101,9 @@ const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
       background: '#fdf6e3',
       foreground: '#584b24',
       cursor: '#657b83',
-      selection: 'rgba(60,60,60,0.25)'
+      selection: 'rgba(60,60,60,0.25)',
     },
-    preview: { background: '#fdf6e3', foreground: '#584b24' }
+    preview: {background: '#fdf6e3', foreground: '#584b24'},
   },
   ocean: {
     label: 'Ocean',
@@ -112,9 +112,9 @@ const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
       background: '#001f3f',
       foreground: '#d0ebff',
       cursor: '#7fdbff',
-      selection: 'rgba(127,219,255,0.35)'
+      selection: 'rgba(127,219,255,0.35)',
     },
-    preview: { background: '#001f3f', foreground: '#d0ebff' }
+    preview: {background: '#001f3f', foreground: '#d0ebff'},
   },
   pro: {
     label: 'Pro',
@@ -123,10 +123,10 @@ const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
       background: '#262626',
       foreground: '#e5e5e5',
       cursor: '#ffffff',
-      selection: 'rgba(229,229,229,0.3)'
+      selection: 'rgba(229,229,229,0.3)',
     },
-    preview: { background: '#262626', foreground: '#e5e5e5' }
-  }
+    preview: {background: '#262626', foreground: '#e5e5e5'},
+  },
 };
 
 export function activate(context: vscode.ExtensionContext) {
@@ -137,13 +137,13 @@ export function activate(context: vscode.ExtensionContext) {
     sessionManager,
     provider,
     vscode.window.registerWebviewViewProvider(VIEW_ID, provider, {
-      webviewOptions: { retainContextWhenHidden: true }
+      webviewOptions: {retainContextWhenHidden: true},
     }),
-    vscode.commands.registerCommand('ai-terminal.focus', () => {
+    vscode.commands.registerCommand('terminal-for-ai-cli.focus', () => {
       vscode.commands.executeCommand(CONTAINER_COMMAND);
       provider.reveal();
     }),
-    vscode.commands.registerCommand('ai-terminal.newSession', () => {
+    vscode.commands.registerCommand('terminal-for-ai-cli.newSession', () => {
       provider.newSession();
     })
   );
@@ -153,7 +153,9 @@ export function deactivate() {
   // handled by disposables registered in activate()
 }
 
-class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
+class AiTerminalViewProvider
+  implements vscode.WebviewViewProvider, vscode.Disposable
+{
   private webviewView?: vscode.WebviewView;
   private webviewReady = false;
   private readonly messageQueue: unknown[] = [];
@@ -166,11 +168,17 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
     private readonly sessionManager: SessionManager
   ) {
     this.disposables.push(
-      this.sessionManager.onDidWriteData(({ id, data }) => {
-        this.postMessage({ type: 'session-data', payload: { sessionId: id, data } });
+      this.sessionManager.onDidWriteData(({id, data}) => {
+        this.postMessage({
+          type: 'session-data',
+          payload: {sessionId: id, data},
+        });
       }),
-      this.sessionManager.onDidExit(({ id, code, signal }) => {
-        this.postMessage({ type: 'session-exited', payload: { sessionId: id, code, signal } });
+      this.sessionManager.onDidExit(({id, code, signal}) => {
+        this.postMessage({
+          type: 'session-exited',
+          payload: {sessionId: id, code, signal},
+        });
         this.sessionLabels.delete(id);
         this.postSessionCount();
       }),
@@ -196,7 +204,7 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
     const webview = webviewView.webview;
     webview.options = {
       enableScripts: true,
-      localResourceRoots: [this.context.extensionUri]
+      localResourceRoots: [this.context.extensionUri],
     };
 
     webview.html = this.getHtml(webview);
@@ -230,8 +238,14 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
         this.handleSessionRequest(message.payload);
         break;
       case 'terminal-input':
-        if (message.payload?.sessionId && typeof message.payload.data === 'string') {
-          this.sessionManager.write(message.payload.sessionId, message.payload.data);
+        if (
+          message.payload?.sessionId &&
+          typeof message.payload.data === 'string'
+        ) {
+          this.sessionManager.write(
+            message.payload.sessionId,
+            message.payload.data
+          );
         }
         break;
       case 'terminal-resize':
@@ -258,7 +272,7 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
     }
   }
 
-  private handleSessionRequest(dimensions?: { cols?: number; rows?: number }) {
+  private handleSessionRequest(dimensions?: {cols?: number; rows?: number}) {
     const config = vscode.workspace.getConfiguration('aiTerminal');
     const shell = config.get<string>('defaultShell')?.trim() || undefined;
     const startupCommands = config.get<string[]>('startupCommands') ?? [];
@@ -269,24 +283,31 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
         cols: dimensions?.cols,
         rows: dimensions?.rows,
         startupCommands,
-        cwd: this.resolveWorkingDirectory()
+        cwd: this.resolveWorkingDirectory(),
       });
       const label = this.getOrCreateLabel(info.id);
 
-      this.postMessage({ type: 'session-created', payload: { ...info, label } });
+      this.postMessage({type: 'session-created', payload: {...info, label}});
       this.postSessionCount();
     } catch (error) {
-      console.error('Failed to create AI Terminal session', error);
-      vscode.window.showErrorMessage('AI Terminal: セッションを作成できませんでした。詳細は開発者ツールを確認してください。');
+      console.error('Failed to create Terminal For AI CLI session', error);
+      vscode.window.showErrorMessage(
+        'Terminal For AI CLI: セッションを作成できませんでした。詳細は開発者ツールを確認してください。'
+      );
       this.postMessage({
         type: 'session-error',
-        payload: { message: error instanceof Error ? error.message : String(error) }
+        payload: {
+          message: error instanceof Error ? error.message : String(error),
+        },
       });
     }
   }
 
   private postSessionCount() {
-    this.postMessage({ type: 'session-count', payload: { total: this.sessionManager.getSessionCount() } });
+    this.postMessage({
+      type: 'session-count',
+      payload: {total: this.sessionManager.getSessionCount()},
+    });
   }
 
   private postMessage(message: unknown) {
@@ -298,7 +319,7 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
   }
 
   private postThemeUpdate() {
-    this.postMessage({ type: 'theme-update', payload: this.getThemeValues() });
+    this.postMessage({type: 'theme-update', payload: this.getThemeValues()});
   }
 
   private async updateThemePreset(presetKey: string) {
@@ -306,12 +327,20 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
       return;
     }
     const config = vscode.workspace.getConfiguration('aiTerminal');
-    await config.update('themePreset', presetKey, vscode.ConfigurationTarget.Global);
+    await config.update(
+      'themePreset',
+      presetKey,
+      vscode.ConfigurationTarget.Global
+    );
     this.postThemeUpdate();
   }
 
   private flushQueuedMessages() {
-    if (!this.webviewView || !this.webviewReady || this.messageQueue.length === 0) {
+    if (
+      !this.webviewView ||
+      !this.webviewReady ||
+      this.messageQueue.length === 0
+    ) {
       return;
     }
     while (this.messageQueue.length > 0) {
@@ -331,7 +360,9 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
   private resolveWorkingDirectory(): string | undefined {
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor) {
-      const workspaceFolder = vscode.workspace.getWorkspaceFolder(activeEditor.document.uri);
+      const workspaceFolder = vscode.workspace.getWorkspaceFolder(
+        activeEditor.document.uri
+      );
       if (workspaceFolder?.uri.scheme === 'file') {
         return workspaceFolder.uri.fsPath;
       }
@@ -343,7 +374,9 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
 
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (workspaceFolders?.length) {
-      const preferred = workspaceFolders.find((folder) => folder.uri.scheme === 'file');
+      const preferred = workspaceFolders.find(
+        (folder) => folder.uri.scheme === 'file'
+      );
       return (preferred ?? workspaceFolders[0]).uri.fsPath;
     }
 
@@ -352,7 +385,7 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
       process.env.CURSOR_WORKSPACE_DIR,
       process.env.CURSOR_CWD,
       process.env.PWD,
-      process.env.INIT_CWD
+      process.env.INIT_CWD,
     ];
     for (const candidate of envCandidates) {
       if (candidate && candidate.trim().length > 0) {
@@ -386,13 +419,13 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
           <meta charset="UTF-8" />
           <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';" />
           <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <title>AI Terminal</title>
+          <title>Terminal For AI CLI</title>
           <link rel="stylesheet" href="${xtermCssUri}" />
           <style>
             :root {
               color-scheme: light dark;
-              --ai-terminal-bg: ${theme.palette.background};
-              --ai-terminal-fg: ${theme.palette.foreground};
+              --terminal-bg: ${theme.palette.background};
+              --terminal-fg: ${theme.palette.foreground};
             }
             html,
             body {
@@ -404,7 +437,7 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
               box-sizing: border-box;
               font-family: var(--vscode-font-family);
               font-size: var(--vscode-font-size);
-              color: var(--ai-terminal-fg);
+              color: var(--terminal-fg);
               background: var(--vscode-sideBar-background);
               display: flex;
               flex-direction: column;
@@ -457,8 +490,8 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
             #terminal-root {
               flex: 1 1 auto;
               border-radius: 6px;
-              border: 1px solid color-mix(in srgb, var(--ai-terminal-fg) 30%, transparent);
-              background: var(--ai-terminal-bg);
+              border: 1px solid color-mix(in srgb, var(--terminal-fg) 30%, transparent);
+              background: var(--terminal-bg);
               padding: 0.25rem;
               overflow: hidden;
             }
@@ -469,7 +502,7 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
               display: flex;
               align-items: center;
               justify-content: center;
-              color: color-mix(in srgb, var(--ai-terminal-fg) 70%, transparent);
+              color: color-mix(in srgb, var(--terminal-fg) 70%, transparent);
             }
             .terminal-resizer::after {
               content: '';
@@ -504,8 +537,8 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
               gap: 0.4rem;
               padding: 0.35rem 0.5rem;
               border-radius: 4px;
-              border: 1px solid color-mix(in srgb, var(--ai-terminal-fg) 25%, transparent);
-              background: color-mix(in srgb, var(--ai-terminal-bg) 70%, transparent);
+              border: 1px solid color-mix(in srgb, var(--terminal-fg) 25%, transparent);
+              background: color-mix(in srgb, var(--terminal-bg) 70%, transparent);
               font-size: 0.75rem;
               width: fit-content;
             }
@@ -523,8 +556,8 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
         <body>
           <header class="header">
             <div style="display:flex;align-items:center;gap:0.5rem;">
-              <img src="${iconUri}" alt="AI Terminal" width="20" height="20" />
-              <strong>AI Terminal</strong>
+              <img src="${iconUri}" alt="Terminal For AI CLI" width="20" height="20" />
+              <strong>Terminal For AI CLI</strong>
             </div>
             <span data-session-status>初期化中…</span>
           </header>
@@ -557,16 +590,17 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
 
   private getThemeValues() {
     const config = vscode.workspace.getConfiguration('aiTerminal');
-    const presetKey = (config.get<string>('themePreset') as ThemePresetKey) ?? 'modern';
+    const presetKey =
+      (config.get<string>('themePreset') as ThemePresetKey) ?? 'modern';
     const activePreset = THEME_PRESETS[presetKey] ?? THEME_PRESETS.modern;
     const palette = activePreset.palette;
     const presets = Object.entries(THEME_PRESETS).map(([key, value]) => ({
       key,
       label: value.label,
       description: value.description,
-      preview: value.preview
+      preview: value.preview,
     }));
-    return { presetKey, palette, presets };
+    return {presetKey, palette, presets};
   }
 
   private postExistingSessions() {
@@ -578,7 +612,7 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
       const label = this.getOrCreateLabel(session.id);
       this.postMessage({
         type: 'session-created',
-        payload: { ...session, label, restored: true }
+        payload: {...session, label, restored: true},
       });
     }
   }
@@ -597,13 +631,17 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
   private bumpSequenceFromLabel(label: string) {
     const match = label.match(/ターミナル(\d+)/);
     if (match) {
-      this.sessionSequence = Math.max(this.sessionSequence, Number(match[1]) + 1);
+      this.sessionSequence = Math.max(
+        this.sessionSequence,
+        Number(match[1]) + 1
+      );
     }
   }
 }
 
 function getNonce() {
-  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const possible =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let text = '';
   for (let i = 0; i < 16; i++) {
     text += possible.charAt(Math.floor(Math.random() * possible.length));
