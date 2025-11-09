@@ -190,6 +190,7 @@ export class SessionManager implements vscode.Disposable {
   private readonly onDataEmitter = new vscode.EventEmitter<SessionDataEvent>();
   private readonly onExitEmitter = new vscode.EventEmitter<SessionExitEvent>();
   private pythonExecutable: string | null | undefined;
+  private readonly sessionInfos = new Map<string, SessionInfo>();
 
   readonly onDidWriteData = this.onDataEmitter.event;
   readonly onDidExit = this.onExitEmitter.event;
@@ -209,6 +210,13 @@ export class SessionManager implements vscode.Disposable {
 
     const session = new ShellSession(id, child, usesPtyHelper, resizeControl);
     this.sessions.set(id, session);
+    const info: SessionInfo = {
+      id,
+      pid: child.pid ?? undefined,
+      shell,
+      createdAt: Date.now()
+    };
+    this.sessionInfos.set(id, info);
 
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
@@ -223,6 +231,7 @@ export class SessionManager implements vscode.Disposable {
 
     child.on('close', (code, signal) => {
       this.sessions.delete(id);
+      this.sessionInfos.delete(id);
       this.onExitEmitter.fire({ id, code, signal });
     });
 
@@ -257,6 +266,7 @@ export class SessionManager implements vscode.Disposable {
     if (session) {
       session.dispose();
       this.sessions.delete(id);
+      this.sessionInfos.delete(id);
     }
   }
 
@@ -358,6 +368,10 @@ export class SessionManager implements vscode.Disposable {
       return userShell;
     }
     return '/bin/bash';
+  }
+
+  getActiveSessions(): SessionInfo[] {
+    return Array.from(this.sessionInfos.values());
   }
 
   private getDefaultCwd(): string {

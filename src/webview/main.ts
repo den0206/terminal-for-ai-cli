@@ -31,7 +31,10 @@ type ThemeUpdatePayload = {
 
 type InboundMessage =
   | { type: 'session-count'; payload: { total: number } }
-  | { type: 'session-created'; payload: { id: string; shell: string; pid?: number } }
+  | {
+      type: 'session-created';
+      payload: { id: string; shell: string; pid?: number; label?: string; restored?: boolean }
+    }
   | { type: 'session-data'; payload: { sessionId: string; data: string } }
   | { type: 'session-exited'; payload: { sessionId: string; code: number | null; signal: string | null } }
   | { type: 'session-error'; payload: { message: string } }
@@ -45,26 +48,32 @@ type OutboundMessage =
   | { type: 'dispose-session'; payload: { sessionId: string } }
   | { type: 'theme-select'; payload: { presetKey: string } };
 
+type SessionMeta = { shell: string; label: string };
+
 type ViewState = {
   activeSessionId?: string;
   totalSessions: number;
   sessionIds: string[];
   terminalHeight?: number;
+  sessionMeta?: Record<string, SessionMeta>;
 };
 
 const vscode = acquireVsCodeApi<ViewState>();
 
 const statusEl = document.querySelector('[data-session-status]') as HTMLSpanElement | null;
-const logEl = document.querySelector('[data-session-log]') as HTMLUListElement | null;
-const newSessionButton = document.querySelector('[data-action="new-session"]') as HTMLButtonElement | null;
-const disposeSessionButton = document.querySelector('[data-action="dispose-session"]') as HTMLButtonElement | null;
+const addSessionButton = document.querySelector('[data-session-add]') as HTMLButtonElement | null;
+const removeSessionButton = document.querySelector('[data-session-remove]') as HTMLButtonElement | null;
 const terminalRoot = document.getElementById('terminal-root') as HTMLDivElement | null;
 const terminalShell = document.querySelector('[data-terminal-shell]') as HTMLDivElement | null;
 const resizerEl = document.querySelector('[data-terminal-resizer]') as HTMLDivElement | null;
+const sessionSelectEl = document.querySelector('[data-session-select]') as HTMLSelectElement | null;
 const themeSelectEl = document.querySelector('[data-theme-select]') as HTMLSelectElement | null;
 const themeActiveLabel = document.querySelector('[data-theme-active-label]') as HTMLSpanElement | null;
 const themePreviewText = document.querySelector('[data-theme-preview-text]') as HTMLSpanElement | null;
 const themePreviewSwatch = document.querySelector('[data-theme-swatch]') as HTMLSpanElement | null;
+
+const sessionBuffers: Record<string, string> = {};
+const MAX_BUFFER_SIZE = 200_000;
 
 const savedState = vscode.getState() ?? { totalSessions: 0, sessionIds: [] };
 let activeSessionId = savedState.activeSessionId;
@@ -74,6 +83,15 @@ let terminalHeight = typeof savedState.terminalHeight === 'number' ? savedState.
 let pendingSessionRequest = false;
 let currentThemeKey: string | undefined;
 let availablePresets: ThemePresetInfo[] = [];
+let sessionMeta: Record<string, SessionMeta> = savedState.sessionMeta ?? {};
+sessionIds.forEach((id, index) => {
+  sessionBuffers[id] = sessionBuffers[id] ?? '';
+  sessionMeta[id] =
+    sessionMeta[id] ?? ({
+      shell: 'シェル',
+      label: `ターミナル${index + 1}`
+    } as SessionMeta);
+});
 
 const terminal = new Terminal({
   allowTransparency: true,
@@ -119,6 +137,7 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
       totalSessions = message.payload.total;
       if (totalSessions === 0) {
         sessionIds = [];
+        sessionMeta = {};
         if (activeSessionId) {
           activeSessionId = undefined;
           terminal.reset();
@@ -132,33 +151,35 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
       break;
     case 'session-created':
       pendingSessionRequest = false;
-      setNewSessionButtonBusy(false);
+      updateAddButtonState(false);
       sessionIds = sessionIds.filter((id) => id !== message.payload.id);
       sessionIds.push(message.payload.id);
+      sessionMeta[message.payload.id] = {
+        shell: message.payload.shell,
+        label: message.payload.label ?? `ターミナル${sessionIds.length}`
+      };
+      sessionBuffers[message.payload.id] = '';
       persistState();
+      const restored = Boolean(message.payload.restored);
       activateSession(message.payload.id, message.payload.shell);
-      appendLog(
-        `${message.payload.shell} の新しいセッション (${message.payload.id}) を開始しました`
-      );
+      // no log panel
       break;
     case 'session-data':
       if (!activeSessionId) {
         activeSessionId = message.payload.sessionId;
         persistState();
-        updateDisposeButtonState();
+        updateSessionControls();
       }
+      appendToBuffer(message.payload.sessionId, message.payload.data);
       if (message.payload.sessionId === activeSessionId) {
         terminal.write(message.payload.data);
       }
       break;
     case 'session-exited':
       sessionIds = sessionIds.filter((id) => id !== message.payload.sessionId);
+      delete sessionMeta[message.payload.sessionId];
+      delete sessionBuffers[message.payload.sessionId];
       persistState();
-      appendLog(
-        `${message.payload.sessionId} が終了しました (code: ${
-          message.payload.code ?? '―'
-        }, signal: ${message.payload.signal ?? '―'})`
-      );
       if (message.payload.sessionId === activeSessionId) {
         const fallbackId = sessionIds[sessionIds.length - 1];
         if (fallbackId) {
@@ -168,15 +189,14 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
           persistState();
           terminal.reset();
           setStatus('セッションが終了しました');
-          updateDisposeButtonState();
+          updateSessionControls();
         }
       }
       break;
     case 'session-error':
       pendingSessionRequest = false;
-      setNewSessionButtonBusy(false);
+      updateAddButtonState(false);
       setStatus(`エラー: ${message.payload.message}`);
-      appendLog(`エラー: ${message.payload.message}`);
       break;
     case 'theme-update':
       applyTheme(message.payload.palette);
@@ -189,20 +209,28 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
   }
 });
 
-newSessionButton?.addEventListener('click', () => {
+addSessionButton?.addEventListener('click', () => {
   requestNewSession();
 });
 
-disposeSessionButton?.addEventListener('click', () => {
+removeSessionButton?.addEventListener('click', () => {
   if (!activeSessionId || pendingSessionRequest) {
     return;
   }
   setStatus('セッションを終了しています…');
-  updateDisposeButtonState();
+  updateSessionControls();
   vscode.postMessage<OutboundMessage>({
     type: 'dispose-session',
     payload: { sessionId: activeSessionId }
   });
+});
+
+sessionSelectEl?.addEventListener('change', () => {
+  const nextSessionId = sessionSelectEl.value;
+  if (!nextSessionId || nextSessionId === activeSessionId) {
+    return;
+  }
+  switchActiveSession(nextSessionId, `${getSessionLabel(nextSessionId)} に切り替えました`);
 });
 window.addEventListener(
   'resize',
@@ -256,14 +284,14 @@ if (activeSessionId) {
 } else {
   setStatus('セッションを初期化しています…');
 }
-updateDisposeButtonState();
+updateSessionControls();
 
 function requestNewSession() {
   if (pendingSessionRequest) {
     return;
   }
   pendingSessionRequest = true;
-  setNewSessionButtonBusy(true);
+  updateAddButtonState(true);
   setStatus('新しいセッションを初期化しています…');
   fitTerminal();
   vscode.postMessage<OutboundMessage>({
@@ -276,23 +304,26 @@ function activateSession(sessionId: string, shell?: string) {
   activeSessionId = sessionId;
   persistState();
   terminal.reset();
+  writeBufferToTerminal(sessionId);
+  terminal.scrollToBottom();
   fitTerminal();
   notifyResize();
   terminal.focus();
-  setStatus(`${shell ?? 'シェル'} セッション ${sessionId} に接続しました`);
-  updateDisposeButtonState();
+  setStatus(`${getSessionLabel(sessionId)} (${shell ?? sessionMeta[sessionId]?.shell ?? 'シェル'}) に接続しました`);
+  updateSessionControls();
 }
 
 function switchActiveSession(sessionId: string, message: string) {
   activeSessionId = sessionId;
   persistState();
   terminal.reset();
+  writeBufferToTerminal(sessionId);
+  terminal.scrollToBottom();
   fitTerminal();
   notifyResize();
   terminal.focus();
   setStatus(message);
-  appendLog(message);
-  updateDisposeButtonState();
+  updateSessionControls();
 }
 
 function notifyResize() {
@@ -326,36 +357,68 @@ function setStatus(text: string) {
   }
 }
 
-function appendLog(text: string) {
-  if (!logEl) {
+function updateAddButtonState(isBusy: boolean) {
+  if (!addSessionButton) {
     return;
   }
-  const li = document.createElement('li');
-  li.textContent = text;
-  logEl.prepend(li);
-  while (logEl.children.length > 7) {
-    logEl.removeChild(logEl.lastElementChild!);
-  }
+  addSessionButton.disabled = isBusy;
 }
 
-function setNewSessionButtonBusy(isBusy: boolean) {
-  if (!newSessionButton) {
-    return;
+function updateSessionControls() {
+  if (removeSessionButton) {
+    removeSessionButton.disabled = !activeSessionId || pendingSessionRequest;
   }
-  newSessionButton.disabled = isBusy;
-  newSessionButton.textContent = isBusy ? '接続中…' : '新しいセッション';
-  updateDisposeButtonState();
+  if (sessionSelectEl) {
+    sessionSelectEl.disabled = sessionIds.length === 0;
+  }
+  updateAddButtonState(pendingSessionRequest);
+  renderSessionSelect();
 }
 
-function updateDisposeButtonState() {
-  if (!disposeSessionButton) {
+function renderSessionSelect() {
+  if (!sessionSelectEl) {
     return;
   }
-  disposeSessionButton.disabled = !activeSessionId || pendingSessionRequest;
+  sessionSelectEl.innerHTML = '';
+  sessionIds.forEach((id, index) => {
+    const option = document.createElement('option');
+    option.value = id;
+    option.textContent = getSessionLabel(id, index);
+    sessionSelectEl.appendChild(option);
+  });
+  if (activeSessionId) {
+    sessionSelectEl.value = activeSessionId;
+  }
+  sessionSelectEl.disabled = sessionIds.length === 0;
 }
 
 function persistState() {
-  vscode.setState({ activeSessionId, totalSessions, sessionIds, terminalHeight });
+  vscode.setState({ activeSessionId, totalSessions, sessionIds, terminalHeight, sessionMeta });
+}
+
+function getSessionLabel(sessionId: string, fallbackIndex?: number) {
+  return (
+    sessionMeta[sessionId]?.label ??
+    (typeof fallbackIndex === 'number' ? `ターミナル${fallbackIndex + 1}` : sessionId)
+  );
+}
+
+function appendToBuffer(sessionId: string, chunk: string) {
+  if (!sessionBuffers[sessionId]) {
+    sessionBuffers[sessionId] = '';
+  }
+  let next = sessionBuffers[sessionId] + chunk;
+  if (next.length > MAX_BUFFER_SIZE) {
+    next = next.slice(next.length - MAX_BUFFER_SIZE);
+  }
+  sessionBuffers[sessionId] = next;
+}
+
+function writeBufferToTerminal(sessionId: string) {
+  const buffer = sessionBuffers[sessionId];
+  if (buffer) {
+    terminal.write(buffer);
+  }
 }
 
 function debounce<T extends (...args: never[]) => void>(fn: T, delay: number) {

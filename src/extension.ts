@@ -158,6 +158,8 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
   private webviewReady = false;
   private readonly messageQueue: unknown[] = [];
   private readonly disposables: vscode.Disposable[] = [];
+  private sessionSequence = 1;
+  private readonly sessionLabels = new Map<string, string>();
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -169,6 +171,7 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
       }),
       this.sessionManager.onDidExit(({ id, code, signal }) => {
         this.postMessage({ type: 'session-exited', payload: { sessionId: id, code, signal } });
+        this.sessionLabels.delete(id);
         this.postSessionCount();
       }),
       vscode.workspace.onDidChangeConfiguration((event) => {
@@ -220,6 +223,7 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
         this.postSessionCount();
         this.flushQueuedMessages();
         this.postThemeUpdate();
+        this.postExistingSessions();
         this.ensureInitialSession();
         break;
       case 'request-new-session':
@@ -267,8 +271,9 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
         startupCommands,
         cwd: this.resolveWorkingDirectory()
       });
+      const label = this.getOrCreateLabel(info.id);
 
-      this.postMessage({ type: 'session-created', payload: info });
+      this.postMessage({ type: 'session-created', payload: { ...info, label } });
       this.postSessionCount();
     } catch (error) {
       console.error('Failed to create AI Terminal session', error);
@@ -411,6 +416,37 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
               align-items: center;
               gap: 0.5rem;
             }
+            .controls {
+              display: flex;
+              align-items: center;
+              gap: 0.5rem;
+            }
+            .controls select {
+              flex: 1;
+              background: var(--vscode-dropdown-background);
+              color: var(--vscode-dropdown-foreground);
+              border: 1px solid var(--vscode-dropdown-border, transparent);
+              border-radius: 4px;
+              padding: 0.2rem 0.4rem;
+            }
+            .icon-button {
+              width: 28px;
+              height: 28px;
+              border-radius: 4px;
+              border: 1px solid var(--vscode-button-border, transparent);
+              background: var(--vscode-button-background);
+              color: var(--vscode-button-foreground);
+              font-size: 1rem;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              cursor: pointer;
+              padding: 0;
+            }
+            .icon-button:disabled {
+              opacity: 0.6;
+              cursor: default;
+            }
             .terminal-shell {
               flex: 0 0 auto;
               display: flex;
@@ -482,24 +518,6 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
             section {
               flex: 0 0 auto;
             }
-            button {
-              padding: 0.4rem 1rem;
-              border-radius: 4px;
-              border: 1px solid var(--vscode-button-border, transparent);
-              background: var(--vscode-button-background);
-              color: var(--vscode-button-foreground);
-              cursor: pointer;
-            }
-            button:disabled {
-              opacity: 0.65;
-              cursor: default;
-            }
-            .actions {
-              display: flex;
-              flex-wrap: wrap;
-              justify-content: flex-end;
-              gap: 0.5rem;
-            }
           </style>
         </head>
         <body>
@@ -510,6 +528,11 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
             </div>
             <span data-session-status>初期化中…</span>
           </header>
+          <div class="controls" aria-label="セッション操作">
+            <select data-session-select></select>
+            <button class="icon-button" data-session-add title="新しいセッション">+</button>
+            <button class="icon-button" data-session-remove title="セッションを終了">🗑</button>
+          </div>
           <div class="terminal-shell" data-terminal-shell>
             <div id="terminal-root" aria-label="ターミナル"></div>
             <div class="terminal-resizer" data-terminal-resizer aria-label="高さを調整"></div>
@@ -527,16 +550,6 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
               <span data-theme-preview-text>プレビュー</span>
             </div>
           </section>
-          <section>
-            <h3 style="font-size:0.85rem;margin:0 0 0.25rem;">イベントログ</h3>
-            <ul data-session-log style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:0.25rem;font-size:0.85rem;">
-              <li>拡張機能が読み込まれました</li>
-            </ul>
-          </section>
-          <div class="actions">
-            <button data-action="dispose-session" disabled>セッションを終了</button>
-            <button data-action="new-session">新しいセッション</button>
-          </div>
           <script nonce="${nonce}" src="${scriptUri}"></script>
         </body>
       </html>`;
@@ -554,6 +567,38 @@ class AiTerminalViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
       preview: value.preview
     }));
     return { presetKey, palette, presets };
+  }
+
+  private postExistingSessions() {
+    const sessions = this.sessionManager.getActiveSessions();
+    if (!sessions.length) {
+      return;
+    }
+    for (const session of sessions) {
+      const label = this.getOrCreateLabel(session.id);
+      this.postMessage({
+        type: 'session-created',
+        payload: { ...session, label, restored: true }
+      });
+    }
+  }
+
+  private getOrCreateLabel(sessionId: string) {
+    const existing = this.sessionLabels.get(sessionId);
+    if (existing) {
+      return existing;
+    }
+    const label = `ターミナル${this.sessionSequence++}`;
+    this.sessionLabels.set(sessionId, label);
+    this.bumpSequenceFromLabel(label);
+    return label;
+  }
+
+  private bumpSequenceFromLabel(label: string) {
+    const match = label.match(/ターミナル(\d+)/);
+    if (match) {
+      this.sessionSequence = Math.max(this.sessionSequence, Number(match[1]) + 1);
+    }
   }
 }
 
