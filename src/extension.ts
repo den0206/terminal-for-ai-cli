@@ -621,20 +621,25 @@ class AiTerminalViewProvider
     if (existing) {
       return existing;
     }
-    const label = `Terminal ${this.sessionSequence++}`;
+    const label = `Terminal ${this.findNextLabelIndex()}`;
     this.sessionLabels.set(sessionId, label);
-    this.bumpSequenceFromLabel(label);
     return label;
   }
 
-  private bumpSequenceFromLabel(label: string) {
-    const match = label.match(/Terminal\s*(\d+)/);
-    if (match) {
-      this.sessionSequence = Math.max(
-        this.sessionSequence,
-        Number(match[1]) + 1
-      );
+  private findNextLabelIndex() {
+    const usedIndexes = new Set<number>();
+    for (const label of this.sessionLabels.values()) {
+      const match = label.match(/Terminal\s*(\d+)/);
+      if (match) {
+        usedIndexes.add(Number(match[1]));
+      }
     }
+
+    let index = 1;
+    while (usedIndexes.has(index)) {
+      index++;
+    }
+    return index;
   }
 }
 
