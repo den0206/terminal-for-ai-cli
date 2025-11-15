@@ -1,0 +1,369 @@
+import * as path from 'node:path';
+import * as vscode from 'vscode';
+import {SessionManager} from '../terminal/sessionManager';
+import {
+  THEME_PRESETS,
+  ThemePalette,
+  ThemePresetKey,
+  ThemePreview,
+  isValidPresetKey,
+} from '../theming/themePresets';
+import {getNonce} from '../utils/nonce';
+import {
+  ThemeSnapshot,
+  buildWebviewHtml,
+} from './htmlTemplate';
+
+type ThemeOption = {
+  key: ThemePresetKey;
+  label: string;
+  description: string;
+  preview: ThemePreview;
+};
+
+export class AiTerminalViewProvider
+  implements vscode.WebviewViewProvider, vscode.Disposable
+{
+  private webviewView?: vscode.WebviewView;
+  private webviewReady = false;
+  private readonly messageQueue: unknown[] = [];
+  private readonly disposables: vscode.Disposable[] = [];
+  private readonly sessionLabels = new Map<string, string>();
+
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    private readonly sessionManager: SessionManager
+  ) {
+    this.disposables.push(
+      this.sessionManager.onDidWriteData(({id, data}) => {
+        this.postMessage({
+          type: 'session-data',
+          payload: {sessionId: id, data},
+        });
+      }),
+      this.sessionManager.onDidExit(({id, code, signal}) => {
+        this.postMessage({
+          type: 'session-exited',
+          payload: {sessionId: id, code, signal},
+        });
+        this.sessionLabels.delete(id);
+        this.postSessionCount();
+      }),
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (
+          event.affectsConfiguration('aiTerminal.webviewBackground') ||
+          event.affectsConfiguration('aiTerminal.webviewForeground')
+        ) {
+          this.postThemeUpdate();
+        }
+      })
+    );
+  }
+
+  dispose() {
+    vscode.Disposable.from(...this.disposables).dispose();
+  }
+
+  resolveWebviewView(webviewView: vscode.WebviewView) {
+    this.webviewView = webviewView;
+    this.webviewReady = false;
+
+    const webview = webviewView.webview;
+    webview.options = {
+      enableScripts: true,
+      localResourceRoots: [this.context.extensionUri],
+    };
+
+    webview.html = this.getHtml(webview);
+
+    webview.onDidReceiveMessage((message) => {
+      this.handleMessage(message);
+    });
+  }
+
+  reveal() {
+    if (this.webviewView) {
+      this.webviewView.show?.(true);
+    }
+  }
+
+  newSession() {
+    this.handleSessionRequest();
+  }
+
+  private handleMessage(message: any) {
+    switch (message?.type) {
+      case 'webview-ready':
+        this.webviewReady = true;
+        this.postSessionCount();
+        this.flushQueuedMessages();
+        this.postThemeUpdate();
+        this.postExistingSessions();
+        this.ensureInitialSession();
+        break;
+      case 'request-new-session':
+        this.handleSessionRequest(message.payload);
+        break;
+      case 'terminal-input':
+        if (
+          message.payload?.sessionId &&
+          typeof message.payload.data === 'string'
+        ) {
+          this.sessionManager.write(
+            message.payload.sessionId,
+            message.payload.data
+          );
+        }
+        break;
+      case 'terminal-resize':
+        if (message.payload?.sessionId) {
+          this.sessionManager.resize(
+            message.payload.sessionId,
+            Number(message.payload.cols) || 0,
+            Number(message.payload.rows) || 0
+          );
+        }
+        break;
+      case 'dispose-session':
+        if (message.payload?.sessionId) {
+          this.sessionManager.disposeSession(message.payload.sessionId);
+        }
+        break;
+      case 'dispose-all-sessions':
+        this.handleClearAllSessions();
+        break;
+      case 'theme-select':
+        if (message.payload?.presetKey) {
+          this.updateThemePreset(message.payload.presetKey);
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  private handleSessionRequest(dimensions?: {cols?: number; rows?: number}) {
+    const config = vscode.workspace.getConfiguration('aiTerminal');
+    const shell = config.get<string>('defaultShell')?.trim() || undefined;
+    const startupCommands = config.get<string[]>('startupCommands') ?? [];
+
+    try {
+      const info = this.sessionManager.createSession({
+        shell,
+        cols: dimensions?.cols,
+        rows: dimensions?.rows,
+        startupCommands,
+        cwd: this.resolveWorkingDirectory(),
+      });
+      const label = this.getOrCreateLabel(info.id);
+
+      this.postMessage({type: 'session-created', payload: {...info, label}});
+      this.postSessionCount();
+    } catch (error) {
+      console.error('Failed to create Terminal For AI CLI session', error);
+      vscode.window.showErrorMessage(
+        'Terminal For AI CLI: Failed to create a session. Please check the developer tools for details.'
+      );
+      this.postMessage({
+        type: 'session-error',
+        payload: {
+          message: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  private postSessionCount() {
+    this.postMessage({
+      type: 'session-count',
+      payload: {total: this.sessionManager.getSessionCount()},
+    });
+  }
+
+  private postMessage(message: unknown) {
+    if (!this.webviewView || !this.webviewReady) {
+      this.messageQueue.push(message);
+      return;
+    }
+    this.webviewView.webview.postMessage(message);
+  }
+
+  private postThemeUpdate() {
+    this.postMessage({type: 'theme-update', payload: this.getThemeValues()});
+  }
+
+  private async updateThemePreset(presetKey: string) {
+    if (!isValidPresetKey(presetKey)) {
+      return;
+    }
+    const config = vscode.workspace.getConfiguration('aiTerminal');
+    await config.update(
+      'themePreset',
+      presetKey,
+      vscode.ConfigurationTarget.Global
+    );
+    this.postThemeUpdate();
+  }
+
+  private flushQueuedMessages() {
+    if (
+      !this.webviewView ||
+      !this.webviewReady ||
+      this.messageQueue.length === 0
+    ) {
+      return;
+    }
+    while (this.messageQueue.length > 0) {
+      const message = this.messageQueue.shift();
+      if (message) {
+        this.webviewView.webview.postMessage(message);
+      }
+    }
+  }
+
+  private ensureInitialSession() {
+    if (this.sessionManager.getSessionCount() === 0) {
+      this.handleSessionRequest();
+    }
+  }
+
+  private resolveWorkingDirectory(): string | undefined {
+    const activeEditor = vscode.window.activeTextEditor;
+    if (activeEditor) {
+      const workspaceFolder = vscode.workspace.getWorkspaceFolder(
+        activeEditor.document.uri
+      );
+      if (workspaceFolder?.uri.scheme === 'file') {
+        return workspaceFolder.uri.fsPath;
+      }
+
+      if (activeEditor.document.uri.scheme === 'file') {
+        return path.dirname(activeEditor.document.uri.fsPath);
+      }
+    }
+
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders?.length) {
+      const preferred = workspaceFolders.find(
+        (folder) => folder.uri.scheme === 'file'
+      );
+      return (preferred ?? workspaceFolders[0]).uri.fsPath;
+    }
+
+    const envCandidates = [
+      process.env.CURSOR_PROJECT_PATH,
+      process.env.CURSOR_WORKSPACE_DIR,
+      process.env.CURSOR_CWD,
+      process.env.PWD,
+      process.env.INIT_CWD,
+    ];
+    for (const candidate of envCandidates) {
+      if (candidate && candidate.trim().length > 0) {
+        return candidate;
+      }
+    }
+
+    try {
+      return process.cwd();
+    } catch {
+      return undefined;
+    }
+  }
+
+  private handleClearAllSessions() {
+    const sessions = this.sessionManager.getActiveSessions();
+    if (sessions.length === 0) {
+      this.sessionLabels.clear();
+      this.postMessage({type: 'all-sessions-cleared'});
+      this.postSessionCount();
+      return;
+    }
+
+    for (const session of sessions) {
+      this.sessionManager.disposeSession(session.id);
+    }
+    this.sessionLabels.clear();
+    this.postMessage({type: 'all-sessions-cleared'});
+    this.postSessionCount();
+  }
+
+  private getThemeValues(): ThemeSnapshot {
+    const config = vscode.workspace.getConfiguration('aiTerminal');
+    const presetKey =
+      (config.get<string>('themePreset') as ThemePresetKey) ?? 'modern';
+    const activePreset = THEME_PRESETS[presetKey] ?? THEME_PRESETS.modern;
+    const palette = activePreset.palette;
+    const presets: ThemeOption[] = Object.entries(THEME_PRESETS).map(
+      ([key, value]) => ({
+        key: key as ThemePresetKey,
+        label: value.label,
+        description: value.description,
+        preview: value.preview,
+      })
+    );
+    return {presetKey, palette, presets};
+  }
+
+  private postExistingSessions() {
+    const sessions = this.sessionManager.getActiveSessions();
+    if (!sessions.length) {
+      return;
+    }
+    for (const session of sessions) {
+      const label = this.getOrCreateLabel(session.id);
+      this.postMessage({
+        type: 'session-created',
+        payload: {...session, label, restored: true},
+      });
+    }
+  }
+
+  private getOrCreateLabel(sessionId: string) {
+    const existing = this.sessionLabels.get(sessionId);
+    if (existing) {
+      return existing;
+    }
+    const label = `Terminal ${this.findNextLabelIndex()}`;
+    this.sessionLabels.set(sessionId, label);
+    return label;
+  }
+
+  private findNextLabelIndex() {
+    const usedIndexes = new Set<number>();
+    for (const label of this.sessionLabels.values()) {
+      const match = label.match(/Terminal\s*(\d+)/);
+      if (match) {
+        usedIndexes.add(Number(match[1]));
+      }
+    }
+
+    let index = 1;
+    while (usedIndexes.has(index)) {
+      index++;
+    }
+    return index;
+  }
+
+  private getHtml(webview: vscode.Webview): string {
+    const nonce = getNonce();
+    const theme = this.getThemeValues();
+    const iconUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'terminal.svg')
+    );
+    const scriptUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'webview.js')
+    );
+    const xtermCssUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'xterm.css')
+    );
+
+    return buildWebviewHtml({
+      webview,
+      nonce,
+      theme,
+      iconUri,
+      scriptUri,
+      xtermCssUri,
+    });
+  }
+}

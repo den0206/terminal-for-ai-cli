@@ -81,6 +81,16 @@ Terminal for AI CLI は Cursor / VS Code のセカンダリサイドバーに常
 - 主要依存: `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, VS Code API, Python 3 (Unix での PTY ブリッジ用)。
 - 生成物: `dist/extension.js`, `media/webview.js`, `media/webview.js.map`, `media/xterm.css`。
 
+### アーキテクチャ概要
+
+| 領域 | ファイル | 役割 |
+| --- | --- | --- |
+| エントリーポイント | `src/extension.ts` | コマンド登録と Webview プロバイダーの登録。 |
+| ビュープロバイダー | `src/view/aiTerminalViewProvider.ts` | メッセージ処理、セッション管理、テーマ情報の送信。 |
+| Webview テンプレート | `src/view/htmlTemplate.ts` | Webview の HTML / CSS 骨格を生成。 |
+| テーマ定義 | `src/theming/themePresets.ts` | プリセット配色・プレビュー・バリデーションを提供。 |
+| セッション管理 | `src/terminal/sessionManager.ts` | シェル起動、Python PTY ブリッジ／OS fallback を扱う。 |
+
 ---
 
 ## ローカライズ

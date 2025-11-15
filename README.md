@@ -82,6 +82,16 @@ Terminal for AI CLI is a VS Code / Cursor extension that anchors a multi-session
 - Dependencies: `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, VS Code `@types`, and Python 3 (Unix PTY bridge).
 - Outputs: extension host bundle (`dist/extension.js`), Webview bundle (`media/webview.js`, `media/webview.js.map`, `media/xterm.css`).
 
+### Architecture Overview
+
+| Area | File(s) | Responsibility |
+| --- | --- | --- |
+| Extension entry | `src/extension.ts` | Registers commands and the Webview view provider. |
+| View provider | `src/view/aiTerminalViewProvider.ts` | Routes messages, manages sessions, and feeds theme data to the Webview. |
+| Webview template | `src/view/htmlTemplate.ts` | Generates the HTML/CSS shell for the Webview UI. |
+| Theming | `src/theming/themePresets.ts` | Defines palette presets, previews, and validation helpers. |
+| Session management | `src/terminal/sessionManager.ts` | Spawns shells, proxies PTY data via Python bridge or OS fallback. |
+
 ---
 
 ## Localization
