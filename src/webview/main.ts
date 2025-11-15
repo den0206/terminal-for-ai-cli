@@ -2,7 +2,7 @@ import {FitAddon} from '@xterm/addon-fit';
 import {Terminal} from '@xterm/xterm';
 
 interface VSCodeApi<State = unknown> {
-  postMessage(message: unknown): void;
+  postMessage<T = unknown>(message: T): void;
   setState(state: State): void;
   getState(): State | undefined;
 }
@@ -47,7 +47,8 @@ type InboundMessage =
       payload: {sessionId: string; code: number | null; signal: string | null};
     }
   | {type: 'session-error'; payload: {message: string}}
-  | {type: 'theme-update'; payload: ThemeUpdatePayload};
+  | {type: 'theme-update'; payload: ThemeUpdatePayload}
+  | {type: 'all-sessions-cleared'};
 
 type OutboundMessage =
   | {type: 'webview-ready'}
@@ -58,6 +59,7 @@ type OutboundMessage =
       payload: {sessionId: string; cols: number; rows: number};
     }
   | {type: 'dispose-session'; payload: {sessionId: string}}
+  | {type: 'dispose-all-sessions'}
   | {type: 'theme-select'; payload: {presetKey: string}};
 
 type SessionMeta = {shell: string; label: string};
@@ -105,6 +107,18 @@ const themePreviewText = document.querySelector(
 const themePreviewSwatch = document.querySelector(
   '[data-theme-swatch]'
 ) as HTMLSpanElement | null;
+const clearAllButton = document.querySelector(
+  '[data-session-clear-all]'
+) as HTMLButtonElement | null;
+const clearAllConfirm = document.querySelector(
+  '[data-clear-all-confirm]'
+) as HTMLDivElement | null;
+const clearAllConfirmAccept = document.querySelector(
+  '[data-clear-all-confirm-accept]'
+) as HTMLButtonElement | null;
+const clearAllConfirmCancel = document.querySelector(
+  '[data-clear-all-confirm-cancel]'
+) as HTMLButtonElement | null;
 
 const sessionBuffers: Record<string, string> = {};
 const MAX_BUFFER_SIZE = 200_000;
@@ -120,6 +134,8 @@ let terminalHeight =
     ? savedState.terminalHeight
     : 640;
 let pendingSessionRequest = false;
+let clearingAll = false;
+let confirmingClearAll = false;
 let currentThemeKey: string | undefined;
 let availablePresets: ThemePresetInfo[] = [];
 let sessionMeta: Record<string, SessionMeta> = savedState.sessionMeta ?? {};
@@ -164,7 +180,7 @@ const terminal = new Terminal({
       undefined,
       '#ffffff'
     ),
-    selection: getComputedVar(
+    selectionBackground: getComputedVar(
       '--vscode-editor-selectionBackground',
       undefined,
       'rgba(255,255,255,0.15)'
@@ -211,7 +227,7 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
         setStatus(`Registered sessions: ${totalSessions}`);
       }
       persistState();
-      updateDisposeButtonState();
+      updateSessionControls();
       break;
     case 'session-created':
       pendingSessionRequest = false;
@@ -268,6 +284,23 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
       availablePresets = message.payload.presets;
       renderThemeDropdown();
       break;
+    case 'all-sessions-cleared':
+      clearingAll = false;
+      pendingSessionRequest = false;
+      confirmingClearAll = false;
+      toggleClearAllConfirm(false);
+      activeSessionId = undefined;
+      sessionIds = [];
+      sessionMeta = {};
+      totalSessions = 0;
+      for (const key of Object.keys(sessionBuffers)) {
+        delete sessionBuffers[key];
+      }
+      terminal.reset();
+      persistState();
+      setStatus('All sessions cleared');
+      updateSessionControls();
+      break;
     default:
       break;
   }
@@ -287,6 +320,34 @@ removeSessionButton?.addEventListener('click', () => {
     type: 'dispose-session',
     payload: {sessionId: activeSessionId},
   });
+});
+
+clearAllButton?.addEventListener('click', () => {
+  if (pendingSessionRequest || clearingAll || sessionIds.length === 0) {
+    return;
+  }
+  if (!confirmingClearAll) {
+    confirmingClearAll = true;
+    toggleClearAllConfirm(true);
+    return;
+  }
+});
+
+clearAllConfirmAccept?.addEventListener('click', () => {
+  if (pendingSessionRequest || clearingAll || sessionIds.length === 0) {
+    return;
+  }
+  confirmingClearAll = false;
+  toggleClearAllConfirm(false);
+  clearingAll = true;
+  setStatus('Clearing all sessions...');
+  updateSessionControls();
+  vscode.postMessage<OutboundMessage>({type: 'dispose-all-sessions'});
+});
+
+clearAllConfirmCancel?.addEventListener('click', () => {
+  confirmingClearAll = false;
+  toggleClearAllConfirm(false);
 });
 
 sessionSelectEl?.addEventListener('change', () => {
@@ -442,6 +503,14 @@ function updateSessionControls() {
   if (removeSessionButton) {
     removeSessionButton.disabled = !activeSessionId || pendingSessionRequest;
   }
+  if (clearAllButton) {
+    clearAllButton.disabled =
+      clearingAll || pendingSessionRequest || sessionIds.length === 0;
+    if (clearAllButton.disabled && confirmingClearAll) {
+      confirmingClearAll = false;
+      toggleClearAllConfirm(false);
+    }
+  }
   if (sessionSelectEl) {
     sessionSelectEl.disabled = sessionIds.length === 0;
   }
@@ -564,7 +633,7 @@ function refreshTerminalTheme() {
       '--vscode-terminalCursor-foreground',
       '#ffffff'
     ),
-    selection: getComputedVar(
+    selectionBackground: getComputedVar(
       '--terminal-selection',
       '--vscode-editor-selectionBackground',
       'rgba(255,255,255,0.15)'
@@ -616,4 +685,11 @@ function updateThemePreview(preset: ThemePresetInfo | null) {
     themePreviewText.textContent = 'Preview';
     themePreviewSwatch.style.background = '';
   }
+}
+
+function toggleClearAllConfirm(visible: boolean) {
+  if (!clearAllConfirm) {
+    return;
+  }
+  clearAllConfirm.setAttribute('aria-hidden', visible ? 'false' : 'true');
 }

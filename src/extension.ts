@@ -261,6 +261,9 @@ class AiTerminalViewProvider
           this.sessionManager.disposeSession(message.payload.sessionId);
         }
         break;
+      case 'dispose-all-sessions':
+        this.handleClearAllSessions();
+        break;
       case 'theme-select':
         if (message.payload?.presetKey) {
           this.updateThemePreset(message.payload.presetKey);
@@ -397,6 +400,23 @@ class AiTerminalViewProvider
     } catch {
       return undefined;
     }
+  }
+
+  private handleClearAllSessions() {
+    const sessions = this.sessionManager.getActiveSessions();
+    if (sessions.length === 0) {
+      this.sessionLabels.clear();
+      this.postMessage({type: 'all-sessions-cleared'});
+      this.postSessionCount();
+      return;
+    }
+
+    for (const session of sessions) {
+      this.sessionManager.disposeSession(session.id);
+    }
+    this.sessionLabels.clear();
+    this.postMessage({type: 'all-sessions-cleared'});
+    this.postSessionCount();
   }
 
   private getHtml(webview: vscode.Webview): string {
@@ -550,6 +570,61 @@ class AiTerminalViewProvider
             section {
               flex: 0 0 auto;
             }
+            .clear-all {
+              border-top: 1px solid color-mix(in srgb, var(--terminal-fg) 20%, transparent);
+              padding-top: 0.75rem;
+              margin-top: 0.25rem;
+              display: flex;
+              flex-direction: column;
+              gap: 0.4rem;
+            }
+            .danger-button {
+              align-self: flex-start;
+              background: transparent;
+              color: var(--vscode-errorForeground, #f48771);
+              border: 1px solid var(--vscode-errorForeground, #f48771);
+              border-radius: 4px;
+              padding: 0.4rem 0.8rem;
+              font-size: 0.85rem;
+              cursor: pointer;
+              transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+            }
+            .danger-button:hover:enabled {
+              background: color-mix(in srgb, var(--vscode-errorForeground, #f48771) 15%, transparent);
+              color: var(--vscode-errorForeground, #f48771);
+            }
+            .danger-button:disabled {
+              opacity: 0.5;
+              cursor: default;
+            }
+            .clear-all__confirm {
+              display: none;
+              flex-direction: column;
+              gap: 0.35rem;
+              border: 1px solid color-mix(in srgb, var(--terminal-fg) 25%, transparent);
+              border-radius: 6px;
+              padding: 0.5rem;
+              background: color-mix(in srgb, var(--terminal-bg) 50%, transparent);
+            }
+            .clear-all__confirm[aria-hidden='false'] {
+              display: flex;
+            }
+            .clear-all__confirm-actions {
+              display: flex;
+              gap: 0.5rem;
+            }
+            .clear-all__confirm button {
+              padding: 0.35rem 0.7rem;
+              border-radius: 4px;
+              border: 1px solid var(--vscode-button-border, transparent);
+              background: var(--vscode-button-background);
+              color: var(--vscode-button-foreground);
+              cursor: pointer;
+            }
+            .clear-all__confirm button:disabled {
+              opacity: 0.6;
+              cursor: default;
+            }
           </style>
         </head>
         <body>
@@ -580,6 +655,23 @@ class AiTerminalViewProvider
             <div class="theme-preview" data-theme-preview>
               <span class="theme-preview__swatch" data-theme-swatch></span>
               <span data-theme-preview-text>Preview</span>
+            </div>
+          </section>
+          <section class="clear-all" aria-label="Danger zone">
+            <button class="danger-button" data-session-clear-all type="button">
+              Clear all sessions
+            </button>
+            <p style="margin:0;font-size:0.75rem;opacity:0.8;">
+              Closes every running shell in this view.
+            </p>
+            <div class="clear-all__confirm" data-clear-all-confirm aria-hidden="true">
+              <span style="font-size:0.85rem;">
+                Are you sure you want to close every session?
+              </span>
+              <div class="clear-all__confirm-actions">
+                <button data-clear-all-confirm-accept type="button">Yes, close all</button>
+                <button data-clear-all-confirm-cancel type="button">Cancel</button>
+              </div>
             </div>
           </section>
           <script nonce="${nonce}" src="${scriptUri}"></script>
