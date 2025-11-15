@@ -1,82 +1,92 @@
 # Terminal for AI CLI
 
-Terminal for AI CLI は Cursor / VS Code のセカンダリサイドバーに常駐する多機能ターミナル拡張です。`xterm.js` をベースに、セッション管理やテーマのプリセット選択などを提供し、IDE 内で複数シェルを素早く切り替えられるようにします。
+Terminal for AI CLI is a VS Code / Cursor extension that anchors a multi-session terminal inside the secondary sidebar. It is powered by `xterm.js`, communicates with a lightweight `SessionManager` (Node.js + Python bridge), and keeps UI state in the Webview so you can switch shells without context switching to another window.
+
+> 🇯🇵 Looking for the Japanese documentation? Check [`README_JP.md`](README_JP.md). This file and the Japanese version are intentionally kept in sync.
 
 ---
 
-## 進捗状況
+## Features
 
-- [x] Webview ベースのターミナル UI を構築し、セッションごとに `xterm.js` を描画
-- [x] 独自の `SessionManager` により `node-pty` を使わずに PTY を生成（Python ブリッジ + fallback）
-- [x] セッションの追加 / 削除 / ドロップダウン切り替え、出力バッファの復元、サイズ変更ハンドルを実装
-- [x] `ターミナル{n}` のわかりやすい名前付けと永続化、Webview 再起動時のセッション再接続
-- [x] テーマプリセット（Modern, Basic, Clear Dark ...）を追加し、UI から切り替え
-- [x] README 以外の主要コード ( `src/extension.ts`, `src/webview/main.ts`, `src/terminal/sessionManager.ts` ) を TypeScript 化 & ビルド済み
-- [x] イベントログ機能を削除し、UI をシンプル化（ユーザー要望対応済み）
-- [ ] （今後の予定）セッションごとのステータスや自動再接続ポリシーなど高度な管理
+- Multiple shells in one Webview: add, remove, and switch sessions from the dropdown.
+- In-memory scrollback persistence per session (restored when the Webview reloads).
+- Automatic naming (`Terminal 1`, `Terminal 2`, …) that reuses freed numbers.
+- Theme presets (Modern, Basic, Homebrew, etc.) with live preview and VS Code color integration.
+- Adjustable terminal height with a drag handle; the setting is persisted across reloads.
+- “Clear all sessions” section with an inline confirmation flow to terminate every running shell safely.
+- Configurable default shell, startup commands, and theme preset via VS Code settings.
+- Pure TypeScript codebase (`src/extension.ts`, `src/webview/main.ts`, `src/terminal/sessionManager.ts`) with esbuild + `tsc` outputs committed to `media/` and `dist/`.
 
 ---
 
-## 使用方法
+## Usage
 
-1. **依存関係のインストール**
+1. **Install dependencies**
    ```bash
    npm install
    ```
-2. **ビルド / TypeScript コンパイル**
+2. **Compile / bundle**
    ```bash
    npm run compile
    ```
-3. **開発ホストでデバッグ**
-   - VS Code / Cursor で `F5` を押し、Extension Development Host を起動
-   - サイドバーの「Terminal For AI CLI」ビューを開くと自動的にセッションが 1 つ作成されます
-4. **操作**
-   - 上部のドロップダウンで既存セッションを選択
-   - `+` ボタンで新しいセッションを追加
-   - 🗑 ボタンでアクティブセッションを終了
-   - テーマセレクトから好みのプリセットを選択（即時反映）
-   - ドラッグハンドルでターミナル領域の高さを調整（設定は永続化）
+3. **Launch in Extension Development Host**
+   - Press `F5` inside VS Code or Cursor.
+   - In the Extension Development Host, open the “Terminal For AI CLI” view (Activity Bar).
+   - A first terminal session is created automatically; additional sessions can be added with `+`.
+4. **Operate the UI**
+   - **Dropdown**: select any existing session.
+   - **`+` / 🗑**: add or close the active session.
+   - **Clear all sessions**: open the confirmation panel below the Theme section to terminate every shell.
+   - **Theme selector**: pick any preset; the palette updates instantly.
+   - **Resize handle**: drag to change the terminal height (value is saved).
 
 ---
 
-## 改善点・既知の課題
+## Configuration (VS Code settings)
 
-| 項目 | 説明 |
+| Setting | Key | Description |
+| --- | --- | --- |
+| Default shell | `aiTerminal.defaultShell` | Absolute path to the shell executable. Empty string falls back to the user’s login shell. |
+| Startup commands | `aiTerminal.startupCommands` | Array of commands sent (in order) right after a session starts. |
+| Theme preset | `aiTerminal.themePreset` | One of `modern`, `basic`, `clearDark`, `clearLight`, `grass`, `homebrew`, `manPage`, `ocean`, `pro`. The same presets are available in the Webview. |
+
+---
+
+## Known Issues / Limitations
+
+| Item | Description |
 | --- | --- |
-| Windows での PTY | 現状は Python の `pty` ブリッジを使う Unix 最適化実装。Windows では単純な `spawn` fallback のため、全画面アプリやカーソル制御が不安定な可能性があります。 |
-| 端末リサイズ通知 |  `script`/Python ブリッジ経由のリサイズは SIGWINCH/JSON コマンドで送信しているが、環境によって反映が遅れる場合があります。 |
-| セッション永続化 | Webview リロード時に出力バッファを再描画しているものの、IDE を完全に再起動すると OS 側でプロセスが切れるため、より堅牢な復元ロジックが必要です。 |
-| 設定 UI | テーマはプリセットを導入したが、ユーザー独自の配色を JSON で定義するオプションは未実装。 |
-| ログ / 通知 | イベントログ機能を削除したため、今後は VS Code の通知センターや Output channel への記録を検討。 |
+| Windows PTY fallback | Windows uses a simple `spawn` fallback instead of the Python PTY bridge, so full-screen applications and cursor control may be unstable. |
+| Resize propagation | The Python bridge proxies resize events via JSON/SIGWINCH; some environments may see a short delay. |
+| Session restoration | Webview reloads restore buffered output, but a full IDE restart still kills OS processes. A persistent session registry is on the roadmap. |
+| Theme customization | Only built-in presets are supported today; user-defined palettes are a future task. |
+| Logging | The old event log was removed. Consider using the VS Code Output channel for future troubleshooting. |
 
 ---
 
-## 今後のステップ
+## Roadmap
 
-1. **Windows 向け擬似コンソール対応**
-   - PowerShell の Pseudo Console API や `winpty` 互換レイヤーを採用し、等幅描画を改善
-2. **セッション復元の強化**
-   - Extension host 側でセッション状態を永続化し、IDE 再起動後も同じシェルを再生成
-3. **カスタムテーマの導入**
-   - `settings.json` で任意のテーマオブジェクトを指定できるようにする
-4. **コマンド履歴 / スニペット連携**
-   - よく使うコマンドをプリセット化し、ボタン一つで送信
-5. **テレメトリ / ログ出力の整備**
-   - エラー復旧を容易にするため、Output チャンネルに詳細ログを書き出す
+1. **Windows pseudo console integration** (ConPTY/winpty) for reliable rendering.
+2. **Persistent session recovery** even after restarting VS Code.
+3. **Custom theme JSON** support in `settings.json`.
+4. **Command palette / snippet presets** to inject frequently used commands.
+5. **Improved telemetry/logging** via Output channels and notifications.
 
 ---
 
-## 開発メモ
+## Development Notes
 
-- **ビルドコマンド**
-  - `npm run bundle:webview`：Webview JavaScript の IIFE バンドル
-  - `npm run compile`：上記 + `tsc` による extension/server 側のビルド
-- **依存関係**
-  - `@xterm/xterm` / `@xterm/addon-fit`（Webview）
-  - `python3`（Unix のみ、PTY ブリッジ用）
-  - VS Code API (`vscode`), Node.js 18+
-- **出力先**
-  - Extension code: `dist/extension.js`
-  - Webview bundle: `media/webview.js`, `media/xterm.css`
+- `npm run bundle:webview` – bundles `src/webview/main.ts` (IIFE) to `media/webview.js`.
+- `npm run compile` – runs the bundle script and `tsc -p ./` to emit `dist/extension.js`.
+- `npm run watch` – TypeScript watch mode for iterative work.
+- Dependencies: `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, VS Code `@types`, and Python 3 (Unix PTY bridge).
+- Outputs: extension host bundle (`dist/extension.js`), Webview bundle (`media/webview.js`, `media/webview.js.map`, `media/xterm.css`).
 
-開発の際は `README` に記載の手順でビルドし、Extension Development Host で確認してください。質問や改善要望があれば issue へどうぞ。
+---
+
+## Localization
+
+- English: `README.md` (this file)
+- Japanese: [`README_JP.md`](README_JP.md)
+
+Both files describe the same features, usage steps, and roadmap so contributors can reference their preferred language.
