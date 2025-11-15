@@ -1,5 +1,5 @@
-import { FitAddon } from '@xterm/addon-fit';
-import { Terminal } from '@xterm/xterm';
+import {FitAddon} from '@xterm/addon-fit';
+import {Terminal} from '@xterm/xterm';
 
 interface VSCodeApi<State = unknown> {
   postMessage(message: unknown): void;
@@ -20,7 +20,7 @@ type ThemePresetInfo = {
   key: string;
   label: string;
   description: string;
-  preview: { background: string; foreground: string };
+  preview: {background: string; foreground: string};
 };
 
 type ThemeUpdatePayload = {
@@ -30,25 +30,37 @@ type ThemeUpdatePayload = {
 };
 
 type InboundMessage =
-  | { type: 'session-count'; payload: { total: number } }
+  | {type: 'session-count'; payload: {total: number}}
   | {
       type: 'session-created';
-      payload: { id: string; shell: string; pid?: number; label?: string; restored?: boolean }
+      payload: {
+        id: string;
+        shell: string;
+        pid?: number;
+        label?: string;
+        restored?: boolean;
+      };
     }
-  | { type: 'session-data'; payload: { sessionId: string; data: string } }
-  | { type: 'session-exited'; payload: { sessionId: string; code: number | null; signal: string | null } }
-  | { type: 'session-error'; payload: { message: string } }
-  | { type: 'theme-update'; payload: ThemeUpdatePayload };
+  | {type: 'session-data'; payload: {sessionId: string; data: string}}
+  | {
+      type: 'session-exited';
+      payload: {sessionId: string; code: number | null; signal: string | null};
+    }
+  | {type: 'session-error'; payload: {message: string}}
+  | {type: 'theme-update'; payload: ThemeUpdatePayload};
 
 type OutboundMessage =
-  | { type: 'webview-ready' }
-  | { type: 'request-new-session'; payload?: { cols: number; rows: number } }
-  | { type: 'terminal-input'; payload: { sessionId: string; data: string } }
-  | { type: 'terminal-resize'; payload: { sessionId: string; cols: number; rows: number } }
-  | { type: 'dispose-session'; payload: { sessionId: string } }
-  | { type: 'theme-select'; payload: { presetKey: string } };
+  | {type: 'webview-ready'}
+  | {type: 'request-new-session'; payload?: {cols: number; rows: number}}
+  | {type: 'terminal-input'; payload: {sessionId: string; data: string}}
+  | {
+      type: 'terminal-resize';
+      payload: {sessionId: string; cols: number; rows: number};
+    }
+  | {type: 'dispose-session'; payload: {sessionId: string}}
+  | {type: 'theme-select'; payload: {presetKey: string}};
 
-type SessionMeta = { shell: string; label: string };
+type SessionMeta = {shell: string; label: string};
 
 type ViewState = {
   activeSessionId?: string;
@@ -60,26 +72,53 @@ type ViewState = {
 
 const vscode = acquireVsCodeApi<ViewState>();
 
-const statusEl = document.querySelector('[data-session-status]') as HTMLSpanElement | null;
-const addSessionButton = document.querySelector('[data-session-add]') as HTMLButtonElement | null;
-const removeSessionButton = document.querySelector('[data-session-remove]') as HTMLButtonElement | null;
-const terminalRoot = document.getElementById('terminal-root') as HTMLDivElement | null;
-const terminalShell = document.querySelector('[data-terminal-shell]') as HTMLDivElement | null;
-const resizerEl = document.querySelector('[data-terminal-resizer]') as HTMLDivElement | null;
-const sessionSelectEl = document.querySelector('[data-session-select]') as HTMLSelectElement | null;
-const themeSelectEl = document.querySelector('[data-theme-select]') as HTMLSelectElement | null;
-const themeActiveLabel = document.querySelector('[data-theme-active-label]') as HTMLSpanElement | null;
-const themePreviewText = document.querySelector('[data-theme-preview-text]') as HTMLSpanElement | null;
-const themePreviewSwatch = document.querySelector('[data-theme-swatch]') as HTMLSpanElement | null;
+const statusEl = document.querySelector(
+  '[data-session-status]'
+) as HTMLSpanElement | null;
+const addSessionButton = document.querySelector(
+  '[data-session-add]'
+) as HTMLButtonElement | null;
+const removeSessionButton = document.querySelector(
+  '[data-session-remove]'
+) as HTMLButtonElement | null;
+const terminalRoot = document.getElementById(
+  'terminal-root'
+) as HTMLDivElement | null;
+const terminalShell = document.querySelector(
+  '[data-terminal-shell]'
+) as HTMLDivElement | null;
+const resizerEl = document.querySelector(
+  '[data-terminal-resizer]'
+) as HTMLDivElement | null;
+const sessionSelectEl = document.querySelector(
+  '[data-session-select]'
+) as HTMLSelectElement | null;
+const themeSelectEl = document.querySelector(
+  '[data-theme-select]'
+) as HTMLSelectElement | null;
+const themeActiveLabel = document.querySelector(
+  '[data-theme-active-label]'
+) as HTMLSpanElement | null;
+const themePreviewText = document.querySelector(
+  '[data-theme-preview-text]'
+) as HTMLSpanElement | null;
+const themePreviewSwatch = document.querySelector(
+  '[data-theme-swatch]'
+) as HTMLSpanElement | null;
 
 const sessionBuffers: Record<string, string> = {};
 const MAX_BUFFER_SIZE = 200_000;
 
-const savedState = vscode.getState() ?? { totalSessions: 0, sessionIds: [] };
+const savedState = vscode.getState() ?? {totalSessions: 0, sessionIds: []};
 let activeSessionId = savedState.activeSessionId;
 let totalSessions = savedState.totalSessions ?? 0;
-let sessionIds = Array.isArray(savedState.sessionIds) ? [...savedState.sessionIds] : [];
-let terminalHeight = typeof savedState.terminalHeight === 'number' ? savedState.terminalHeight : 640;
+let sessionIds = Array.isArray(savedState.sessionIds)
+  ? [...savedState.sessionIds]
+  : [];
+let terminalHeight =
+  typeof savedState.terminalHeight === 'number'
+    ? savedState.terminalHeight
+    : 640;
 let pendingSessionRequest = false;
 let currentThemeKey: string | undefined;
 let availablePresets: ThemePresetInfo[] = [];
@@ -87,9 +126,10 @@ let sessionMeta: Record<string, SessionMeta> = savedState.sessionMeta ?? {};
 sessionIds.forEach((id, index) => {
   sessionBuffers[id] = sessionBuffers[id] ?? '';
   sessionMeta[id] =
-    sessionMeta[id] ?? ({
-      shell: 'シェル',
-      label: `ターミナル${index + 1}`
+    sessionMeta[id] ??
+    ({
+      shell: 'Shell',
+      label: `Terminal ${index + 1}`,
     } as SessionMeta);
 });
 
@@ -98,14 +138,38 @@ const terminal = new Terminal({
   convertEol: true,
   cursorBlink: true,
   scrollback: 2000,
-  fontFamily: getComputedVar('--vscode-editor-font-family', 'var(--monaco-monospace-font)', 'monospace'),
-  fontSize: Number.parseInt(getComputedVar('--vscode-editor-font-size', undefined, '13'), 10) || 13,
+  fontFamily: getComputedVar(
+    '--vscode-editor-font-family',
+    'var(--monaco-monospace-font)',
+    'monospace'
+  ),
+  fontSize:
+    Number.parseInt(
+      getComputedVar('--vscode-editor-font-size', undefined, '13'),
+      10
+    ) || 13,
   theme: {
-    background: getComputedVar('--vscode-editor-background', undefined, '#1e1e1e'),
-    foreground: getComputedVar('--vscode-editor-foreground', undefined, '#cccccc'),
-    cursor: getComputedVar('--vscode-terminalCursor-foreground', undefined, '#ffffff'),
-    selection: getComputedVar('--vscode-editor-selectionBackground', undefined, 'rgba(255,255,255,0.15)')
-  }
+    background: getComputedVar(
+      '--vscode-editor-background',
+      undefined,
+      '#1e1e1e'
+    ),
+    foreground: getComputedVar(
+      '--vscode-editor-foreground',
+      undefined,
+      '#cccccc'
+    ),
+    cursor: getComputedVar(
+      '--vscode-terminalCursor-foreground',
+      undefined,
+      '#ffffff'
+    ),
+    selection: getComputedVar(
+      '--vscode-editor-selectionBackground',
+      undefined,
+      'rgba(255,255,255,0.15)'
+    ),
+  },
 });
 const fitAddon = new FitAddon();
 terminal.loadAddon(fitAddon);
@@ -122,7 +186,7 @@ terminal.onData((data) => {
   if (activeSessionId) {
     vscode.postMessage<OutboundMessage>({
       type: 'terminal-input',
-      payload: { sessionId: activeSessionId, data }
+      payload: {sessionId: activeSessionId, data},
     });
   }
 });
@@ -142,9 +206,9 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
           activeSessionId = undefined;
           terminal.reset();
         }
-        setStatus('セッションがありません');
+        setStatus('No sessions available');
       } else {
-        setStatus(`登録済みセッション: ${totalSessions} 件`);
+        setStatus(`Registered sessions: ${totalSessions}`);
       }
       persistState();
       updateDisposeButtonState();
@@ -156,7 +220,7 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
       sessionIds.push(message.payload.id);
       sessionMeta[message.payload.id] = {
         shell: message.payload.shell,
-        label: message.payload.label ?? `ターミナル${sessionIds.length}`
+        label: message.payload.label ?? `Terminal ${sessionIds.length}`,
       };
       sessionBuffers[message.payload.id] = '';
       persistState();
@@ -183,12 +247,12 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
       if (message.payload.sessionId === activeSessionId) {
         const fallbackId = sessionIds[sessionIds.length - 1];
         if (fallbackId) {
-          switchActiveSession(fallbackId, `セッション ${fallbackId} に切り替えました`);
+          switchActiveSession(fallbackId, `Switched to session ${fallbackId}`);
         } else {
           activeSessionId = undefined;
           persistState();
           terminal.reset();
-          setStatus('セッションが終了しました');
+          setStatus('Session has ended');
           updateSessionControls();
         }
       }
@@ -196,7 +260,7 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
     case 'session-error':
       pendingSessionRequest = false;
       updateAddButtonState(false);
-      setStatus(`エラー: ${message.payload.message}`);
+      setStatus(`Error: ${message.payload.message}`);
       break;
     case 'theme-update':
       applyTheme(message.payload.palette);
@@ -217,11 +281,11 @@ removeSessionButton?.addEventListener('click', () => {
   if (!activeSessionId || pendingSessionRequest) {
     return;
   }
-  setStatus('セッションを終了しています…');
+  setStatus('Ending session...');
   updateSessionControls();
   vscode.postMessage<OutboundMessage>({
     type: 'dispose-session',
-    payload: { sessionId: activeSessionId }
+    payload: {sessionId: activeSessionId},
   });
 });
 
@@ -230,7 +294,10 @@ sessionSelectEl?.addEventListener('change', () => {
   if (!nextSessionId || nextSessionId === activeSessionId) {
     return;
   }
-  switchActiveSession(nextSessionId, `${getSessionLabel(nextSessionId)} に切り替えました`);
+  switchActiveSession(
+    nextSessionId,
+    `Switched to ${getSessionLabel(nextSessionId)}`
+  );
 });
 window.addEventListener(
   'resize',
@@ -274,15 +341,18 @@ themeSelectEl?.addEventListener('change', () => {
   if (!presetKey || presetKey === currentThemeKey) {
     return;
   }
-  vscode.postMessage<OutboundMessage>({ type: 'theme-select', payload: { presetKey } });
+  vscode.postMessage<OutboundMessage>({
+    type: 'theme-select',
+    payload: {presetKey},
+  });
 });
 
-vscode.postMessage<OutboundMessage>({ type: 'webview-ready' });
+vscode.postMessage<OutboundMessage>({type: 'webview-ready'});
 if (activeSessionId) {
-  setStatus(`セッション ${activeSessionId} を復元中…`);
+  setStatus(`Restoring session ${activeSessionId}...`);
   notifyResize();
 } else {
-  setStatus('セッションを初期化しています…');
+  setStatus('Initializing session...');
 }
 updateSessionControls();
 
@@ -292,11 +362,11 @@ function requestNewSession() {
   }
   pendingSessionRequest = true;
   updateAddButtonState(true);
-  setStatus('新しいセッションを初期化しています…');
+  setStatus('Initializing a new session...');
   fitTerminal();
   vscode.postMessage<OutboundMessage>({
     type: 'request-new-session',
-    payload: getTerminalDimensions()
+    payload: getTerminalDimensions(),
   });
 }
 
@@ -309,7 +379,11 @@ function activateSession(sessionId: string, shell?: string) {
   fitTerminal();
   notifyResize();
   terminal.focus();
-  setStatus(`${getSessionLabel(sessionId)} (${shell ?? sessionMeta[sessionId]?.shell ?? 'シェル'}) に接続しました`);
+  setStatus(
+    `Connected to ${getSessionLabel(sessionId)} (${
+      shell ?? sessionMeta[sessionId]?.shell ?? 'Shell'
+    })`
+  );
   updateSessionControls();
 }
 
@@ -330,10 +404,10 @@ function notifyResize() {
   if (!activeSessionId) {
     return;
   }
-  const { cols, rows } = getTerminalDimensions();
+  const {cols, rows} = getTerminalDimensions();
   vscode.postMessage<OutboundMessage>({
     type: 'terminal-resize',
-    payload: { sessionId: activeSessionId, cols, rows }
+    payload: {sessionId: activeSessionId, cols, rows},
   });
 }
 
@@ -347,7 +421,7 @@ function fitTerminal() {
 function getTerminalDimensions() {
   return {
     cols: terminal.cols || 80,
-    rows: terminal.rows || 24
+    rows: terminal.rows || 24,
   };
 }
 
@@ -393,13 +467,21 @@ function renderSessionSelect() {
 }
 
 function persistState() {
-  vscode.setState({ activeSessionId, totalSessions, sessionIds, terminalHeight, sessionMeta });
+  vscode.setState({
+    activeSessionId,
+    totalSessions,
+    sessionIds,
+    terminalHeight,
+    sessionMeta,
+  });
 }
 
 function getSessionLabel(sessionId: string, fallbackIndex?: number) {
   return (
     sessionMeta[sessionId]?.label ??
-    (typeof fallbackIndex === 'number' ? `ターミナル${fallbackIndex + 1}` : sessionId)
+    (typeof fallbackIndex === 'number'
+      ? `Terminal ${fallbackIndex + 1}`
+      : sessionId)
   );
 }
 
@@ -467,14 +549,26 @@ function applyTerminalHeight(value: number, persist = true) {
 
 function refreshTerminalTheme() {
   terminal.options.theme = {
-    background: getComputedVar('--terminal-bg', '--vscode-editor-background', '#1e1e1e'),
-    foreground: getComputedVar('--terminal-fg', '--vscode-editor-foreground', '#cccccc'),
-    cursor: getComputedVar('--terminal-cursor', '--vscode-terminalCursor-foreground', '#ffffff'),
+    background: getComputedVar(
+      '--terminal-bg',
+      '--vscode-editor-background',
+      '#1e1e1e'
+    ),
+    foreground: getComputedVar(
+      '--terminal-fg',
+      '--vscode-editor-foreground',
+      '#cccccc'
+    ),
+    cursor: getComputedVar(
+      '--terminal-cursor',
+      '--vscode-terminalCursor-foreground',
+      '#ffffff'
+    ),
     selection: getComputedVar(
       '--terminal-selection',
       '--vscode-editor-selectionBackground',
       'rgba(255,255,255,0.15)'
-    )
+    ),
   };
 }
 
@@ -501,7 +595,9 @@ function renderThemeDropdown() {
   if (currentThemeKey) {
     themeSelectEl.value = currentThemeKey;
   }
-  const active = availablePresets.find((preset) => preset.key === currentThemeKey);
+  const active = availablePresets.find(
+    (preset) => preset.key === currentThemeKey
+  );
   if (themeActiveLabel) {
     themeActiveLabel.textContent = active ? active.description : '―';
   }
@@ -517,7 +613,7 @@ function updateThemePreview(preset: ThemePresetInfo | null) {
     themePreviewSwatch.style.background = preset.preview.background;
     themePreviewSwatch.style.color = preset.preview.foreground;
   } else {
-    themePreviewText.textContent = 'プレビュー';
+    themePreviewText.textContent = 'Preview';
     themePreviewSwatch.style.background = '';
   }
 }

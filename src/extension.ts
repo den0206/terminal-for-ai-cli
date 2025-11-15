@@ -30,7 +30,7 @@ type ThemePreset = {
 const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
   modern: {
     label: 'Modern',
-    description: 'VS Code テーマに馴染む落ち着いた配色',
+    description: 'A subdued palette that blends with VS Code themes',
     palette: {
       background: `color-mix(in srgb, var(--vscode-editor-background) 85%, transparent)`,
       foreground: `var(--vscode-foreground)`,
@@ -41,7 +41,7 @@ const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
   },
   basic: {
     label: 'Basic',
-    description: '黒地に白文字のクラシック',
+    description: 'Classic black background with white text',
     palette: {
       background: '#050505',
       foreground: '#f8f8f2',
@@ -52,7 +52,7 @@ const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
   },
   clearDark: {
     label: 'Clear Dark',
-    description: 'ダークグレー + 水色アクセント',
+    description: 'Dark gray background with soft cyan accents',
     palette: {
       background: '#2b303b',
       foreground: '#c0c5ce',
@@ -63,7 +63,7 @@ const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
   },
   clearLight: {
     label: 'Clear Light',
-    description: '明るい背景と柔らかい文字色',
+    description: 'Light background with gentle dark text',
     palette: {
       background: '#f4f4f2',
       foreground: '#2b2b2b',
@@ -74,7 +74,7 @@ const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
   },
   grass: {
     label: 'Grass',
-    description: 'グリーン基調のレトロターミナル',
+    description: 'Green retro terminal aesthetic',
     palette: {
       background: '#253120',
       foreground: '#d4fcbc',
@@ -85,7 +85,7 @@ const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
   },
   homebrew: {
     label: 'Homebrew',
-    description: 'ネオングリーンの Homebrew 風',
+    description: 'Neo green, Homebrew-inspired glow',
     palette: {
       background: '#000000',
       foreground: '#39ff14',
@@ -96,7 +96,7 @@ const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
   },
   manPage: {
     label: 'Man Page',
-    description: 'マニュアルのような淡色',
+    description: 'Muted, paper-like tones reminiscent of man pages',
     palette: {
       background: '#fdf6e3',
       foreground: '#584b24',
@@ -107,7 +107,7 @@ const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
   },
   ocean: {
     label: 'Ocean',
-    description: '青と白の高コントラスト',
+    description: 'High-contrast blue and white palette',
     palette: {
       background: '#001f3f',
       foreground: '#d0ebff',
@@ -118,7 +118,7 @@ const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
   },
   pro: {
     label: 'Pro',
-    description: 'シルバーの筐体を意識したダークグレー',
+    description: 'Dark gray inspired by silver hardware accents',
     palette: {
       background: '#262626',
       foreground: '#e5e5e5',
@@ -160,7 +160,6 @@ class AiTerminalViewProvider
   private webviewReady = false;
   private readonly messageQueue: unknown[] = [];
   private readonly disposables: vscode.Disposable[] = [];
-  private sessionSequence = 1;
   private readonly sessionLabels = new Map<string, string>();
 
   constructor(
@@ -292,7 +291,7 @@ class AiTerminalViewProvider
     } catch (error) {
       console.error('Failed to create Terminal For AI CLI session', error);
       vscode.window.showErrorMessage(
-        'Terminal For AI CLI: セッションを作成できませんでした。詳細は開発者ツールを確認してください。'
+        'Terminal For AI CLI: Failed to create a session. Please check the developer tools for details.'
       );
       this.postMessage({
         type: 'session-error',
@@ -559,20 +558,20 @@ class AiTerminalViewProvider
               <img src="${iconUri}" alt="Terminal For AI CLI" width="20" height="20" />
               <strong>Terminal For AI CLI</strong>
             </div>
-            <span data-session-status>初期化中…</span>
+            <span data-session-status>Initializing...</span>
           </header>
-          <div class="controls" aria-label="セッション操作">
+          <div class="controls" aria-label="Session controls">
             <select data-session-select></select>
-            <button class="icon-button" data-session-add title="新しいセッション">+</button>
-            <button class="icon-button" data-session-remove title="セッションを終了">🗑</button>
+            <button class="icon-button" data-session-add title="New session">+</button>
+            <button class="icon-button" data-session-remove title="Close session">🗑</button>
           </div>
           <div class="terminal-shell" data-terminal-shell>
-            <div id="terminal-root" aria-label="ターミナル"></div>
-            <div class="terminal-resizer" data-terminal-resizer aria-label="高さを調整"></div>
+            <div id="terminal-root" aria-label="Terminal"></div>
+            <div class="terminal-resizer" data-terminal-resizer aria-label="Adjust height"></div>
           </div>
-          <section class="theme-picker" aria-label="テーマ選択">
+          <section class="theme-picker" aria-label="Theme selector">
             <label style="font-size:0.85rem;display:flex;flex-direction:column;gap:0.35rem;">
-              テーマ
+              Theme
               <div class="theme-picker__control">
                 <select data-theme-select></select>
                 <span data-theme-active-label style="font-size:0.75rem;opacity:0.8;">―</span>
@@ -580,7 +579,7 @@ class AiTerminalViewProvider
             </label>
             <div class="theme-preview" data-theme-preview>
               <span class="theme-preview__swatch" data-theme-swatch></span>
-              <span data-theme-preview-text>プレビュー</span>
+              <span data-theme-preview-text>Preview</span>
             </div>
           </section>
           <script nonce="${nonce}" src="${scriptUri}"></script>
@@ -622,14 +621,14 @@ class AiTerminalViewProvider
     if (existing) {
       return existing;
     }
-    const label = `ターミナル${this.sessionSequence++}`;
+    const label = `Terminal ${this.sessionSequence++}`;
     this.sessionLabels.set(sessionId, label);
     this.bumpSequenceFromLabel(label);
     return label;
   }
 
   private bumpSequenceFromLabel(label: string) {
-    const match = label.match(/ターミナル(\d+)/);
+    const match = label.match(/Terminal\s*(\d+)/);
     if (match) {
       this.sessionSequence = Math.max(
         this.sessionSequence,
