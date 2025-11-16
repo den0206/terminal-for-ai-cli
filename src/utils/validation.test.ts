@@ -1,0 +1,112 @@
+import {describe, expect, it} from 'vitest';
+import {
+  getDefaultShell,
+  validateShellPath,
+  validateStartupCommands,
+  validateWorkingDirectory,
+} from './validation';
+
+describe('validation', () => {
+  describe('validateShellPath', () => {
+    it('should reject undefined or empty paths', () => {
+      expect(validateShellPath(undefined)).toBe(false);
+      expect(validateShellPath('')).toBe(false);
+      expect(validateShellPath('   ')).toBe(false);
+    });
+
+    it('should reject relative paths', () => {
+      expect(validateShellPath('bin/bash')).toBe(false);
+      expect(validateShellPath('./bash')).toBe(false);
+      expect(validateShellPath('../bash')).toBe(false);
+    });
+
+    it('should reject non-existent paths', () => {
+      expect(validateShellPath('/nonexistent/shell')).toBe(false);
+    });
+
+    it('should accept valid shell paths', () => {
+      const shell = getDefaultShell();
+      expect(validateShellPath(shell)).toBe(true);
+    });
+
+    it('should reject path traversal attempts', () => {
+      expect(validateShellPath('/bin/../../../etc/passwd')).toBe(false);
+    });
+  });
+
+  describe('getDefaultShell', () => {
+    it('should return a valid shell path', () => {
+      const shell = getDefaultShell();
+      expect(shell).toBeTruthy();
+      expect(typeof shell).toBe('string');
+      expect(shell.length).toBeGreaterThan(0);
+    });
+
+    it('should return an absolute path', () => {
+      const shell = getDefaultShell();
+      expect(shell.startsWith('/')).toBe(true);
+    });
+  });
+
+  describe('validateStartupCommands', () => {
+    it('should return empty array for non-array input', () => {
+      expect(validateStartupCommands(null)).toEqual([]);
+      expect(validateStartupCommands(undefined)).toEqual([]);
+      expect(validateStartupCommands('not an array')).toEqual([]);
+      expect(validateStartupCommands(123)).toEqual([]);
+    });
+
+    it('should filter out non-string elements', () => {
+      const input = ['echo hello', 123, null, 'ls', undefined];
+      const result = validateStartupCommands(input);
+      expect(result).toEqual(['echo hello', 'ls']);
+    });
+
+    it('should trim commands and filter empty strings', () => {
+      const input = ['  echo hello  ', '', '   ', 'ls'];
+      const result = validateStartupCommands(input);
+      expect(result).toEqual(['echo hello', 'ls']);
+    });
+
+    it('should accept safe commands', () => {
+      const input = ['echo "Hello, World!"', 'ls -la', 'pwd'];
+      const result = validateStartupCommands(input);
+      expect(result).toEqual(input);
+    });
+
+    it('should warn about dangerous commands but not block them', () => {
+      // This test verifies that dangerous commands are still allowed
+      // (users have control), but warnings are logged
+      const input = ['rm -rf /tmp/test', 'ls'];
+      const result = validateStartupCommands(input);
+      expect(result).toEqual(input);
+    });
+  });
+
+  describe('validateWorkingDirectory', () => {
+    it('should return undefined for invalid input', () => {
+      expect(validateWorkingDirectory(undefined)).toBeUndefined();
+      expect(validateWorkingDirectory('')).toBeUndefined();
+      expect(validateWorkingDirectory('   ')).toBeUndefined();
+    });
+
+    it('should return undefined for non-existent paths', () => {
+      expect(
+        validateWorkingDirectory('/nonexistent/directory')
+      ).toBeUndefined();
+    });
+
+    it('should return absolute path for valid directories', () => {
+      // Test with /tmp which should exist on Unix systems
+      const result = validateWorkingDirectory('/tmp');
+      expect(result).toBeTruthy();
+      expect(result?.startsWith('/')).toBe(true);
+    });
+
+    it('should reject files (only directories allowed)', () => {
+      // This test assumes /etc/hosts exists as a file
+      const result = validateWorkingDirectory('/etc/hosts');
+      expect(result).toBeUndefined();
+    });
+  });
+});
