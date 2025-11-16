@@ -9,6 +9,11 @@ import {
 } from '../theming/themePresets';
 import {getNonce} from '../utils/nonce';
 import {
+  validateShellPath,
+  validateStartupCommands,
+  getDefaultShell,
+} from '../utils/validation';
+import {
   ThemeSnapshot,
   buildWebviewHtml,
 } from './htmlTemplate';
@@ -21,6 +26,55 @@ type ThemeOption = {
   description: string;
   preview: ThemePreview;
 };
+
+// Message types from webview to extension
+type WebviewReadyMessage = {
+  type: 'webview-ready';
+};
+
+type RequestNewSessionMessage = {
+  type: 'request-new-session';
+  payload?: { cols?: number; rows?: number };
+};
+
+type TerminalInputMessage = {
+  type: 'terminal-input';
+  payload: { sessionId: string; data: string };
+};
+
+type TerminalResizeMessage = {
+  type: 'terminal-resize';
+  payload: { sessionId: string; cols: number; rows: number };
+};
+
+type DisposeSessionMessage = {
+  type: 'dispose-session';
+  payload: { sessionId: string };
+};
+
+type DisposeAllSessionsMessage = {
+  type: 'dispose-all-sessions';
+};
+
+type ThemeSelectMessage = {
+  type: 'theme-select';
+  payload: { presetKey: string };
+};
+
+type ImageDropMessage = {
+  type: 'image-drop';
+  payload: { fileName: string; data: string; sessionId: string };
+};
+
+type InboundMessage =
+  | WebviewReadyMessage
+  | RequestNewSessionMessage
+  | TerminalInputMessage
+  | TerminalResizeMessage
+  | DisposeSessionMessage
+  | DisposeAllSessionsMessage
+  | ThemeSelectMessage
+  | ImageDropMessage;
 
 export class AiTerminalViewProvider
   implements vscode.WebviewViewProvider, vscode.Disposable
@@ -96,8 +150,8 @@ export class AiTerminalViewProvider
     this.handleSessionRequest();
   }
 
-  private async handleMessage(message: any) {
-    switch (message?.type) {
+  private async handleMessage(message: InboundMessage) {
+    switch (message.type) {
       case 'webview-ready':
         this.webviewReady = true;
         this.postSessionCount();
@@ -110,53 +164,34 @@ export class AiTerminalViewProvider
         this.handleSessionRequest(message.payload);
         break;
       case 'terminal-input':
-        if (
-          message.payload?.sessionId &&
-          typeof message.payload.data === 'string'
-        ) {
-          this.sessionManager.write(
-            message.payload.sessionId,
-            message.payload.data
-          );
-        }
+        this.sessionManager.write(
+          message.payload.sessionId,
+          message.payload.data
+        );
         break;
       case 'terminal-resize':
-        if (message.payload?.sessionId) {
-          this.sessionManager.resize(
-            message.payload.sessionId,
-            Number(message.payload.cols) || 0,
-            Number(message.payload.rows) || 0
-          );
-        }
+        this.sessionManager.resize(
+          message.payload.sessionId,
+          message.payload.cols,
+          message.payload.rows
+        );
         break;
       case 'dispose-session':
-        if (message.payload?.sessionId) {
-          await this.deleteSessionImages(message.payload.sessionId);
-          this.sessionManager.disposeSession(message.payload.sessionId);
-        }
+        await this.deleteSessionImages(message.payload.sessionId);
+        this.sessionManager.disposeSession(message.payload.sessionId);
         break;
       case 'dispose-all-sessions':
         this.handleClearAllSessions();
         break;
       case 'theme-select':
-        if (message.payload?.presetKey) {
-          this.updateThemePreset(message.payload.presetKey);
-        }
+        this.updateThemePreset(message.payload.presetKey);
         break;
       case 'image-drop':
-        if (
-          message.payload?.fileName &&
-          message.payload?.data &&
-          message.payload?.sessionId
-        ) {
-          this.handleImageDrop(
-            message.payload.fileName,
-            message.payload.data,
-            message.payload.sessionId
-          );
-        }
-        break;
-      default:
+        this.handleImageDrop(
+          message.payload.fileName,
+          message.payload.data,
+          message.payload.sessionId
+        );
         break;
     }
   }
@@ -173,8 +208,26 @@ export class AiTerminalViewProvider
       return;
     }
     const config = vscode.workspace.getConfiguration('aiTerminal');
-    const shell = config.get<string>('defaultShell')?.trim() || undefined;
-    const startupCommands = config.get<string[]>('startupCommands') ?? [];
+    const configuredShell = config.get<string>('defaultShell')?.trim();
+    const configuredCommands = config.get<string[]>('startupCommands');
+
+    // Validate and sanitize shell path
+    let shell: string | undefined;
+    if (configuredShell) {
+      if (validateShellPath(configuredShell)) {
+        shell = configuredShell;
+      } else {
+        vscode.window.showWarningMessage(
+          `Invalid shell path configured: "${configuredShell}". Using default shell instead.`
+        );
+        shell = getDefaultShell();
+      }
+    } else {
+      shell = undefined; // Let SessionManager use its default
+    }
+
+    // Validate and sanitize startup commands
+    const startupCommands = validateStartupCommands(configuredCommands);
 
     try {
       const info = this.sessionManager.createSession({
