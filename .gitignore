@@ -4,3 +4,5 @@
 /media/webview.js
 /media/webview.js.map
 /vsix
+/coverage
+*.log
