@@ -107,14 +107,70 @@ export function buildWebviewHtml({
             display: flex;
             flex-direction: column;
             min-height: var(--terminal-height, 320px);
+            gap: 0.5rem;
+            overflow: hidden;
           }
-          #terminal-root {
+          .terminal-stack {
             flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            min-height: 0;
+          }
+          .terminal-pane {
+            flex: 1 1 0%;
+            display: none;
+            flex-direction: column;
             border-radius: 6px;
             border: 1px solid color-mix(in srgb, var(--terminal-fg) 30%, transparent);
             background: var(--terminal-bg);
+            overflow: hidden;
+            min-height: 0;
+          }
+          .terminal-pane[data-active='true'] {
+            border-color: var(--vscode-focusBorder, color-mix(in srgb, var(--terminal-fg) 45%, transparent));
+            box-shadow: 0 0 0 1px color-mix(in srgb, var(--vscode-focusBorder, var(--terminal-fg)) 30%, transparent);
+          }
+          .terminal-pane[data-pane-visible='true'] {
+            display: flex;
+          }
+          .terminal-pane__label {
+            font-size: 0.75rem;
+            opacity: 0.8;
+            padding: 0.35rem 0.6rem;
+            border-bottom: 1px solid color-mix(in srgb, var(--terminal-fg) 20%, transparent);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.35rem;
+          }
+          .terminal-pane__label span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+          .terminal-root {
+            flex: 1 1 auto;
             padding: 0.25rem;
             overflow: hidden;
+            min-height: 0;
+            height: 100%;
+          }
+          .split-resizer {
+            display: none;
+            flex: 0 0 8px;
+            cursor: row-resize;
+            align-items: center;
+            justify-content: center;
+            color: color-mix(in srgb, var(--terminal-fg) 70%, transparent);
+          }
+          .split-resizer::after {
+            content: '';
+            width: 60px;
+            height: 2px;
+            border-radius: 999px;
+            background: currentColor;
+            opacity: 0.7;
           }
           .terminal-resizer {
             flex: 0 0 auto;
@@ -240,10 +296,55 @@ export function buildWebviewHtml({
         <div class="controls" aria-label="Session controls">
           <select data-session-select></select>
           <button class="icon-button" data-session-add title="New session">+</button>
+          <button
+            class="icon-button"
+            data-view-toggle
+            title="Toggle split view"
+            aria-pressed="false"
+            type="button"
+          >
+            <span data-view-toggle-icon>▢</span>
+          </button>
           <button class="icon-button" data-session-remove title="Close session">🗑</button>
         </div>
         <div class="terminal-shell" data-terminal-shell>
-          <div id="terminal-root" aria-label="Terminal"></div>
+          <div class="terminal-stack" data-terminal-stack>
+            <div
+              class="terminal-pane"
+              data-terminal-pane="primary"
+              data-pane-visible="false"
+            >
+              <div class="terminal-pane__label">
+                <span data-pane-label="primary">Terminal</span>
+              </div>
+              <div
+                class="terminal-root"
+                data-terminal-root="primary"
+                aria-label="Primary terminal"
+              ></div>
+            </div>
+            <div
+              class="split-resizer"
+              data-split-resizer
+              aria-label="Resize split panes"
+              role="separator"
+              aria-orientation="vertical"
+            ></div>
+            <div
+              class="terminal-pane"
+              data-terminal-pane="secondary"
+              data-pane-visible="false"
+            >
+              <div class="terminal-pane__label">
+                <span data-pane-label="secondary">Terminal</span>
+              </div>
+              <div
+                class="terminal-root"
+                data-terminal-root="secondary"
+                aria-label="Secondary terminal"
+              ></div>
+            </div>
+          </div>
           <div class="terminal-resizer" data-terminal-resizer aria-label="Adjust height"></div>
         </div>
         <section class="theme-picker" aria-label="Theme selector">

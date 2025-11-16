@@ -29,6 +29,13 @@ type ThemeUpdatePayload = {
   presets: ThemePresetInfo[];
 };
 
+type ViewMode = 'single' | 'split';
+type Pane = 'primary' | 'secondary';
+
+const MAX_SESSIONS = 2;
+const MIN_SPLIT_RATIO = 0.2;
+const MAX_SPLIT_RATIO = 0.8;
+
 type InboundMessage =
   | {type: 'session-count'; payload: {total: number}}
   | {
@@ -47,6 +54,7 @@ type InboundMessage =
       payload: {sessionId: string; code: number | null; signal: string | null};
     }
   | {type: 'session-error'; payload: {message: string}}
+  | {type: 'session-limit-reached'; payload: {max: number}}
   | {type: 'theme-update'; payload: ThemeUpdatePayload}
   | {type: 'all-sessions-cleared'};
 
@@ -70,6 +78,8 @@ type ViewState = {
   sessionIds: string[];
   terminalHeight?: number;
   sessionMeta?: Record<string, SessionMeta>;
+  viewMode?: ViewMode;
+  splitRatio?: number;
 };
 
 const vscode = acquireVsCodeApi<ViewState>();
@@ -80,14 +90,47 @@ const statusEl = document.querySelector(
 const addSessionButton = document.querySelector(
   '[data-session-add]'
 ) as HTMLButtonElement | null;
+const viewToggleButton = document.querySelector(
+  '[data-view-toggle]'
+) as HTMLButtonElement | null;
+const viewToggleIcon = document.querySelector(
+  '[data-view-toggle-icon]'
+) as HTMLSpanElement | null;
 const removeSessionButton = document.querySelector(
   '[data-session-remove]'
 ) as HTMLButtonElement | null;
-const terminalRoot = document.getElementById(
-  'terminal-root'
-) as HTMLDivElement | null;
 const terminalShell = document.querySelector(
   '[data-terminal-shell]'
+) as HTMLDivElement | null;
+const terminalStack = document.querySelector(
+  '[data-terminal-stack]'
+) as HTMLDivElement | null;
+const paneElements: Record<Pane, HTMLDivElement | null> = {
+  primary: document.querySelector(
+    '[data-terminal-pane="primary"]'
+  ) as HTMLDivElement | null,
+  secondary: document.querySelector(
+    '[data-terminal-pane="secondary"]'
+  ) as HTMLDivElement | null,
+};
+const paneLabels: Record<Pane, HTMLSpanElement | null> = {
+  primary: document.querySelector(
+    '[data-pane-label="primary"]'
+  ) as HTMLSpanElement | null,
+  secondary: document.querySelector(
+    '[data-pane-label="secondary"]'
+  ) as HTMLSpanElement | null,
+};
+const paneRoots: Record<Pane, HTMLDivElement | null> = {
+  primary: document.querySelector(
+    '[data-terminal-root="primary"]'
+  ) as HTMLDivElement | null,
+  secondary: document.querySelector(
+    '[data-terminal-root="secondary"]'
+  ) as HTMLDivElement | null,
+};
+const splitResizer = document.querySelector(
+  '[data-split-resizer]'
 ) as HTMLDivElement | null;
 const resizerEl = document.querySelector(
   '[data-terminal-resizer]'
@@ -139,6 +182,15 @@ let confirmingClearAll = false;
 let currentThemeKey: string | undefined;
 let availablePresets: ThemePresetInfo[] = [];
 let sessionMeta: Record<string, SessionMeta> = savedState.sessionMeta ?? {};
+let viewMode: ViewMode =
+  savedState.viewMode === 'split' ? 'split' : 'single';
+let splitRatio = clampSplitRatio(
+  typeof savedState.splitRatio === 'number' ? savedState.splitRatio : 0.5
+);
+const paneSessions: Record<Pane, string | undefined> = {
+  primary: undefined,
+  secondary: undefined,
+};
 sessionIds.forEach((id, index) => {
   sessionBuffers[id] = sessionBuffers[id] ?? '';
   sessionMeta[id] =
@@ -149,63 +201,84 @@ sessionIds.forEach((id, index) => {
     } as SessionMeta);
 });
 
-const terminal = new Terminal({
-  allowTransparency: true,
-  convertEol: true,
-  cursorBlink: true,
-  scrollback: 2000,
-  fontFamily: getComputedVar(
-    '--vscode-editor-font-family',
-    'var(--monaco-monospace-font)',
-    'monospace'
-  ),
-  fontSize:
-    Number.parseInt(
-      getComputedVar('--vscode-editor-font-size', undefined, '13'),
-      10
-    ) || 13,
-  theme: {
-    background: getComputedVar(
-      '--vscode-editor-background',
-      undefined,
-      '#1e1e1e'
+function createTerminalInstance() {
+  return new Terminal({
+    allowTransparency: true,
+    convertEol: true,
+    cursorBlink: true,
+    scrollback: 2000,
+    fontFamily: getComputedVar(
+      '--vscode-editor-font-family',
+      'var(--monaco-monospace-font)',
+      'monospace'
     ),
-    foreground: getComputedVar(
-      '--vscode-editor-foreground',
-      undefined,
-      '#cccccc'
-    ),
-    cursor: getComputedVar(
-      '--vscode-terminalCursor-foreground',
-      undefined,
-      '#ffffff'
-    ),
-    selectionBackground: getComputedVar(
-      '--vscode-editor-selectionBackground',
-      undefined,
-      'rgba(255,255,255,0.15)'
-    ),
-  },
-});
-const fitAddon = new FitAddon();
-terminal.loadAddon(fitAddon);
-
-if (terminalRoot) {
-  terminal.open(terminalRoot);
-  fitTerminal();
-  terminal.focus();
+    fontSize:
+      Number.parseInt(
+        getComputedVar('--vscode-editor-font-size', undefined, '13'),
+        10
+      ) || 13,
+    theme: {
+      background: getComputedVar(
+        '--vscode-editor-background',
+        undefined,
+        '#1e1e1e'
+      ),
+      foreground: getComputedVar(
+        '--vscode-editor-foreground',
+        undefined,
+        '#cccccc'
+      ),
+      cursor: getComputedVar(
+        '--vscode-terminalCursor-foreground',
+        undefined,
+        '#ffffff'
+      ),
+      selectionBackground: getComputedVar(
+        '--vscode-editor-selectionBackground',
+        undefined,
+        'rgba(255,255,255,0.15)'
+      ),
+    },
+  });
 }
+
+type PaneContext = {terminal: Terminal; fitAddon: FitAddon};
+
+function createPaneContext(pane: Pane): PaneContext {
+  const terminal = createTerminalInstance();
+  const fitAddon = new FitAddon();
+  terminal.loadAddon(fitAddon);
+  const root = paneRoots[pane];
+  if (root) {
+    terminal.open(root);
+  }
+  terminal.onData((data) => {
+    const sessionId = paneSessions[pane];
+    if (sessionId) {
+      vscode.postMessage<OutboundMessage>({
+        type: 'terminal-input',
+        payload: {sessionId, data},
+      });
+    }
+  });
+  root?.addEventListener('pointerdown', () => {
+    handlePaneFocus(pane);
+  });
+  root?.addEventListener('focusin', () => {
+    handlePaneFocus(pane);
+  });
+  return {terminal, fitAddon};
+}
+
+const paneContexts: Record<Pane, PaneContext> = {
+  primary: createPaneContext('primary'),
+  secondary: createPaneContext('secondary'),
+};
+
 applyTerminalHeight(terminalHeight, false);
 refreshTerminalTheme();
-
-terminal.onData((data) => {
-  if (activeSessionId) {
-    vscode.postMessage<OutboundMessage>({
-      type: 'terminal-input',
-      payload: {sessionId: activeSessionId, data},
-    });
-  }
-});
+syncPaneAssignments(true);
+focusActivePane();
 
 window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
   const message = event.data;
@@ -218,10 +291,11 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
       if (totalSessions === 0) {
         sessionIds = [];
         sessionMeta = {};
-        if (activeSessionId) {
-          activeSessionId = undefined;
-          terminal.reset();
+        activeSessionId = undefined;
+        for (const key of Object.keys(sessionBuffers)) {
+          delete sessionBuffers[key];
         }
+        syncPaneAssignments(true);
         setStatus('No sessions available');
       } else {
         setStatus(`Registered sessions: ${totalSessions}`);
@@ -251,9 +325,7 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
         updateSessionControls();
       }
       appendToBuffer(message.payload.sessionId, message.payload.data);
-      if (message.payload.sessionId === activeSessionId) {
-        terminal.write(message.payload.data);
-      }
+      deliverDataToPanes(message.payload.sessionId, message.payload.data);
       break;
     case 'session-exited':
       sessionIds = sessionIds.filter((id) => id !== message.payload.sessionId);
@@ -266,17 +338,26 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
           switchActiveSession(fallbackId, `Switched to session ${fallbackId}`);
         } else {
           activeSessionId = undefined;
-          persistState();
-          terminal.reset();
           setStatus('Session has ended');
-          updateSessionControls();
         }
+        persistState();
       }
+      syncPaneAssignments(true);
+      focusActivePane();
+      fitVisibleTerminals();
+      notifyResize();
+      updateSessionControls();
       break;
     case 'session-error':
       pendingSessionRequest = false;
       updateAddButtonState(false);
       setStatus(`Error: ${message.payload.message}`);
+      break;
+    case 'session-limit-reached':
+      pendingSessionRequest = false;
+      updateAddButtonState(false);
+      setStatus(`Maximum of ${message.payload.max} terminals are supported.`);
+      updateSessionControls();
       break;
     case 'theme-update':
       applyTheme(message.payload.palette);
@@ -296,7 +377,7 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
       for (const key of Object.keys(sessionBuffers)) {
         delete sessionBuffers[key];
       }
-      terminal.reset();
+      syncPaneAssignments(true);
       persistState();
       setStatus('All sessions cleared');
       updateSessionControls();
@@ -308,6 +389,17 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
 
 addSessionButton?.addEventListener('click', () => {
   requestNewSession();
+});
+
+viewToggleButton?.addEventListener('click', () => {
+  if (viewToggleButton.disabled) {
+    return;
+  }
+  if (viewMode === 'single' && sessionIds.length < 2) {
+    setStatus('Add a second session to enable split view.');
+    return;
+  }
+  setViewMode(viewMode === 'single' ? 'split' : 'single');
 });
 
 removeSessionButton?.addEventListener('click', () => {
@@ -363,7 +455,7 @@ sessionSelectEl?.addEventListener('change', () => {
 window.addEventListener(
   'resize',
   debounce(() => {
-    fitTerminal();
+    fitVisibleTerminals();
     notifyResize();
   }, 150)
 );
@@ -380,6 +472,43 @@ resizerEl?.addEventListener('pointerdown', (event) => {
     }
     const delta = moveEvent.clientY - startY;
     applyTerminalHeight(startHeight + delta, false);
+  };
+
+  const cleanup = (moveEvent: PointerEvent) => {
+    if (moveEvent.pointerId !== pointerId) {
+      return;
+    }
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', cleanup);
+    window.removeEventListener('pointercancel', cleanup);
+    persistState();
+  };
+
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', cleanup);
+  window.addEventListener('pointercancel', cleanup);
+});
+
+splitResizer?.addEventListener('pointerdown', (event) => {
+  if (!isSplitModeActive()) {
+    return;
+  }
+  const stackRect = terminalStack?.getBoundingClientRect();
+  if (!stackRect || stackRect.height <= 0) {
+    return;
+  }
+  event.preventDefault();
+  const pointerId = event.pointerId;
+  const startY = event.clientY;
+  const startRatio = splitRatio;
+
+  const onMove = (moveEvent: PointerEvent) => {
+    if (moveEvent.pointerId !== pointerId) {
+      return;
+    }
+    const delta = moveEvent.clientY - startY;
+    const deltaRatio = delta / stackRect.height;
+    setSplitRatio(startRatio + deltaRatio, false);
   };
 
   const cleanup = (moveEvent: PointerEvent) => {
@@ -421,25 +550,28 @@ function requestNewSession() {
   if (pendingSessionRequest) {
     return;
   }
+  if (sessionIds.length >= MAX_SESSIONS) {
+    setStatus(`Maximum of ${MAX_SESSIONS} sessions reached.`);
+    updateAddButtonState(false);
+    return;
+  }
   pendingSessionRequest = true;
   updateAddButtonState(true);
   setStatus('Initializing a new session...');
-  fitTerminal();
+  fitVisibleTerminals();
   vscode.postMessage<OutboundMessage>({
     type: 'request-new-session',
-    payload: getTerminalDimensions(),
+    payload: getPaneDimensions('primary'),
   });
 }
 
 function activateSession(sessionId: string, shell?: string) {
   activeSessionId = sessionId;
   persistState();
-  terminal.reset();
-  writeBufferToTerminal(sessionId);
-  terminal.scrollToBottom();
-  fitTerminal();
+  syncPaneAssignments();
+  focusActivePane();
+  fitVisibleTerminals();
   notifyResize();
-  terminal.focus();
   setStatus(
     `Connected to ${getSessionLabel(sessionId)} (${
       shell ?? sessionMeta[sessionId]?.shell ?? 'Shell'
@@ -451,38 +583,54 @@ function activateSession(sessionId: string, shell?: string) {
 function switchActiveSession(sessionId: string, message: string) {
   activeSessionId = sessionId;
   persistState();
-  terminal.reset();
-  writeBufferToTerminal(sessionId);
-  terminal.scrollToBottom();
-  fitTerminal();
+  syncPaneAssignments();
+  focusActivePane();
+  fitVisibleTerminals();
   notifyResize();
-  terminal.focus();
   setStatus(message);
   updateSessionControls();
 }
 
 function notifyResize() {
-  if (!activeSessionId) {
+  const primarySession = paneSessions.primary;
+  const secondarySession = paneSessions.secondary;
+  if (!primarySession && !secondarySession) {
     return;
   }
-  const {cols, rows} = getTerminalDimensions();
-  vscode.postMessage<OutboundMessage>({
-    type: 'terminal-resize',
-    payload: {sessionId: activeSessionId, cols, rows},
+  if (primarySession) {
+    const {cols, rows} = getPaneDimensions('primary');
+    vscode.postMessage<OutboundMessage>({
+      type: 'terminal-resize',
+      payload: {sessionId: primarySession, cols, rows},
+    });
+  }
+  if (secondarySession) {
+    const {cols, rows} = getPaneDimensions('secondary');
+    vscode.postMessage<OutboundMessage>({
+      type: 'terminal-resize',
+      payload: {sessionId: secondarySession, cols, rows},
+    });
+  }
+}
+
+function fitVisibleTerminals() {
+  (['primary', 'secondary'] as const).forEach((pane) => {
+    const context = paneContexts[pane];
+    const isVisible =
+      pane === 'primary'
+        ? Boolean(paneSessions.primary)
+        : paneElements[pane]?.getAttribute('data-pane-visible') === 'true';
+    if (isVisible) {
+      context.fitAddon.fit();
+    }
   });
 }
 
-function fitTerminal() {
-  if (!terminalRoot) {
-    return;
-  }
-  fitAddon.fit();
-}
-
-function getTerminalDimensions() {
+function getPaneDimensions(pane: Pane) {
+  const context = paneContexts[pane];
   return {
-    cols: terminal.cols || 80,
-    rows: terminal.rows || 24,
+    cols: context.terminal.cols || 80,
+    rows: context.terminal.rows || 24,
   };
 }
 
@@ -496,7 +644,8 @@ function updateAddButtonState(isBusy: boolean) {
   if (!addSessionButton) {
     return;
   }
-  addSessionButton.disabled = isBusy;
+  const atLimit = sessionIds.length >= MAX_SESSIONS;
+  addSessionButton.disabled = isBusy || atLimit;
 }
 
 function updateSessionControls() {
@@ -515,7 +664,74 @@ function updateSessionControls() {
     sessionSelectEl.disabled = sessionIds.length === 0;
   }
   updateAddButtonState(pendingSessionRequest);
+  if (viewToggleButton) {
+    viewToggleButton.disabled = sessionIds.length < 2 || pendingSessionRequest;
+  }
   renderSessionSelect();
+  updateViewToggleButton();
+}
+
+function setViewMode(mode: ViewMode) {
+  if (mode === 'split' && sessionIds.length < 2) {
+    setStatus('Two sessions are required for split view.');
+    return;
+  }
+  if (viewMode === mode) {
+    return;
+  }
+  viewMode = mode;
+  persistState();
+  syncPaneAssignments(true);
+  focusActivePane();
+  fitVisibleTerminals();
+  notifyResize();
+  updateViewToggleButton();
+}
+
+function isSplitModeActive() {
+  return (
+    viewMode === 'split' &&
+    Boolean(paneSessions.primary && paneSessions.secondary)
+  );
+}
+
+function setSplitRatio(value: number, persistNow = true) {
+  const clamped = clampSplitRatio(value);
+  if (Math.abs(clamped - splitRatio) < 0.001) {
+    return;
+  }
+  splitRatio = clamped;
+  if (persistNow) {
+    persistState();
+  }
+  applySplitSizing();
+  fitVisibleTerminals();
+  notifyResize();
+}
+
+function clampSplitRatio(value: number) {
+  if (!Number.isFinite(value)) {
+    return 0.5;
+  }
+  return Math.min(MAX_SPLIT_RATIO, Math.max(MIN_SPLIT_RATIO, value));
+}
+
+function updateViewToggleButton() {
+  if (!viewToggleButton) {
+    return;
+  }
+  const splitEnabled = viewMode === 'split' && sessionIds.length >= 2;
+  viewToggleButton.setAttribute('aria-pressed', splitEnabled ? 'true' : 'false');
+  if (viewToggleIcon) {
+    viewToggleIcon.textContent = splitEnabled ? '▦' : '▢';
+  }
+  if (viewToggleButton.disabled) {
+    viewToggleButton.title = 'Add a second session to enable split view';
+  } else {
+    viewToggleButton.title = splitEnabled
+      ? 'Show a single terminal'
+      : 'Show split view';
+  }
 }
 
 function renderSessionSelect() {
@@ -535,6 +751,24 @@ function renderSessionSelect() {
   sessionSelectEl.disabled = sessionIds.length === 0;
 }
 
+function applySplitSizing() {
+  const splitActive = isSplitModeActive();
+  if (paneElements.primary) {
+    paneElements.primary.style.flex = splitActive
+      ? `${splitRatio} 1 0%`
+      : '1 1 auto';
+  }
+  if (paneElements.secondary) {
+    const secondaryRatio = Math.max(0.01, 1 - splitRatio);
+    paneElements.secondary.style.flex = splitActive
+      ? `${secondaryRatio} 1 0%`
+      : '0 0 auto';
+  }
+  if (splitResizer) {
+    splitResizer.style.display = splitActive ? 'flex' : 'none';
+  }
+}
+
 function persistState() {
   vscode.setState({
     activeSessionId,
@@ -542,6 +776,8 @@ function persistState() {
     sessionIds,
     terminalHeight,
     sessionMeta,
+    viewMode,
+    splitRatio,
   });
 }
 
@@ -565,10 +801,10 @@ function appendToBuffer(sessionId: string, chunk: string) {
   sessionBuffers[sessionId] = next;
 }
 
-function writeBufferToTerminal(sessionId: string) {
+function writeBufferToTerminal(sessionId: string, target: Terminal) {
   const buffer = sessionBuffers[sessionId];
   if (buffer) {
-    terminal.write(buffer);
+    target.write(buffer);
   }
 }
 
@@ -609,7 +845,7 @@ function applyTerminalHeight(value: number, persist = true) {
   if (terminalShell) {
     terminalShell.style.setProperty('--terminal-height', `${clamped}px`);
   }
-  fitTerminal();
+  fitVisibleTerminals();
   notifyResize();
   if (persist) {
     persistState();
@@ -617,7 +853,7 @@ function applyTerminalHeight(value: number, persist = true) {
 }
 
 function refreshTerminalTheme() {
-  terminal.options.theme = {
+  const theme = {
     background: getComputedVar(
       '--terminal-bg',
       '--vscode-editor-background',
@@ -639,6 +875,9 @@ function refreshTerminalTheme() {
       'rgba(255,255,255,0.15)'
     ),
   };
+  (['primary', 'secondary'] as const).forEach((pane) => {
+    paneContexts[pane].terminal.options.theme = {...theme};
+  });
 }
 
 function applyTheme(palette: ThemePalette) {
@@ -685,6 +924,134 @@ function updateThemePreview(preset: ThemePresetInfo | null) {
     themePreviewText.textContent = 'Preview';
     themePreviewSwatch.style.background = '';
   }
+}
+
+function syncPaneAssignments(force = false) {
+  const activeChanged = ensureActiveSession();
+  if (activeChanged) {
+    persistState();
+  }
+  const primarySession = getDesiredPaneSession('primary');
+  const secondarySession = getDesiredPaneSession('secondary');
+  assignPane('primary', primarySession, force);
+  assignPane('secondary', secondarySession, force);
+  updatePaneActiveStates();
+  if (terminalStack) {
+    const splitActive = viewMode === 'split' && Boolean(secondarySession);
+    terminalStack.setAttribute('data-view-mode', splitActive ? 'split' : 'single');
+  }
+  applySplitSizing();
+}
+
+function assignPane(
+  pane: Pane,
+  sessionId: string | undefined,
+  force = false
+) {
+  const current = paneSessions[pane];
+  if (!force && current === sessionId) {
+    updatePaneVisibility(pane, Boolean(sessionId));
+    updatePaneLabel(pane, sessionId);
+    return;
+  }
+  paneSessions[pane] = sessionId;
+  const {terminal} = paneContexts[pane];
+  terminal.reset();
+  if (sessionId) {
+    writeBufferToTerminal(sessionId, terminal);
+    terminal.scrollToBottom();
+  }
+  updatePaneVisibility(pane, Boolean(sessionId));
+  updatePaneLabel(pane, sessionId);
+}
+
+function updatePaneVisibility(pane: Pane, visible: boolean) {
+  const paneElement = paneElements[pane];
+  if (paneElement) {
+    paneElement.setAttribute('data-pane-visible', visible ? 'true' : 'false');
+  }
+}
+
+function ensureActiveSession() {
+  if (activeSessionId && sessionIds.includes(activeSessionId)) {
+    return false;
+  }
+  const fallbackId = sessionIds[sessionIds.length - 1];
+  if (fallbackId) {
+    activeSessionId = fallbackId;
+  } else {
+    activeSessionId = undefined;
+  }
+  return true;
+}
+
+function focusActivePane() {
+  const pane = getPaneForSession(activeSessionId);
+  if (!pane) {
+    return;
+  }
+  paneContexts[pane].terminal.focus();
+  updatePaneActiveStates();
+}
+
+function handlePaneFocus(pane: Pane) {
+  const sessionId = paneSessions[pane];
+  if (!sessionId || activeSessionId === sessionId) {
+    updatePaneActiveStates();
+    return;
+  }
+  activeSessionId = sessionId;
+  persistState();
+  updateSessionControls();
+  updatePaneActiveStates();
+  paneContexts[pane].terminal.focus();
+  setStatus(`Focused ${getSessionLabel(sessionId)}`);
+}
+
+function updatePaneLabel(pane: Pane, sessionId?: string) {
+  const label = paneLabels[pane];
+  if (!label) {
+    return;
+  }
+  label.textContent = sessionId ? getSessionLabel(sessionId) : 'No session';
+}
+
+function updatePaneActiveStates() {
+  (['primary', 'secondary'] as const).forEach((pane) => {
+    const paneElement = paneElements[pane];
+    if (!paneElement) {
+      return;
+    }
+    const isActive = paneSessions[pane] === activeSessionId;
+    paneElement.setAttribute('data-active', isActive ? 'true' : 'false');
+  });
+}
+
+function getPaneForSession(sessionId?: string) {
+  if (!sessionId) {
+    return undefined;
+  }
+  return (['primary', 'secondary'] as const).find(
+    (pane) => paneSessions[pane] === sessionId
+  );
+}
+
+function getDesiredPaneSession(pane: Pane) {
+  if (viewMode === 'split' && sessionIds.length >= 2) {
+    return pane === 'primary' ? sessionIds[0] : sessionIds[1];
+  }
+  if (pane === 'primary') {
+    return activeSessionId ?? sessionIds[sessionIds.length - 1];
+  }
+  return undefined;
+}
+
+function deliverDataToPanes(sessionId: string, chunk: string) {
+  (['primary', 'secondary'] as const).forEach((pane) => {
+    if (paneSessions[pane] === sessionId) {
+      paneContexts[pane].terminal.write(chunk);
+    }
+  });
 }
 
 function toggleClearAllConfirm(visible: boolean) {
