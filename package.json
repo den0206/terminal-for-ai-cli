@@ -100,16 +100,25 @@
     "compile": "npm run bundle:webview && tsc -p ./",
     "watch": "tsc -w -p ./",
     "lint": "eslint src --ext .ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
     "package": "node scripts/package-vsix.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
     "@types/vscode": "^1.99.0",
+    "@typescript-eslint/eslint-plugin": "^8.46.4",
+    "@typescript-eslint/parser": "^8.46.4",
+    "@vitest/ui": "^3.2.4",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "esbuild": "^0.27.0",
     "eslint": "^9.39.1",
+    "globals": "^16.5.0",
     "typescript": "^5.9.3",
+    "vitest": "^3.2.4",
     "vsce": "^2.15.0"
   },
   "dependencies": {
