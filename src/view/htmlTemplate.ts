@@ -103,11 +103,10 @@ export function buildWebviewHtml({
             cursor: default;
           }
           .terminal-shell {
-            flex: 0 0 auto;
+            flex: 1 1 auto;
             display: flex;
             flex-direction: column;
-            min-height: 240px;
-            height: var(--terminal-height, 640px);
+            min-height: var(--terminal-height, 320px);
           }
           #terminal-root {
             flex: 1 1 auto;
