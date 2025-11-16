@@ -322,7 +322,6 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
       };
       sessionBuffers[message.payload.id] = '';
       persistState();
-      const restored = Boolean(message.payload.restored);
       activateSession(message.payload.id, message.payload.shell);
       // no log panel
       break;
