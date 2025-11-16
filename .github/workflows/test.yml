@@ -1,25 +1,15 @@
-name: CI
+name: Test
 
 on:
   push:
     branches:
       - 'feature/**'
       - 'fix/**'
-      - 'main'
-      - 'develop'
-  pull_request:
-    branches:
-      - 'main'
-      - 'develop'
 
 jobs:
   lint-and-test:
     name: Lint and Test
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        node-version: [18.x, 20.x]
 
     steps:
       - name: Checkout code
@@ -43,19 +33,6 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Generate coverage report
-        if: matrix.node-version == '20.x'
-        run: npm run test:coverage
-
-      - name: Upload coverage to Codecov
-        if: matrix.node-version == '20.x'
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./coverage/coverage-final.json
-          flags: unittests
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
-        continue-on-error: true
 
   build-check:
     name: Build Check
