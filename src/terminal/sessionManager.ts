@@ -15,21 +15,41 @@ import json
 import os
 import pty
 import select
+import signal
 import struct
 import sys
 import termios
+
+
+child_pid = None
 
 
 def set_winsize(fd, rows, cols):
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', rows, cols, 0, 0))
 
 
+def signal_handler(signum, frame):
+    """Handle SIGTERM by killing child process"""
+    global child_pid
+    if child_pid:
+        try:
+            os.kill(child_pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    sys.exit(0)
+
+
 def main():
+    global child_pid
+
     argv = sys.argv[1:]
     if not argv:
         sys.stderr.write('No shell specified for PTY bridge\n')
         sys.stderr.flush()
         sys.exit(1)
+
+    # Set up signal handler to properly terminate child process
+    signal.signal(signal.SIGTERM, signal_handler)
 
     rows = int(os.environ.get('AI_TERM_ROWS', '24') or '24')
     cols = int(os.environ.get('AI_TERM_COLS', '80') or '80')
@@ -54,6 +74,7 @@ def main():
             sys.stderr.flush()
             os._exit(1)
 
+    child_pid = pid
     os.close(slave_fd)
     set_winsize(master_fd, rows, cols)
     control_fd = 3
@@ -176,11 +197,51 @@ class ShellSession implements vscode.Disposable {
   }
 
   dispose() {
-    if (!this.child.killed) {
-      this.child.kill();
-    }
+    this.killProcessTree();
     if (this.resizeControl && !this.resizeControl.destroyed) {
       this.resizeControl.end();
+    }
+  }
+
+  private killProcessTree() {
+    if (this.child.killed || !this.child.pid) {
+      return;
+    }
+
+    const pid = this.child.pid;
+
+    if (process.platform === 'win32') {
+      // Windows: Use taskkill to terminate the entire process tree
+      try {
+        spawn('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore' });
+      } catch {
+        // Fallback to standard kill
+        this.child.kill();
+      }
+    } else {
+      // Unix-like systems: Kill the process group
+      try {
+        // Send SIGTERM to the entire process group
+        // Negative PID sends signal to the process group
+        process.kill(-pid, 'SIGTERM');
+
+        // Schedule SIGKILL if process doesn't terminate within 2 seconds
+        const killTimer = setTimeout(() => {
+          try {
+            if (!this.child.killed) {
+              process.kill(-pid, 'SIGKILL');
+            }
+          } catch {
+            // Process already terminated
+          }
+        }, 2000);
+
+        // Clear timer if process exits normally
+        this.child.once('exit', () => clearTimeout(killTimer));
+      } catch {
+        // Fallback to standard kill if process group kill fails
+        this.child.kill();
+      }
     }
   }
 }
