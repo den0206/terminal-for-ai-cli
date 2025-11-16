@@ -14,6 +14,8 @@ import {
   buildWebviewHtml,
 } from './htmlTemplate';
 
+const MAX_SESSIONS = 2;
+
 type ThemeOption = {
   key: ThemePresetKey;
   label: string;
@@ -143,6 +145,16 @@ export class AiTerminalViewProvider
   }
 
   private handleSessionRequest(dimensions?: {cols?: number; rows?: number}) {
+    if (this.sessionManager.getSessionCount() >= MAX_SESSIONS) {
+      vscode.window.showWarningMessage(
+        `Terminal For AI CLI supports up to ${MAX_SESSIONS} sessions.`
+      );
+      this.postMessage({
+        type: 'session-limit-reached',
+        payload: {max: MAX_SESSIONS},
+      });
+      return;
+    }
     const config = vscode.workspace.getConfiguration('aiTerminal');
     const shell = config.get<string>('defaultShell')?.trim() || undefined;
     const startupCommands = config.get<string[]>('startupCommands') ?? [];
