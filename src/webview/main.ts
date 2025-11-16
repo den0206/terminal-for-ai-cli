@@ -68,7 +68,16 @@ type OutboundMessage =
     }
   | {type: 'dispose-session'; payload: {sessionId: string}}
   | {type: 'dispose-all-sessions'}
-  | {type: 'theme-select'; payload: {presetKey: string}};
+  | {type: 'theme-select'; payload: {presetKey: string}}
+  | {
+      type: 'image-drop';
+      payload: {
+        fileName: string;
+        mimeType: string;
+        data: string;
+        sessionId: string;
+      };
+    };
 
 type SessionMeta = {shell: string; label: string};
 
@@ -182,8 +191,7 @@ let confirmingClearAll = false;
 let currentThemeKey: string | undefined;
 let availablePresets: ThemePresetInfo[] = [];
 let sessionMeta: Record<string, SessionMeta> = savedState.sessionMeta ?? {};
-let viewMode: ViewMode =
-  savedState.viewMode === 'split' ? 'split' : 'single';
+let viewMode: ViewMode = savedState.viewMode === 'split' ? 'split' : 'single';
 let splitRatio = clampSplitRatio(
   typeof savedState.splitRatio === 'number' ? savedState.splitRatio : 0.5
 );
@@ -721,7 +729,10 @@ function updateViewToggleButton() {
     return;
   }
   const splitEnabled = viewMode === 'split' && sessionIds.length >= 2;
-  viewToggleButton.setAttribute('aria-pressed', splitEnabled ? 'true' : 'false');
+  viewToggleButton.setAttribute(
+    'aria-pressed',
+    splitEnabled ? 'true' : 'false'
+  );
   if (viewToggleIcon) {
     viewToggleIcon.textContent = splitEnabled ? '▦' : '▢';
   }
@@ -938,16 +949,15 @@ function syncPaneAssignments(force = false) {
   updatePaneActiveStates();
   if (terminalStack) {
     const splitActive = viewMode === 'split' && Boolean(secondarySession);
-    terminalStack.setAttribute('data-view-mode', splitActive ? 'split' : 'single');
+    terminalStack.setAttribute(
+      'data-view-mode',
+      splitActive ? 'split' : 'single'
+    );
   }
   applySplitSizing();
 }
 
-function assignPane(
-  pane: Pane,
-  sessionId: string | undefined,
-  force = false
-) {
+function assignPane(pane: Pane, sessionId: string | undefined, force = false) {
   const current = paneSessions[pane];
   if (!force && current === sessionId) {
     updatePaneVisibility(pane, Boolean(sessionId));
@@ -960,6 +970,7 @@ function assignPane(
   if (sessionId) {
     writeBufferToTerminal(sessionId, terminal);
     terminal.scrollToBottom();
+    terminal.write('\u001b[?25h');
   }
   updatePaneVisibility(pane, Boolean(sessionId));
   updatePaneLabel(pane, sessionId);
@@ -1060,3 +1071,79 @@ function toggleClearAllConfirm(visible: boolean) {
   }
   clearAllConfirm.setAttribute('aria-hidden', visible ? 'false' : 'true');
 }
+
+function setupImageDragAndDrop() {
+  const handleDragOver = (event: DragEvent) => {
+    if (!event.shiftKey) {
+      return;
+    }
+
+    if (!event.dataTransfer) {
+      return;
+    }
+
+    const hasFiles = event.dataTransfer.types.includes('Files');
+    if (!hasFiles) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDrop = async (event: DragEvent) => {
+    if (!event.shiftKey) {
+      return;
+    }
+
+    if (!event.dataTransfer?.files.length) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const files = Array.from(event.dataTransfer.files);
+    const imageFiles = files.filter((file) => file.type.startsWith('image/'));
+
+    if (imageFiles.length === 0) {
+      return;
+    }
+
+    const sessionId = activeSessionId;
+    if (!sessionId) {
+      return;
+    }
+
+    for (const file of imageFiles) {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        const base64 = btoa(
+          uint8Array.reduce(
+            (data, byte) => data + String.fromCharCode(byte),
+            ''
+          )
+        );
+
+        vscode.postMessage<OutboundMessage>({
+          type: 'image-drop',
+          payload: {
+            fileName: file.name,
+            mimeType: file.type,
+            data: base64,
+            sessionId,
+          },
+        });
+      } catch (error) {
+        console.error('Failed to process image file:', error);
+      }
+    }
+  };
+
+  document.addEventListener('dragover', handleDragOver);
+  document.addEventListener('drop', handleDrop);
+}
+
+setupImageDragAndDrop();

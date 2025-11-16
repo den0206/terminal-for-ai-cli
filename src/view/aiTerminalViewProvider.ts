@@ -3,7 +3,6 @@ import * as vscode from 'vscode';
 import {SessionManager} from '../terminal/sessionManager';
 import {
   THEME_PRESETS,
-  ThemePalette,
   ThemePresetKey,
   ThemePreview,
   isValidPresetKey,
@@ -31,6 +30,7 @@ export class AiTerminalViewProvider
   private readonly messageQueue: unknown[] = [];
   private readonly disposables: vscode.Disposable[] = [];
   private readonly sessionLabels = new Map<string, string>();
+  private readonly sessionImages = new Map<string, Set<string>>();
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -49,6 +49,9 @@ export class AiTerminalViewProvider
           payload: {sessionId: id, code, signal},
         });
         this.sessionLabels.delete(id);
+        this.deleteSessionImages(id).catch((error) => {
+          console.error(`Failed to delete images for session ${id}:`, error);
+        });
         this.postSessionCount();
       }),
       vscode.workspace.onDidChangeConfiguration((event) => {
@@ -93,7 +96,7 @@ export class AiTerminalViewProvider
     this.handleSessionRequest();
   }
 
-  private handleMessage(message: any) {
+  private async handleMessage(message: any) {
     switch (message?.type) {
       case 'webview-ready':
         this.webviewReady = true;
@@ -128,6 +131,7 @@ export class AiTerminalViewProvider
         break;
       case 'dispose-session':
         if (message.payload?.sessionId) {
+          await this.deleteSessionImages(message.payload.sessionId);
           this.sessionManager.disposeSession(message.payload.sessionId);
         }
         break;
@@ -137,6 +141,19 @@ export class AiTerminalViewProvider
       case 'theme-select':
         if (message.payload?.presetKey) {
           this.updateThemePreset(message.payload.presetKey);
+        }
+        break;
+      case 'image-drop':
+        if (
+          message.payload?.fileName &&
+          message.payload?.data &&
+          message.payload?.sessionId
+        ) {
+          this.handleImageDrop(
+            message.payload.fileName,
+            message.payload.data,
+            message.payload.sessionId
+          );
         }
         break;
       default:
@@ -282,12 +299,13 @@ export class AiTerminalViewProvider
     }
   }
 
-  private handleClearAllSessions() {
+  private async handleClearAllSessions() {
     const sessions = this.sessionManager.getActiveSessions();
     if (sessions.length === 0) {
       this.sessionLabels.clear();
       this.postMessage({type: 'all-sessions-cleared'});
       this.postSessionCount();
+      await this.clearAllImages();
       return;
     }
 
@@ -297,6 +315,53 @@ export class AiTerminalViewProvider
     this.sessionLabels.clear();
     this.postMessage({type: 'all-sessions-cleared'});
     this.postSessionCount();
+    await this.clearAllImages();
+  }
+
+  private async deleteSessionImages(sessionId: string) {
+    const imagePaths = this.sessionImages.get(sessionId);
+    if (!imagePaths || imagePaths.size === 0) {
+      return;
+    }
+
+    for (const imagePath of imagePaths) {
+      try {
+        const imageUri = vscode.Uri.file(imagePath);
+        await vscode.workspace.fs.delete(imageUri, {useTrash: false});
+      } catch (error) {
+        console.error(`Failed to delete image ${imagePath}:`, error);
+        // Continue deleting other images even if one fails
+      }
+    }
+
+    this.sessionImages.delete(sessionId);
+  }
+
+  private async clearAllImages() {
+    try {
+      const storageUri = this.context.globalStorageUri;
+      const imagesDir = vscode.Uri.joinPath(storageUri, 'images');
+
+      try {
+        await vscode.workspace.fs.delete(imagesDir, {
+          recursive: true,
+          useTrash: false,
+        });
+      } catch (error) {
+        // Ignore errors if the directory doesn't exist
+        if (error instanceof vscode.FileSystemError) {
+          // Directory might not exist, which is fine
+          return;
+        }
+        throw error;
+      }
+    } catch (error) {
+      console.error('Failed to clear images:', error);
+      // Don't show error to user as this is a background cleanup operation
+    }
+
+    // Clear all session image tracking
+    this.sessionImages.clear();
   }
 
   private getThemeValues(): ThemeSnapshot {
@@ -354,6 +419,46 @@ export class AiTerminalViewProvider
       index++;
     }
     return index;
+  }
+
+  private async handleImageDrop(
+    fileName: string,
+    base64Data: string,
+    sessionId: string
+  ) {
+    try {
+      const buffer = Buffer.from(base64Data, 'base64');
+      const storageUri = this.context.globalStorageUri;
+      await vscode.workspace.fs.createDirectory(storageUri);
+
+      const imagesDir = vscode.Uri.joinPath(storageUri, 'images');
+      await vscode.workspace.fs.createDirectory(imagesDir);
+
+      const timestamp = Date.now();
+      const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const uniqueFileName = `${timestamp}_${sanitizedFileName}`;
+      const imageUri = vscode.Uri.joinPath(imagesDir, uniqueFileName);
+
+      await vscode.workspace.fs.writeFile(imageUri, buffer);
+
+      // Track which session used this image
+      if (!this.sessionImages.has(sessionId)) {
+        this.sessionImages.set(sessionId, new Set());
+      }
+      this.sessionImages.get(sessionId)!.add(imageUri.fsPath);
+
+      const imagePath = imageUri.fsPath;
+      const quotedPath = imagePath.includes(' ')
+        ? `"${imagePath}"`
+        : imagePath;
+
+      this.sessionManager.write(sessionId, `${quotedPath}`);
+    } catch (error) {
+      console.error('Failed to save image:', error);
+      vscode.window.showErrorMessage(
+        `Failed to save image: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
 
   private getHtml(webview: vscode.Webview): string {
