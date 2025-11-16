@@ -1,5 +1,9 @@
 # Terminal for AI CLI
 
+[![CI](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/ci.yml)
+[![PR Check](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/pr-check.yml/badge.svg)](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/pr-check.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Terminal for AI CLI は Cursor / VS Code のセカンダリサイドバーに常駐するマルチセッション対応ターミナル拡張です。`xterm.js` をベースにした Webview と、Node.js + Python ブリッジで構成された `SessionManager` により、IDE 内で複数シェルを高速に切り替えられます。
 
 > 🇺🇸 英語版はこちら: [`README.md`](README.md)。内容は両ファイルで同期されています。
@@ -15,6 +19,9 @@ Terminal for AI CLI は Cursor / VS Code のセカンダリサイドバーに常
 - ドラッグで端の高さを変更し、値は永続化。
 - 「Clear all sessions」セクションで、確認ダイアログを挟んで全セッションを安全に終了。
 - 既定シェル・起動時コマンド・テーマプリセットを VS Code 設定からカスタマイズ可能。
+- **セキュリティ強化**: シェルパスとコマンドの入力検証、暗号学的に安全なランダム生成を実装。
+- **型安全**: Discriminated Unions によるメッセージ処理で、`any` 型を完全排除。
+- **テスト済み**: Vitest による包括的なテストスイート（22以上のテストでユーティリティと検証をカバー）。
 - 主要コードは TypeScript (`src/extension.ts`, `src/webview/main.ts`, `src/terminal/sessionManager.ts`) で統一し、`dist/` と `media/` にビルド成果物を出力。
 
 ---
@@ -73,13 +80,60 @@ Terminal for AI CLI は Cursor / VS Code のセカンダリサイドバーに常
 
 ---
 
+## セキュリティ
+
+Terminal For AI CLI は、一般的な脆弱性から保護するための複数のセキュリティ対策を実装しています：
+
+### 入力検証
+- **シェルパスの検証**: プロセス起動前に、シェルパスが絶対パスであり、存在し、実行可能であることを確認します。
+- **起動コマンドのサニタイズ**: 起動コマンドをフィルタリングおよび検証し、危険なパターンに対して警告を表示します。
+- **作業ディレクトリの検証**: 使用前に作業ディレクトリが有効で存在することを確認します。
+
+### 暗号化セキュリティ
+- **安全なランダム生成**: セッション ID と CSP nonce の生成に、`Math.random()` ではなく Node.js の `crypto` モジュールを使用します。
+- **コンテンツセキュリティポリシー**: XSS 攻撃を防ぐため、nonce ベースのスクリプト実行による厳格な CSP を実装しています。
+
+### 型安全性
+- **`any` 型ゼロ**: すべてのメッセージハンドラーで、型安全なメッセージルーティングのために厳格な TypeScript Discriminated Unions を使用します。
+- **厳格なコンパイル**: 包括的な型チェックで TypeScript strict モードを有効化しています。
+
+### テスト
+- **自動テスト**: 検証ロジック、ランダム生成、セキュリティ機能をカバーする 22 以上のユニットテストを実装。
+- **継続的な検証**: ESLint がコード品質を強制し、開発時に潜在的な問題を検出します。
+
+---
+
 ## 開発メモ
 
 - `npm run bundle:webview`：`src/webview/main.ts` を IIFE 形式で `media/webview.js` に出力。
 - `npm run compile`：上記 + `tsc -p ./` により `dist/extension.js` を出力。
 - `npm run watch`：TypeScript のウォッチモード。
-- 主要依存: `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, VS Code API, Python 3 (Unix での PTY ブリッジ用)。
+- `npm run lint`：ESLint でソースコードを検証。
+- `npm test`：Vitest でテストスイートを実行。
+- `npm run test:watch`：テストをウォッチモードで実行。
+- `npm run test:coverage`：テストカバレッジレポートを生成。
+- 主要依存: `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, `vitest`, VS Code API, Python 3 (Unix での PTY ブリッジ用)。
 - 生成物: `dist/extension.js`, `media/webview.js`, `media/webview.js.map`, `media/xterm.css`。
+
+### CI/CD
+
+プロジェクトは継続的インテグレーションに GitHub Actions を使用しています：
+
+- **CI ワークフロー** (`.github/workflows/ci.yml`): `feature/**`、`fix/**`、`main`、`develop` ブランチへのプッシュ時に実行
+  - ESLint による lint チェック
+  - TypeScript コンパイル
+  - Vitest によるテスト実行
+  - テストカバレッジレポート生成
+  - 複数バージョンの Node.js でテスト (18.x, 20.x)
+
+- **PR チェックワークフロー** (`.github/workflows/pr-check.yml`): すべてのプルリクエストで実行
+  - フル検証スイート（lint、型チェック、テスト）
+  - PR コメントとしてカバレッジレポートを投稿
+  - バンドルサイズチェックと警告
+  - npm audit によるセキュリティ監査
+  - TruffleHog によるシークレットスキャン
+
+プルリクエストをマージする前に、すべてのチェックに合格する必要があります。
 
 ### アーキテクチャ概要
 
@@ -90,6 +144,8 @@ Terminal for AI CLI は Cursor / VS Code のセカンダリサイドバーに常
 | Webview テンプレート | `src/view/htmlTemplate.ts` | Webview の HTML / CSS 骨格を生成。 |
 | テーマ定義 | `src/theming/themePresets.ts` | プリセット配色・プレビュー・バリデーションを提供。 |
 | セッション管理 | `src/terminal/sessionManager.ts` | シェル起動、Python PTY ブリッジ／OS fallback を扱う。 |
+| セキュリティ・検証 | `src/utils/validation.ts` | シェルパス、起動コマンド、作業ディレクトリの検証。 |
+| ユーティリティ | `src/utils/nonce.ts` | CSP 用の暗号学的に安全な nonce を生成。 |
 
 ---
 

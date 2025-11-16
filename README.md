@@ -1,5 +1,9 @@
 # Terminal for AI CLI
 
+[![CI](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/ci.yml)
+[![PR Check](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/pr-check.yml/badge.svg)](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/pr-check.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Terminal for AI CLI is a VS Code / Cursor extension that anchors a multi-session terminal inside the secondary sidebar. It is powered by `xterm.js`, communicates with a lightweight `SessionManager` (Node.js + Python bridge), and keeps UI state in the Webview so you can switch shells without context switching to another window.
 
 > 🇯🇵 Looking for the Japanese documentation? Check [`README_JP.md`](README_JP.md). This file and the Japanese version are intentionally kept in sync.
@@ -13,8 +17,11 @@ Terminal for AI CLI is a VS Code / Cursor extension that anchors a multi-session
 - Automatic naming (`Terminal 1`, `Terminal 2`, …) that reuses freed numbers.
 - Theme presets (Modern, Basic, Homebrew, etc.) with live preview and VS Code color integration.
 - Adjustable terminal height with a drag handle; the setting is persisted across reloads.
-- “Clear all sessions” section with an inline confirmation flow to terminate every running shell safely.
+- "Clear all sessions" section with an inline confirmation flow to terminate every running shell safely.
 - Configurable default shell, startup commands, and theme preset via VS Code settings.
+- **Security hardened**: Input validation for shell paths and commands, cryptographically secure random generation.
+- **Type-safe**: Strict TypeScript with discriminated unions for message handling (zero `any` types).
+- **Tested**: Comprehensive test suite with Vitest (22+ tests covering utilities and validation).
 - Pure TypeScript codebase (`src/extension.ts`, `src/webview/main.ts`, `src/terminal/sessionManager.ts`) with esbuild + `tsc` outputs committed to `media/` and `dist/`.
 
 ---
@@ -74,13 +81,60 @@ Terminal for AI CLI is a VS Code / Cursor extension that anchors a multi-session
 
 ---
 
+## Security
+
+Terminal For AI CLI implements multiple security measures to protect against common vulnerabilities:
+
+### Input Validation
+- **Shell path validation**: Verifies that shell paths are absolute, exist, and are executable before spawning processes.
+- **Startup command sanitization**: Filters and validates startup commands, with warnings for potentially dangerous patterns.
+- **Working directory validation**: Ensures working directories are valid and exist before use.
+
+### Cryptographic Security
+- **Secure random generation**: Uses Node.js `crypto` module for generating session IDs and CSP nonces instead of `Math.random()`.
+- **Content Security Policy**: Implements strict CSP with nonce-based script execution to prevent XSS attacks.
+
+### Type Safety
+- **Zero `any` types**: All message handlers use strict TypeScript discriminated unions for type-safe message routing.
+- **Strict compilation**: TypeScript strict mode enabled with comprehensive type checking.
+
+### Testing
+- **Automated tests**: 22+ unit tests covering validation logic, random generation, and security features.
+- **Continuous validation**: ESLint enforces code quality and catches potential issues at development time.
+
+---
+
 ## Development Notes
 
 - `npm run bundle:webview` – bundles `src/webview/main.ts` (IIFE) to `media/webview.js`.
 - `npm run compile` – runs the bundle script and `tsc -p ./` to emit `dist/extension.js`.
 - `npm run watch` – TypeScript watch mode for iterative work.
-- Dependencies: `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, VS Code `@types`, and Python 3 (Unix PTY bridge).
+- `npm run lint` – runs ESLint on the source code.
+- `npm test` – runs the test suite with Vitest.
+- `npm run test:watch` – runs tests in watch mode.
+- `npm run test:coverage` – generates test coverage report.
+- Dependencies: `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, `vitest`, VS Code `@types`, and Python 3 (Unix PTY bridge).
 - Outputs: extension host bundle (`dist/extension.js`), Webview bundle (`media/webview.js`, `media/webview.js.map`, `media/xterm.css`).
+
+### CI/CD
+
+The project uses GitHub Actions for continuous integration:
+
+- **CI Workflow** (`.github/workflows/ci.yml`): Runs on push to `feature/**`, `fix/**`, `main`, and `develop` branches
+  - Lint check with ESLint
+  - TypeScript compilation
+  - Test execution with Vitest
+  - Test coverage report generation
+  - Multi-version Node.js testing (18.x, 20.x)
+
+- **PR Check Workflow** (`.github/workflows/pr-check.yml`): Runs on all pull requests
+  - Full validation suite (lint, type-check, tests)
+  - Coverage report as PR comment
+  - Bundle size check with warnings
+  - Security audit with npm audit
+  - Secret scanning with TruffleHog
+
+All checks must pass before merging pull requests.
 
 ### Architecture Overview
 
@@ -91,6 +145,8 @@ Terminal for AI CLI is a VS Code / Cursor extension that anchors a multi-session
 | Webview template | `src/view/htmlTemplate.ts` | Generates the HTML/CSS shell for the Webview UI. |
 | Theming | `src/theming/themePresets.ts` | Defines palette presets, previews, and validation helpers. |
 | Session management | `src/terminal/sessionManager.ts` | Spawns shells, proxies PTY data via Python bridge or OS fallback. |
+| Security & validation | `src/utils/validation.ts` | Validates shell paths, startup commands, and working directories. |
+| Utilities | `src/utils/nonce.ts` | Generates cryptographically secure nonces for CSP. |
 
 ---
 
