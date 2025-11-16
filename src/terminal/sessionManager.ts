@@ -4,10 +4,12 @@ import {
   spawnSync,
   SpawnOptions
 } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { Writable } from 'node:stream';
 import * as vscode from 'vscode';
+import { validateShellPath, validateWorkingDirectory } from '../utils/validation';
 
 const PYTHON_PTY_BRIDGE = String.raw`
 import fcntl
@@ -258,7 +260,15 @@ export class SessionManager implements vscode.Disposable {
 
   createSession(options: SessionOptions = {}): SessionInfo {
     const id = this.generateSessionId();
-    const shell = options.shell?.trim() || this.getDefaultShell();
+    let shell = options.shell?.trim() || this.getDefaultShell();
+
+    // Validate shell path for security
+    if (!validateShellPath(shell)) {
+      const fallback = this.getDefaultShell();
+      console.warn(`[SessionManager] Invalid shell path: "${shell}". Using fallback: "${fallback}"`);
+      shell = fallback;
+    }
+
     const dimensions: Dimensions = {
       cols: Math.max(2, options.cols ?? 80),
       rows: Math.max(1, options.rows ?? 24)
@@ -345,7 +355,13 @@ export class SessionManager implements vscode.Disposable {
     dimensions: Dimensions,
     options: SessionOptions
   ): LaunchResult {
-    const cwd = options.cwd ?? this.getDefaultCwd();
+    // Validate and sanitize working directory
+    const requestedCwd = options.cwd ?? this.getDefaultCwd();
+    const cwd = validateWorkingDirectory(requestedCwd) ?? this.getDefaultCwd();
+    if (cwd !== requestedCwd) {
+      console.warn(`[SessionManager] Invalid working directory: "${requestedCwd}". Using fallback: "${cwd}"`);
+    }
+
     const env = this.buildEnv(options.env, dimensions);
     const shellArgs = this.getShellArgs(shell);
     const stdio: SpawnOptions['stdio'] = 'pipe';
@@ -468,8 +484,13 @@ export class SessionManager implements vscode.Disposable {
     return os.homedir();
   }
 
-  private generateSessionId() {
-    return `session-${Math.random().toString(36).slice(2, 10)}`;
+  /**
+   * Generates a cryptographically secure session ID
+   * @returns A unique session identifier
+   */
+  private generateSessionId(): string {
+    // Use crypto.randomUUID() for cryptographically secure random IDs
+    return `session-${randomUUID()}`;
   }
 
   private getPythonExecutable(): string | null {
