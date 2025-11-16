@@ -1,5 +1,6 @@
 /dist
 /node_modules
 /.vscode
-/media
+/media/webview.js
+/media/webview.js.map
 /vsix
