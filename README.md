@@ -19,9 +19,11 @@ Terminal for AI CLI is a VS Code / Cursor extension that anchors a multi-session
 - Adjustable terminal height with a drag handle; the setting is persisted across reloads.
 - "Clear all sessions" section with an inline confirmation flow to terminate every running shell safely.
 - Configurable default shell, startup commands, and theme preset via VS Code settings.
-- **Security hardened**: Input validation for shell paths and commands, cryptographically secure random generation.
+- **Security hardened**: Input validation for shell paths and commands, cryptographically secure random generation, image file size limits (10MB).
 - **Type-safe**: Strict TypeScript with discriminated unions for message handling (zero `any` types).
-- **Tested**: Comprehensive test suite with Vitest (22+ tests covering utilities and validation).
+- **Tested**: Comprehensive test suite with Vitest (33+ tests covering utilities, validation, and logging).
+- **Robust logging**: Centralized logging system using VS Code Output Channel for better debugging and troubleshooting.
+- **Resource management**: Automatic cleanup of session buffers and message queue limits to prevent memory leaks.
 - Pure TypeScript codebase (`src/extension.ts`, `src/webview/main.ts`, `src/terminal/sessionManager.ts`) with esbuild + `tsc` outputs committed to `media/` and `dist/`.
 
 ---
@@ -67,7 +69,6 @@ Terminal for AI CLI is a VS Code / Cursor extension that anchors a multi-session
 | Resize propagation | The Python bridge proxies resize events via JSON/SIGWINCH; some environments may see a short delay. |
 | Session restoration | Webview reloads restore buffered output, but a full IDE restart still kills OS processes. A persistent session registry is on the roadmap. |
 | Theme customization | Only built-in presets are supported today; user-defined palettes are a future task. |
-| Logging | The old event log was removed. Consider using the VS Code Output channel for future troubleshooting. |
 
 ---
 
@@ -77,7 +78,6 @@ Terminal for AI CLI is a VS Code / Cursor extension that anchors a multi-session
 2. **Persistent session recovery** even after restarting VS Code.
 3. **Custom theme JSON** support in `settings.json`.
 4. **Command palette / snippet presets** to inject frequently used commands.
-5. **Improved telemetry/logging** via Output channels and notifications.
 
 ---
 
@@ -89,6 +89,7 @@ Terminal For AI CLI implements multiple security measures to protect against com
 - **Shell path validation**: Verifies that shell paths are absolute, exist, and are executable before spawning processes.
 - **Startup command sanitization**: Filters and validates startup commands, with warnings for potentially dangerous patterns.
 - **Working directory validation**: Ensures working directories are valid and exist before use.
+- **Image file validation**: Validates image file size (10MB limit), base64 data integrity, and filename sanitization to prevent path traversal attacks.
 
 ### Cryptographic Security
 - **Secure random generation**: Uses Node.js `crypto` module for generating session IDs and CSP nonces instead of `Math.random()`.
@@ -99,8 +100,13 @@ Terminal For AI CLI implements multiple security measures to protect against com
 - **Strict compilation**: TypeScript strict mode enabled with comprehensive type checking.
 
 ### Testing
-- **Automated tests**: 22+ unit tests covering validation logic, random generation, and security features.
+- **Automated tests**: 33+ unit tests covering validation logic, random generation, security features, and logging.
 - **Continuous validation**: ESLint enforces code quality and catches potential issues at development time.
+
+### Logging & Debugging
+- **Centralized logging**: VS Code Output Channel integration for structured logging with timestamps and log levels.
+- **Error tracking**: Comprehensive error handling with detailed logging for troubleshooting.
+- **Resource monitoring**: Automatic cleanup of session buffers and message queues to prevent memory issues.
 
 ---
 
@@ -146,6 +152,7 @@ All checks must pass before merging pull requests.
 | Theming | `src/theming/themePresets.ts` | Defines palette presets, previews, and validation helpers. |
 | Session management | `src/terminal/sessionManager.ts` | Spawns shells, proxies PTY data via Python bridge or OS fallback. |
 | Security & validation | `src/utils/validation.ts` | Validates shell paths, startup commands, and working directories. |
+| Logging | `src/utils/logger.ts` | Centralized logging system using VS Code Output Channel. |
 | Utilities | `src/utils/nonce.ts` | Generates cryptographically secure nonces for CSP. |
 
 ---

@@ -35,6 +35,7 @@ type Pane = 'primary' | 'secondary';
 const MAX_SESSIONS = 2;
 const MIN_SPLIT_RATIO = 0.2;
 const MAX_SPLIT_RATIO = 0.8;
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
 type InboundMessage =
   | {type: 'session-count'; payload: {total: number}}
@@ -174,6 +175,7 @@ const clearAllConfirmCancel = document.querySelector(
 
 const sessionBuffers: Record<string, string> = {};
 const MAX_BUFFER_SIZE = 200_000;
+const MAX_BUFFER_COUNT = 10; // Maximum number of session buffers to keep
 
 const savedState = vscode.getState() ?? {totalSessions: 0, sessionIds: []};
 let activeSessionId = savedState.activeSessionId;
@@ -300,13 +302,13 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
         sessionIds = [];
         sessionMeta = {};
         activeSessionId = undefined;
-        for (const key of Object.keys(sessionBuffers)) {
-          delete sessionBuffers[key];
-        }
+        cleanupAllBuffers();
         syncPaneAssignments(true);
         setStatus('No sessions available');
       } else {
         setStatus(`Registered sessions: ${totalSessions}`);
+        // Clean up buffers for sessions that no longer exist
+        cleanupOldBuffers();
       }
       persistState();
       updateSessionControls();
@@ -337,7 +339,8 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
     case 'session-exited':
       sessionIds = sessionIds.filter((id) => id !== message.payload.sessionId);
       delete sessionMeta[message.payload.sessionId];
-      delete sessionBuffers[message.payload.sessionId];
+      // Clean up buffer for exited session
+      cleanupSessionBuffer(message.payload.sessionId);
       persistState();
       if (message.payload.sessionId === activeSessionId) {
         const fallbackId = sessionIds[sessionIds.length - 1];
@@ -381,9 +384,8 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
       sessionIds = [];
       sessionMeta = {};
       totalSessions = 0;
-      for (const key of Object.keys(sessionBuffers)) {
-        delete sessionBuffers[key];
-      }
+      // Clear all buffers
+      cleanupAllBuffers();
       syncPaneAssignments(true);
       persistState();
       setStatus('All sessions cleared');
@@ -809,6 +811,36 @@ function appendToBuffer(sessionId: string, chunk: string) {
     next = next.slice(next.length - MAX_BUFFER_SIZE);
   }
   sessionBuffers[sessionId] = next;
+
+  // Clean up old buffers if we have too many
+  cleanupOldBuffers();
+}
+
+function cleanupSessionBuffer(sessionId: string) {
+  delete sessionBuffers[sessionId];
+}
+
+function cleanupAllBuffers() {
+  for (const key of Object.keys(sessionBuffers)) {
+    delete sessionBuffers[key];
+  }
+}
+
+function cleanupOldBuffers() {
+  const bufferKeys = Object.keys(sessionBuffers);
+  if (bufferKeys.length <= MAX_BUFFER_COUNT) {
+    return;
+  }
+
+  // Sort by session ID (oldest first, assuming session IDs are sequential)
+  // Or we could track last access time, but for simplicity, remove oldest entries
+  const keysToRemove = bufferKeys
+    .filter((key) => !sessionIds.includes(key))
+    .slice(0, bufferKeys.length - MAX_BUFFER_COUNT);
+
+  for (const key of keysToRemove) {
+    delete sessionBuffers[key];
+  }
 }
 
 function writeBufferToTerminal(sessionId: string, target: Terminal) {
@@ -1117,6 +1149,16 @@ function setupImageDragAndDrop() {
 
     for (const file of imageFiles) {
       try {
+        // Check file size before processing
+        if (file.size > MAX_IMAGE_SIZE_BYTES) {
+          const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+          const maxMB = (MAX_IMAGE_SIZE_BYTES / (1024 * 1024)).toFixed(0);
+          console.warn(
+            `Image file "${file.name}" is too large: ${sizeMB}MB (maximum: ${maxMB}MB). Skipping.`
+          );
+          continue;
+        }
+
         const arrayBuffer = await file.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);
         const base64 = btoa(
@@ -1136,7 +1178,8 @@ function setupImageDragAndDrop() {
           },
         });
       } catch (error) {
-        console.error('Failed to process image file:', error);
+        // Log error in webview console (Logger is not available in webview context)
+        console.error(`Failed to process image file "${file.name}":`, error);
       }
     }
   };

@@ -18,4 +18,9 @@ export default defineConfig({
       ],
     },
   },
+  resolve: {
+    alias: {
+      vscode: 'node_modules/@types/vscode/index.d.ts',
+    },
+  },
 });

@@ -1,6 +1,18 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+// Conditional import to avoid issues in test environment
+let Logger: typeof import('./logger').Logger;
+try {
+  const loggerModule = require('./logger');
+  Logger = loggerModule.Logger;
+} catch {
+  // Fallback for test environment
+  Logger = {
+    warn: (...args: unknown[]) => console.warn(...args),
+  } as typeof import('./logger').Logger;
+}
+
 /**
  * Validates that a shell path is safe to execute
  * @param shellPath The path to validate
@@ -118,7 +130,7 @@ export function validateStartupCommands(commands: unknown): string[] {
 
       for (const pattern of dangerousPatterns) {
         if (pattern.test(cmd)) {
-          console.warn(`[Terminal For AI CLI] Potentially dangerous startup command detected: ${cmd.substring(0, 50)}...`);
+          Logger.warn(`Potentially dangerous startup command detected: ${cmd.substring(0, 50)}...`);
         }
       }
 

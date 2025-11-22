@@ -10,6 +10,7 @@ import * as path from 'node:path';
 import { Writable } from 'node:stream';
 import * as vscode from 'vscode';
 import { validateShellPath, validateWorkingDirectory } from '../utils/validation';
+import {Logger} from '../utils/logger';
 
 const PYTHON_PTY_BRIDGE = String.raw`
 import fcntl
@@ -265,7 +266,7 @@ export class SessionManager implements vscode.Disposable {
     // Validate shell path for security
     if (!validateShellPath(shell)) {
       const fallback = this.getDefaultShell();
-      console.warn(`[SessionManager] Invalid shell path: "${shell}". Using fallback: "${fallback}"`);
+      Logger.warn(`Invalid shell path: "${shell}". Using fallback: "${fallback}"`);
       shell = fallback;
     }
 
@@ -359,7 +360,7 @@ export class SessionManager implements vscode.Disposable {
     const requestedCwd = options.cwd ?? this.getDefaultCwd();
     const cwd = validateWorkingDirectory(requestedCwd) ?? this.getDefaultCwd();
     if (cwd !== requestedCwd) {
-      console.warn(`[SessionManager] Invalid working directory: "${requestedCwd}". Using fallback: "${cwd}"`);
+      Logger.warn(`Invalid working directory: "${requestedCwd}". Using fallback: "${cwd}"`);
     }
 
     const env = this.buildEnv(options.env, dimensions);
