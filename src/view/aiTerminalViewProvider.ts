@@ -239,7 +239,10 @@ export class AiTerminalViewProvider
           break;
         case 'dispose-session':
           await this.deleteSessionImages(message.payload.sessionId);
+          this.sessionLabels.delete(message.payload.sessionId);
+          this.removeSessionFromQueue(message.payload.sessionId);
           this.sessionManager.disposeSession(message.payload.sessionId);
+          this.postSessionCount();
           break;
         case 'dispose-all-sessions':
           await this.handleClearAllSessions();
@@ -393,6 +396,27 @@ export class AiTerminalViewProvider
       const message = this.messageQueue.shift();
       if (message) {
         this.webviewView.webview.postMessage(message);
+      }
+    }
+  }
+
+  private removeSessionFromQueue(sessionId: string) {
+    for (let i = this.messageQueue.length - 1; i >= 0; i--) {
+      const message = this.messageQueue[i];
+      let shouldRemove = false;
+
+      switch (message.type) {
+        case 'session-data':
+        case 'session-exited':
+          shouldRemove = message.payload.sessionId === sessionId;
+          break;
+        case 'session-created':
+          shouldRemove = message.payload.id === sessionId;
+          break;
+      }
+
+      if (shouldRemove) {
+        this.messageQueue.splice(i, 1);
       }
     }
   }
