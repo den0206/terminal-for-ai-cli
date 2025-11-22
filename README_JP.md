@@ -132,6 +132,21 @@ Terminal For AI CLI は、一般的な脆弱性から保護するための複数
 - 主要依存: `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, `vitest`, VS Code API, Python 3 (Unix での PTY ブリッジ用)。
 - 生成物: `dist/extension.js`, `media/webview.js`, `media/webview.js.map`, `media/xterm.css`。
 
+### 拡張機能アイコン
+
+拡張機能では2つのアイコンファイルを使用しています：
+
+- **拡張機能アイコン** (`package.json` → `icon`): `media/icon.png` (128x128 PNG 推奨、透過対応)
+  - VS Code マーケットプレイスと拡張機能ビューに表示されます
+  - 正方形の PNG 画像で、透過（アルファチャンネル）に対応しています
+
+- **アクティビティバーアイコン** (`package.json` → `contributes.viewsContainers.activitybar[].icon`): `media/icon-bit.png`
+  - VS Code のアクティビティバーに表示されます
+  - PNG または SVG 形式に対応しています
+  - Webview UI でも使用されます (`src/view/aiTerminalViewProvider.ts`)
+
+**注意**: 最適な表示のため、両方のアイコンに透過 PNG（アルファチャンネル）を使用することを推奨します。拡張機能アイコンは VS Code マーケットプレイスでの最適な表示のために 128x128 ピクセルを推奨します。
+
 ### CI/CD
 
 プロジェクトは継続的インテグレーションに GitHub Actions を使用しています：

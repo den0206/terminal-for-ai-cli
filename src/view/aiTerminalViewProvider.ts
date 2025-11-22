@@ -753,7 +753,7 @@ export class AiTerminalViewProvider
     const nonce = getNonce();
     const theme = this.getThemeValues();
     const iconUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'terminal.svg')
+      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'icon-bit.png')
     );
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'media', 'webview.js')
