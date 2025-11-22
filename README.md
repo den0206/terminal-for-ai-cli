@@ -133,6 +133,21 @@ Terminal For AI CLI implements multiple security measures to protect against com
 - Dependencies: `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, `vitest`, VS Code `@types`, and Python 3 (Unix PTY bridge).
 - Outputs: extension host bundle (`dist/extension.js`), Webview bundle (`media/webview.js`, `media/webview.js.map`, `media/xterm.css`).
 
+### Extension Icons
+
+The extension uses two icon files:
+
+- **Extension icon** (`package.json` → `icon`): `media/icon.png` (128x128 PNG recommended, supports transparency)
+  - Displayed in VS Code marketplace and extension view
+  - Should be a square PNG image with optional transparency
+
+- **Activity bar icon** (`package.json` → `contributes.viewsContainers.activitybar[].icon`): `media/icon-bit.png`
+  - Displayed in the VS Code activity bar
+  - Can be PNG or SVG format
+  - Also used in the Webview UI (`src/view/aiTerminalViewProvider.ts`)
+
+**Note**: For best results, use PNG format with transparency (alpha channel) for both icons. The extension icon should be 128x128 pixels for optimal display in the VS Code marketplace.
+
 ### CI/CD
 
 The project uses GitHub Actions for continuous integration:

@@ -4,6 +4,7 @@
   "description": "Terminal view in the Cursor secondary sidebar.",
   "version": "0.0.1",
   "publisher": "yuukisakai",
+  "icon": "media/icon.png",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -26,7 +27,7 @@
         {
           "id": "terminal-for-ai-cli",
           "title": "Terminal For AI",
-          "icon": "media/terminal.svg"
+          "icon": "media/icon-bit.png"
         }
       ]
     },
