@@ -8,6 +8,7 @@ import {
   isValidPresetKey,
 } from '../theming/themePresets';
 import {getNonce} from '../utils/nonce';
+import {Logger} from '../utils/logger';
 import {
   validateShellPath,
   validateStartupCommands,
@@ -19,6 +20,8 @@ import {
 } from './htmlTemplate';
 
 const MAX_SESSIONS = 2;
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+const MAX_IMAGE_FILENAME_LENGTH = 255;
 
 type ThemeOption = {
   key: ThemePresetKey;
@@ -26,6 +29,62 @@ type ThemeOption = {
   description: string;
   preview: ThemePreview;
 };
+
+// Outbound message types (Extension Host -> Webview)
+type SessionDataMessage = {
+  type: 'session-data';
+  payload: {sessionId: string; data: string};
+};
+
+type SessionCreatedMessage = {
+  type: 'session-created';
+  payload: {
+    id: string;
+    shell: string;
+    pid?: number;
+    label?: string;
+    restored?: boolean;
+  };
+};
+
+type SessionExitedMessage = {
+  type: 'session-exited';
+  payload: {sessionId: string; code: number | null; signal: NodeJS.Signals | null};
+};
+
+type SessionErrorMessage = {
+  type: 'session-error';
+  payload: {message: string};
+};
+
+type SessionLimitReachedMessage = {
+  type: 'session-limit-reached';
+  payload: {max: number};
+};
+
+type SessionCountMessage = {
+  type: 'session-count';
+  payload: {total: number};
+};
+
+type ThemeUpdateMessage = {
+  type: 'theme-update';
+  payload: ThemeSnapshot;
+};
+
+type AllSessionsClearedMessage = {
+  type: 'all-sessions-cleared';
+};
+
+type OutboundMessage =
+  | SessionDataMessage
+  | SessionCreatedMessage
+  | SessionExitedMessage
+  | SessionErrorMessage
+  | SessionLimitReachedMessage
+  | SessionCountMessage
+  | ThemeUpdateMessage
+  | AllSessionsClearedMessage;
 
 // Message types from webview to extension
 type WebviewReadyMessage = {
@@ -81,7 +140,7 @@ export class AiTerminalViewProvider
 {
   private webviewView?: vscode.WebviewView;
   private webviewReady = false;
-  private readonly messageQueue: unknown[] = [];
+  private readonly messageQueue: OutboundMessage[] = [];
   private readonly disposables: vscode.Disposable[] = [];
   private readonly sessionLabels = new Map<string, string>();
   private readonly sessionImages = new Map<string, Set<string>>();
@@ -104,7 +163,7 @@ export class AiTerminalViewProvider
         });
         this.sessionLabels.delete(id);
         this.deleteSessionImages(id).catch((error) => {
-          console.error(`Failed to delete images for session ${id}:`, error);
+          Logger.error(`Failed to delete images for session ${id}`, error);
         });
         this.postSessionCount();
       }),
@@ -150,49 +209,67 @@ export class AiTerminalViewProvider
     this.handleSessionRequest();
   }
 
-  private async handleMessage(message: InboundMessage) {
-    switch (message.type) {
-      case 'webview-ready':
-        this.webviewReady = true;
-        this.postSessionCount();
-        this.flushQueuedMessages();
-        this.postThemeUpdate();
-        this.postExistingSessions();
-        this.ensureInitialSession();
-        break;
-      case 'request-new-session':
-        this.handleSessionRequest(message.payload);
-        break;
-      case 'terminal-input':
-        this.sessionManager.write(
-          message.payload.sessionId,
-          message.payload.data
-        );
-        break;
-      case 'terminal-resize':
-        this.sessionManager.resize(
-          message.payload.sessionId,
-          message.payload.cols,
-          message.payload.rows
-        );
-        break;
-      case 'dispose-session':
-        await this.deleteSessionImages(message.payload.sessionId);
-        this.sessionManager.disposeSession(message.payload.sessionId);
-        break;
-      case 'dispose-all-sessions':
-        this.handleClearAllSessions();
-        break;
-      case 'theme-select':
-        this.updateThemePreset(message.payload.presetKey);
-        break;
-      case 'image-drop':
-        this.handleImageDrop(
-          message.payload.fileName,
-          message.payload.data,
-          message.payload.sessionId
-        );
-        break;
+  private async handleMessage(message: InboundMessage): Promise<void> {
+    try {
+      switch (message.type) {
+        case 'webview-ready':
+          this.webviewReady = true;
+          this.postSessionCount();
+          this.flushQueuedMessages();
+          this.postThemeUpdate();
+          this.postExistingSessions();
+          this.ensureInitialSession();
+          break;
+        case 'request-new-session':
+          this.handleSessionRequest(message.payload);
+          break;
+        case 'terminal-input':
+          this.sessionManager.write(
+            message.payload.sessionId,
+            message.payload.data
+          );
+          break;
+        case 'terminal-resize':
+          this.sessionManager.resize(
+            message.payload.sessionId,
+            message.payload.cols,
+            message.payload.rows
+          );
+          break;
+        case 'dispose-session':
+          await this.deleteSessionImages(message.payload.sessionId);
+          this.sessionManager.disposeSession(message.payload.sessionId);
+          break;
+        case 'dispose-all-sessions':
+          await this.handleClearAllSessions();
+          break;
+        case 'theme-select':
+          await this.updateThemePreset(message.payload.presetKey);
+          break;
+        case 'image-drop':
+          await this.handleImageDrop(
+            message.payload.fileName,
+            message.payload.data,
+            message.payload.sessionId
+          );
+          break;
+        default: {
+          // TypeScript exhaustive check - this should never happen
+          const _exhaustive: never = message;
+          Logger.warn(`Unknown message type received: ${(_exhaustive as InboundMessage).type}`);
+          break;
+        }
+      }
+    } catch (error) {
+      Logger.error(`Error handling message type: ${message.type}`, error);
+      if (message.type === 'request-new-session' || message.type === 'dispose-session') {
+        this.postMessage({
+          type: 'session-error',
+          payload: {
+            message: error instanceof Error ? error.message : String(error),
+          },
+        });
+      }
     }
   }
 
@@ -242,9 +319,9 @@ export class AiTerminalViewProvider
       this.postMessage({type: 'session-created', payload: {...info, label}});
       this.postSessionCount();
     } catch (error) {
-      console.error('Failed to create Terminal For AI CLI session', error);
+      Logger.error('Failed to create Terminal For AI CLI session', error);
       vscode.window.showErrorMessage(
-        'Terminal For AI CLI: Failed to create a session. Please check the developer tools for details.'
+        'Terminal For AI CLI: Failed to create a session. Please check the Output channel for details.'
       );
       this.postMessage({
         type: 'session-error',
@@ -262,12 +339,21 @@ export class AiTerminalViewProvider
     });
   }
 
-  private postMessage(message: unknown) {
+  private postMessage(message: OutboundMessage): void {
     if (!this.webviewView || !this.webviewReady) {
+      // Limit queue size to prevent memory issues
+      if (this.messageQueue.length >= 100) {
+        Logger.warn('Message queue is full, dropping oldest message');
+        this.messageQueue.shift();
+      }
       this.messageQueue.push(message);
       return;
     }
-    this.webviewView.webview.postMessage(message);
+    try {
+      this.webviewView.webview.postMessage(message);
+    } catch (error) {
+      Logger.error('Failed to post message to webview', error);
+    }
   }
 
   private postThemeUpdate() {
@@ -382,7 +468,7 @@ export class AiTerminalViewProvider
         const imageUri = vscode.Uri.file(imagePath);
         await vscode.workspace.fs.delete(imageUri, {useTrash: false});
       } catch (error) {
-        console.error(`Failed to delete image ${imagePath}:`, error);
+        Logger.warn(`Failed to delete image ${imagePath}`, error);
         // Continue deleting other images even if one fails
       }
     }
@@ -409,7 +495,7 @@ export class AiTerminalViewProvider
         throw error;
       }
     } catch (error) {
-      console.error('Failed to clear images:', error);
+      Logger.warn('Failed to clear images', error);
       // Don't show error to user as this is a background cleanup operation
     }
 
@@ -480,16 +566,56 @@ export class AiTerminalViewProvider
     sessionId: string
   ) {
     try {
-      const buffer = Buffer.from(base64Data, 'base64');
+      // Validate base64 data
+      if (!base64Data || typeof base64Data !== 'string' || base64Data.trim().length === 0) {
+        throw new Error('Invalid base64 data provided');
+      }
+
+      // Decode and validate size
+      let buffer: Buffer;
+      try {
+        buffer = Buffer.from(base64Data, 'base64');
+      } catch {
+        throw new Error('Failed to decode base64 data');
+      }
+
+      // Check file size limit
+      if (buffer.length > MAX_IMAGE_SIZE_BYTES) {
+        const sizeMB = (buffer.length / (1024 * 1024)).toFixed(2);
+        const maxMB = (MAX_IMAGE_SIZE_BYTES / (1024 * 1024)).toFixed(0);
+        throw new Error(`Image file too large: ${sizeMB}MB (maximum: ${maxMB}MB)`);
+      }
+
+      // Validate filename
+      if (!fileName || typeof fileName !== 'string' || fileName.trim().length === 0) {
+        throw new Error('Invalid filename provided');
+      }
+
+      // Sanitize and validate filename length
+      const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_').trim();
+      if (sanitizedFileName.length === 0) {
+        throw new Error('Filename contains no valid characters');
+      }
+
+      const timestamp = Date.now();
+      let uniqueFileName = `${timestamp}_${sanitizedFileName}`;
+
+      // Ensure total filename length doesn't exceed filesystem limits
+      if (uniqueFileName.length > MAX_IMAGE_FILENAME_LENGTH) {
+        const extension = path.extname(sanitizedFileName);
+        const nameWithoutExt = path.basename(sanitizedFileName, extension);
+        const maxNameLength = MAX_IMAGE_FILENAME_LENGTH - timestamp.toString().length - extension.length - 2; // -2 for underscores
+        const truncatedName = nameWithoutExt.substring(0, Math.max(1, maxNameLength));
+        uniqueFileName = `${timestamp}_${truncatedName}${extension}`;
+        Logger.warn(`Filename truncated due to length limit: ${fileName} -> ${uniqueFileName}`);
+      }
+
       const storageUri = this.context.globalStorageUri;
       await vscode.workspace.fs.createDirectory(storageUri);
 
       const imagesDir = vscode.Uri.joinPath(storageUri, 'images');
       await vscode.workspace.fs.createDirectory(imagesDir);
 
-      const timestamp = Date.now();
-      const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const uniqueFileName = `${timestamp}_${sanitizedFileName}`;
       const imageUri = vscode.Uri.joinPath(imagesDir, uniqueFileName);
 
       await vscode.workspace.fs.writeFile(imageUri, buffer);
@@ -507,7 +633,7 @@ export class AiTerminalViewProvider
 
       this.sessionManager.write(sessionId, `${quotedPath}`);
     } catch (error) {
-      console.error('Failed to save image:', error);
+      Logger.error('Failed to save image', error);
       vscode.window.showErrorMessage(
         `Failed to save image: ${error instanceof Error ? error.message : String(error)}`
       );
