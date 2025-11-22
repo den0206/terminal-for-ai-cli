@@ -1,16 +1,20 @@
 import {
   ChildProcessWithoutNullStreams,
   spawn,
+  SpawnOptions,
   spawnSync,
-  SpawnOptions
 } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import {randomUUID} from 'node:crypto';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { Writable } from 'node:stream';
+import {Writable} from 'node:stream';
 import * as vscode from 'vscode';
-import { validateShellPath, validateWorkingDirectory } from '../utils/validation';
 import {Logger} from '../utils/logger';
+import {
+  validateShellPath,
+  validateTerminalDimensions,
+  validateWorkingDirectory,
+} from '../utils/validation';
 
 const PYTHON_PTY_BRIDGE = String.raw`
 import fcntl
@@ -149,10 +153,14 @@ type SessionInfo = {
   createdAt: number;
 };
 
-type SessionDataEvent = { id: string; data: string };
-type SessionExitEvent = { id: string; code: number | null; signal: NodeJS.Signals | null };
+type SessionDataEvent = {id: string; data: string};
+type SessionExitEvent = {
+  id: string;
+  code: number | null;
+  signal: NodeJS.Signals | null;
+};
 
-type Dimensions = { cols: number; rows: number };
+type Dimensions = {cols: number; rows: number};
 
 type LaunchResult = {
   child: ChildProcessWithoutNullStreams;
@@ -180,7 +188,7 @@ class ShellSession implements vscode.Disposable {
     if (this.resizeControl && !this.resizeControl.destroyed) {
       try {
         this.resizeControl.write(
-          `${JSON.stringify({ type: 'resize', cols, rows })}\n`,
+          `${JSON.stringify({type: 'resize', cols, rows})}\n`,
           'utf8'
         );
       } catch {
@@ -189,7 +197,11 @@ class ShellSession implements vscode.Disposable {
       return;
     }
     // When we rely on the OS helper a SIGWINCH is enough to notify the wrapped shell.
-    if (!this.usesPtyHelper || !this.child.pid || process.platform === 'win32') {
+    if (
+      !this.usesPtyHelper ||
+      !this.child.pid ||
+      process.platform === 'win32'
+    ) {
       return;
     }
     try {
@@ -216,7 +228,7 @@ class ShellSession implements vscode.Disposable {
     if (process.platform === 'win32') {
       // Windows: Use taskkill to terminate the entire process tree
       try {
-        spawn('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore' });
+        spawn('taskkill', ['/F', '/T', '/PID', String(pid)], {stdio: 'ignore'});
       } catch {
         // Fallback to standard kill
         this.child.kill();
@@ -266,15 +278,21 @@ export class SessionManager implements vscode.Disposable {
     // Validate shell path for security
     if (!validateShellPath(shell)) {
       const fallback = this.getDefaultShell();
-      Logger.warn(`Invalid shell path: "${shell}". Using fallback: "${fallback}"`);
+      Logger.warn(
+        `Invalid shell path: "${shell}". Using fallback: "${fallback}"`
+      );
       shell = fallback;
     }
 
+    const validatedDimensions = validateTerminalDimensions(
+      options.cols,
+      options.rows
+    );
     const dimensions: Dimensions = {
-      cols: Math.max(2, options.cols ?? 80),
-      rows: Math.max(1, options.rows ?? 24)
+      cols: validatedDimensions.cols,
+      rows: validatedDimensions.rows,
     };
-    const { child, usesPtyHelper, resizeControl } = this.launchShellProcess(
+    const {child, usesPtyHelper, resizeControl} = this.launchShellProcess(
       shell,
       dimensions,
       options
@@ -286,7 +304,7 @@ export class SessionManager implements vscode.Disposable {
       id,
       pid: child.pid ?? undefined,
       shell,
-      createdAt: Date.now()
+      createdAt: Date.now(),
     };
     this.sessionInfos.set(id, info);
 
@@ -294,17 +312,17 @@ export class SessionManager implements vscode.Disposable {
     child.stderr.setEncoding('utf8');
 
     child.stdout.on('data', (data: string) => {
-      this.onDataEmitter.fire({ id, data });
+      this.onDataEmitter.fire({id, data});
     });
 
     child.stderr.on('data', (data: string) => {
-      this.onDataEmitter.fire({ id, data });
+      this.onDataEmitter.fire({id, data});
     });
 
     child.on('close', (code, signal) => {
       this.sessions.delete(id);
       this.sessionInfos.delete(id);
-      this.onExitEmitter.fire({ id, code, signal });
+      this.onExitEmitter.fire({id, code, signal});
     });
 
     for (const cmd of options.startupCommands ?? []) {
@@ -317,7 +335,7 @@ export class SessionManager implements vscode.Disposable {
       id,
       pid: child.pid ?? undefined,
       shell,
-      createdAt: Date.now()
+      createdAt: Date.now(),
     };
   }
 
@@ -360,7 +378,9 @@ export class SessionManager implements vscode.Disposable {
     const requestedCwd = options.cwd ?? this.getDefaultCwd();
     const cwd = validateWorkingDirectory(requestedCwd) ?? this.getDefaultCwd();
     if (cwd !== requestedCwd) {
-      Logger.warn(`Invalid working directory: "${requestedCwd}". Using fallback: "${cwd}"`);
+      Logger.warn(
+        `Invalid working directory: "${requestedCwd}". Using fallback: "${cwd}"`
+      );
     }
 
     const env = this.buildEnv(options.env, dimensions);
@@ -372,7 +392,7 @@ export class SessionManager implements vscode.Disposable {
       const pythonEnv = {
         ...env,
         AI_TERM_ROWS: String(dimensions.rows),
-        AI_TERM_COLS: String(dimensions.cols)
+        AI_TERM_COLS: String(dimensions.cols),
       };
       const child = spawn(
         python,
@@ -380,25 +400,32 @@ export class SessionManager implements vscode.Disposable {
         {
           cwd,
           env: pythonEnv,
-          stdio: ['pipe', 'pipe', 'pipe', 'pipe']
+          stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
         }
       ) as ChildProcessWithoutNullStreams;
       const resizeControl = child.stdio?.[3] as Writable | undefined;
       if (resizeControl) {
         resizeControl.setDefaultEncoding?.('utf8');
         resizeControl.write(
-          `${JSON.stringify({ type: 'resize', cols: dimensions.cols, rows: dimensions.rows })}\n`
+          `${JSON.stringify({
+            type: 'resize',
+            cols: dimensions.cols,
+            rows: dimensions.rows,
+          })}\n`
         );
       }
-      return { child, usesPtyHelper: true, resizeControl };
+      return {child, usesPtyHelper: true, resizeControl};
     }
 
     const child = spawn(shell, shellArgs, {
       cwd,
       env,
-      stdio
+      stdio,
     }) as ChildProcessWithoutNullStreams;
-    return { child: child as ChildProcessWithoutNullStreams, usesPtyHelper: false };
+    return {
+      child: child as ChildProcessWithoutNullStreams,
+      usesPtyHelper: false,
+    };
   }
 
   private buildEnv(
@@ -410,7 +437,7 @@ export class SessionManager implements vscode.Disposable {
       ...additionalEnv,
       TERM: additionalEnv?.TERM || process.env.TERM || 'xterm-256color',
       COLUMNS: String(dimensions.cols),
-      LINES: String(dimensions.rows)
+      LINES: String(dimensions.rows),
     };
 
     const sanitized: NodeJS.ProcessEnv = {};
@@ -453,9 +480,9 @@ export class SessionManager implements vscode.Disposable {
   }
 
   private getDefaultCwd(): string {
-    const workspaceFolder = vscode.workspace.workspaceFolders
-      ?.find((folder) => folder.uri.scheme === 'file')
-      ?.uri.fsPath;
+    const workspaceFolder = vscode.workspace.workspaceFolders?.find(
+      (folder) => folder.uri.scheme === 'file'
+    )?.uri.fsPath;
     if (workspaceFolder) {
       return workspaceFolder;
     }
@@ -465,7 +492,7 @@ export class SessionManager implements vscode.Disposable {
       process.env.CURSOR_WORKSPACE_DIR,
       process.env.CURSOR_CWD,
       process.env.PWD,
-      process.env.INIT_CWD
+      process.env.INIT_CWD,
     ];
     for (const candidate of envCandidates) {
       if (candidate && candidate.trim().length > 0) {
@@ -505,7 +532,7 @@ export class SessionManager implements vscode.Disposable {
     const candidates = ['python3', 'python'];
     for (const cmd of candidates) {
       try {
-        const result = spawnSync(cmd, ['-c', 'import pty'], { stdio: 'ignore' });
+        const result = spawnSync(cmd, ['-c', 'import pty'], {stdio: 'ignore'});
         if (result.status === 0) {
           this.pythonExecutable = cmd;
           return cmd;

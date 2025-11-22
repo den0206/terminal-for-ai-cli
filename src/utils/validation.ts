@@ -168,3 +168,81 @@ export function validateWorkingDirectory(cwd: string | undefined): string | unde
 
   return resolved;
 }
+
+/**
+ * Validates a numeric configuration value within a specified range
+ * @param value The value to validate
+ * @param min Minimum allowed value (inclusive)
+ * @param max Maximum allowed value (inclusive)
+ * @param defaultValue Default value to return if validation fails
+ * @returns Validated value within range, or default value
+ */
+export function validateNumericRange(
+  value: unknown,
+  min: number,
+  max: number,
+  defaultValue: number
+): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return defaultValue;
+  }
+  return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * Validates terminal height configuration
+ * @param value The terminal height value to validate
+ * @returns Validated terminal height (220-1000 pixels)
+ */
+export function validateTerminalHeight(value: unknown): number {
+  const MIN_TERMINAL_HEIGHT = 220;
+  const MAX_TERMINAL_HEIGHT = 1000;
+  const DEFAULT_TERMINAL_HEIGHT = 640;
+  return validateNumericRange(
+    value,
+    MIN_TERMINAL_HEIGHT,
+    MAX_TERMINAL_HEIGHT,
+    DEFAULT_TERMINAL_HEIGHT
+  );
+}
+
+/**
+ * Validates split ratio configuration
+ * @param value The split ratio value to validate (0.0-1.0)
+ * @param minRatio Minimum allowed ratio (default: 0.2)
+ * @param maxRatio Maximum allowed ratio (default: 0.8)
+ * @returns Validated split ratio
+ */
+export function validateSplitRatio(
+  value: unknown,
+  minRatio = 0.2,
+  maxRatio = 0.8
+): number {
+  const DEFAULT_RATIO = 0.5;
+  return validateNumericRange(value, minRatio, maxRatio, DEFAULT_RATIO);
+}
+
+/**
+ * Validates terminal dimensions (cols and rows)
+ * @param cols Number of columns
+ * @param rows Number of rows
+ * @returns Validated dimensions with minimum values
+ */
+export function validateTerminalDimensions(
+  cols?: number,
+  rows?: number
+): {cols: number; rows: number} {
+  const MIN_COLS = 2;
+  const MIN_ROWS = 1;
+  const DEFAULT_COLS = 80;
+  const DEFAULT_ROWS = 24;
+
+  return {
+    cols: typeof cols === 'number' && Number.isFinite(cols) && cols >= MIN_COLS
+      ? cols
+      : DEFAULT_COLS,
+    rows: typeof rows === 'number' && Number.isFinite(rows) && rows >= MIN_ROWS
+      ? rows
+      : DEFAULT_ROWS,
+  };
+}
