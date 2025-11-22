@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import {SessionManager} from './terminal/sessionManager';
-import {AiTerminalViewProvider} from './view/aiTerminalViewProvider';
 import {Logger} from './utils/logger';
+import {AiTerminalViewProvider} from './view/aiTerminalViewProvider';
 
 const VIEW_ID = 'terminal-for-ai-cli-view';
 const CONTAINER_COMMAND = 'workbench.view.extension.terminal-for-ai-cli';

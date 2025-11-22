@@ -7,17 +7,14 @@ import {
   ThemePreview,
   isValidPresetKey,
 } from '../theming/themePresets';
-import {getNonce} from '../utils/nonce';
 import {Logger} from '../utils/logger';
+import {getNonce} from '../utils/nonce';
 import {
+  getDefaultShell,
   validateShellPath,
   validateStartupCommands,
-  getDefaultShell,
 } from '../utils/validation';
-import {
-  ThemeSnapshot,
-  buildWebviewHtml,
-} from './htmlTemplate';
+import {ThemeSnapshot, buildWebviewHtml} from './htmlTemplate';
 
 const MAX_SESSIONS = 2;
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
@@ -49,7 +46,11 @@ type SessionCreatedMessage = {
 
 type SessionExitedMessage = {
   type: 'session-exited';
-  payload: {sessionId: string; code: number | null; signal: NodeJS.Signals | null};
+  payload: {
+    sessionId: string;
+    code: number | null;
+    signal: NodeJS.Signals | null;
+  };
 };
 
 type SessionErrorMessage = {
@@ -93,22 +94,22 @@ type WebviewReadyMessage = {
 
 type RequestNewSessionMessage = {
   type: 'request-new-session';
-  payload?: { cols?: number; rows?: number };
+  payload?: {cols?: number; rows?: number};
 };
 
 type TerminalInputMessage = {
   type: 'terminal-input';
-  payload: { sessionId: string; data: string };
+  payload: {sessionId: string; data: string};
 };
 
 type TerminalResizeMessage = {
   type: 'terminal-resize';
-  payload: { sessionId: string; cols: number; rows: number };
+  payload: {sessionId: string; cols: number; rows: number};
 };
 
 type DisposeSessionMessage = {
   type: 'dispose-session';
-  payload: { sessionId: string };
+  payload: {sessionId: string};
 };
 
 type DisposeAllSessionsMessage = {
@@ -117,12 +118,12 @@ type DisposeAllSessionsMessage = {
 
 type ThemeSelectMessage = {
   type: 'theme-select';
-  payload: { presetKey: string };
+  payload: {presetKey: string};
 };
 
 type ImageDropMessage = {
   type: 'image-drop';
-  payload: { fileName: string; data: string; sessionId: string };
+  payload: {fileName: string; data: string; sessionId: string};
 };
 
 type InboundMessage =
@@ -256,13 +257,20 @@ export class AiTerminalViewProvider
         default: {
           // TypeScript exhaustive check - this should never happen
           const _exhaustive: never = message;
-          Logger.warn(`Unknown message type received: ${(_exhaustive as InboundMessage).type}`);
+          Logger.warn(
+            `Unknown message type received: ${
+              (_exhaustive as InboundMessage).type
+            }`
+          );
           break;
         }
       }
     } catch (error) {
       Logger.error(`Error handling message type: ${message.type}`, error);
-      if (message.type === 'request-new-session' || message.type === 'dispose-session') {
+      if (
+        message.type === 'request-new-session' ||
+        message.type === 'dispose-session'
+      ) {
         this.postMessage({
           type: 'session-error',
           payload: {
@@ -505,18 +513,29 @@ export class AiTerminalViewProvider
 
   private getThemeValues(): ThemeSnapshot {
     const config = vscode.workspace.getConfiguration('aiTerminal');
-    const presetKey =
-      (config.get<string>('themePreset') as ThemePresetKey) ?? 'modern';
+    const rawPresetKey = config.get<string>('themePreset');
+    const presetKey: ThemePresetKey =
+      rawPresetKey && isValidPresetKey(rawPresetKey) ? rawPresetKey : 'modern';
     const activePreset = THEME_PRESETS[presetKey] ?? THEME_PRESETS.modern;
     const palette = activePreset.palette;
-    const presets: ThemeOption[] = Object.entries(THEME_PRESETS).map(
-      ([key, value]) => ({
-        key: key as ThemePresetKey,
+    const presets: ThemeOption[] = Object.entries(THEME_PRESETS)
+      .filter(
+        (
+          entry
+        ): entry is [
+          ThemePresetKey,
+          (typeof THEME_PRESETS)[ThemePresetKey]
+        ] => {
+          const [key] = entry;
+          return isValidPresetKey(key);
+        }
+      )
+      .map(([key, value]) => ({
+        key,
         label: value.label,
         description: value.description,
         preview: value.preview,
-      })
-    );
+      }));
     return {presetKey, palette, presets};
   }
 
@@ -567,7 +586,11 @@ export class AiTerminalViewProvider
   ) {
     try {
       // Validate base64 data
-      if (!base64Data || typeof base64Data !== 'string' || base64Data.trim().length === 0) {
+      if (
+        !base64Data ||
+        typeof base64Data !== 'string' ||
+        base64Data.trim().length === 0
+      ) {
         throw new Error('Invalid base64 data provided');
       }
 
@@ -583,16 +606,24 @@ export class AiTerminalViewProvider
       if (buffer.length > MAX_IMAGE_SIZE_BYTES) {
         const sizeMB = (buffer.length / (1024 * 1024)).toFixed(2);
         const maxMB = (MAX_IMAGE_SIZE_BYTES / (1024 * 1024)).toFixed(0);
-        throw new Error(`Image file too large: ${sizeMB}MB (maximum: ${maxMB}MB)`);
+        throw new Error(
+          `Image file too large: ${sizeMB}MB (maximum: ${maxMB}MB)`
+        );
       }
 
       // Validate filename
-      if (!fileName || typeof fileName !== 'string' || fileName.trim().length === 0) {
+      if (
+        !fileName ||
+        typeof fileName !== 'string' ||
+        fileName.trim().length === 0
+      ) {
         throw new Error('Invalid filename provided');
       }
 
       // Sanitize and validate filename length
-      const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_').trim();
+      const sanitizedFileName = fileName
+        .replace(/[^a-zA-Z0-9._-]/g, '_')
+        .trim();
       if (sanitizedFileName.length === 0) {
         throw new Error('Filename contains no valid characters');
       }
@@ -604,10 +635,19 @@ export class AiTerminalViewProvider
       if (uniqueFileName.length > MAX_IMAGE_FILENAME_LENGTH) {
         const extension = path.extname(sanitizedFileName);
         const nameWithoutExt = path.basename(sanitizedFileName, extension);
-        const maxNameLength = MAX_IMAGE_FILENAME_LENGTH - timestamp.toString().length - extension.length - 2; // -2 for underscores
-        const truncatedName = nameWithoutExt.substring(0, Math.max(1, maxNameLength));
+        const maxNameLength =
+          MAX_IMAGE_FILENAME_LENGTH -
+          timestamp.toString().length -
+          extension.length -
+          2; // -2 for underscores
+        const truncatedName = nameWithoutExt.substring(
+          0,
+          Math.max(1, maxNameLength)
+        );
         uniqueFileName = `${timestamp}_${truncatedName}${extension}`;
-        Logger.warn(`Filename truncated due to length limit: ${fileName} -> ${uniqueFileName}`);
+        Logger.warn(
+          `Filename truncated due to length limit: ${fileName} -> ${uniqueFileName}`
+        );
       }
 
       const storageUri = this.context.globalStorageUri;
@@ -624,18 +664,21 @@ export class AiTerminalViewProvider
       if (!this.sessionImages.has(sessionId)) {
         this.sessionImages.set(sessionId, new Set());
       }
-      this.sessionImages.get(sessionId)!.add(imageUri.fsPath);
+      const sessionImageSet = this.sessionImages.get(sessionId);
+      if (sessionImageSet) {
+        sessionImageSet.add(imageUri.fsPath);
+      }
 
       const imagePath = imageUri.fsPath;
-      const quotedPath = imagePath.includes(' ')
-        ? `"${imagePath}"`
-        : imagePath;
+      const quotedPath = imagePath.includes(' ') ? `"${imagePath}"` : imagePath;
 
       this.sessionManager.write(sessionId, `${quotedPath}`);
     } catch (error) {
       Logger.error('Failed to save image', error);
       vscode.window.showErrorMessage(
-        `Failed to save image: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to save image: ${
+          error instanceof Error ? error.message : String(error)
+        }`
       );
     }
   }

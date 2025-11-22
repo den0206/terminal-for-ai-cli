@@ -177,16 +177,56 @@ const sessionBuffers: Record<string, string> = {};
 const MAX_BUFFER_SIZE = 200_000;
 const MAX_BUFFER_COUNT = 10; // Maximum number of session buffers to keep
 
-const savedState = vscode.getState() ?? {totalSessions: 0, sessionIds: []};
+/**
+ * Type guard to validate ViewState structure
+ *
+ * @param state - The state to validate
+ * @returns True if state is a valid ViewState
+ */
+function isValidViewState(state: unknown): state is ViewState {
+  if (!state || typeof state !== 'object') {
+    return false;
+  }
+  // Type guard内でのみ使用するため、型アサーションは安全
+  const s = state as Record<string, unknown>;
+  return (
+    (s.totalSessions === undefined || typeof s.totalSessions === 'number') &&
+    (s.sessionIds === undefined || Array.isArray(s.sessionIds)) &&
+    (s.activeSessionId === undefined ||
+      typeof s.activeSessionId === 'string') &&
+    (s.terminalHeight === undefined || typeof s.terminalHeight === 'number') &&
+    (s.sessionMeta === undefined ||
+      (typeof s.sessionMeta === 'object' && s.sessionMeta !== null)) &&
+    (s.viewMode === undefined ||
+      s.viewMode === 'single' ||
+      s.viewMode === 'split') &&
+    (s.splitRatio === undefined || typeof s.splitRatio === 'number')
+  );
+}
+
+const rawSavedState = vscode.getState();
+const savedState: ViewState = isValidViewState(rawSavedState)
+  ? rawSavedState
+  : {totalSessions: 0, sessionIds: []};
+
 let activeSessionId = savedState.activeSessionId;
 let totalSessions = savedState.totalSessions ?? 0;
 let sessionIds = Array.isArray(savedState.sessionIds)
-  ? [...savedState.sessionIds]
+  ? savedState.sessionIds.filter((id): id is string => typeof id === 'string')
   : [];
-let terminalHeight =
-  typeof savedState.terminalHeight === 'number'
-    ? savedState.terminalHeight
-    : 640;
+// Validate terminalHeight with proper range checking
+const MIN_TERMINAL_HEIGHT = 220;
+const MAX_TERMINAL_HEIGHT = 1000;
+const DEFAULT_TERMINAL_HEIGHT = 640;
+
+function validateTerminalHeight(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_TERMINAL_HEIGHT;
+  }
+  return Math.min(MAX_TERMINAL_HEIGHT, Math.max(MIN_TERMINAL_HEIGHT, value));
+}
+
+let terminalHeight = validateTerminalHeight(savedState.terminalHeight);
 let pendingSessionRequest = false;
 let clearingAll = false;
 let confirmingClearAll = false;
@@ -325,7 +365,6 @@ window.addEventListener('message', (event: MessageEvent<InboundMessage>) => {
       sessionBuffers[message.payload.id] = '';
       persistState();
       activateSession(message.payload.id, message.payload.shell);
-      // no log panel
       break;
     case 'session-data':
       if (!activeSessionId) {
@@ -461,13 +500,21 @@ sessionSelectEl?.addEventListener('change', () => {
     `Switched to ${getSessionLabel(nextSessionId)}`
   );
 });
-window.addEventListener(
-  'resize',
-  debounce(() => {
-    fitVisibleTerminals();
-    notifyResize();
-  }, 150)
-);
+// Combine throttle and debounce for resize events
+// Throttle ensures immediate response, debounce prevents excessive calls
+const throttledResize = throttle(() => {
+  fitVisibleTerminals();
+  notifyResize();
+}, 100);
+const debouncedResize = debounce(() => {
+  fitVisibleTerminals();
+  notifyResize();
+}, 150);
+
+window.addEventListener('resize', () => {
+  throttledResize();
+  debouncedResize();
+});
 
 resizerEl?.addEventListener('pointerdown', (event) => {
   event.preventDefault();
@@ -475,12 +522,17 @@ resizerEl?.addEventListener('pointerdown', (event) => {
   const startY = event.clientY;
   const startHeight = terminalHeight;
 
+  // Throttle pointermove events for better performance
+  const throttledMove = throttle((delta: number) => {
+    applyTerminalHeight(startHeight + delta, false);
+  }, 16); // ~60fps
+
   const onMove = (moveEvent: PointerEvent) => {
     if (moveEvent.pointerId !== pointerId) {
       return;
     }
     const delta = moveEvent.clientY - startY;
-    applyTerminalHeight(startHeight + delta, false);
+    throttledMove(delta);
   };
 
   const cleanup = (moveEvent: PointerEvent) => {
@@ -511,13 +563,18 @@ splitResizer?.addEventListener('pointerdown', (event) => {
   const startY = event.clientY;
   const startRatio = splitRatio;
 
+  // Throttle pointermove events for better performance
+  const throttledMove = throttle((deltaRatio: number) => {
+    setSplitRatio(startRatio + deltaRatio, false);
+  }, 16); // ~60fps
+
   const onMove = (moveEvent: PointerEvent) => {
     if (moveEvent.pointerId !== pointerId) {
       return;
     }
     const delta = moveEvent.clientY - startY;
     const deltaRatio = delta / stackRect.height;
-    setSplitRatio(startRatio + deltaRatio, false);
+    throttledMove(deltaRatio);
   };
 
   const cleanup = (moveEvent: PointerEvent) => {
@@ -862,6 +919,36 @@ function debounce<T extends (...args: never[]) => void>(fn: T, delay: number) {
   };
 }
 
+/**
+ * Throttle function to limit the rate of function calls
+ * @param fn Function to throttle
+ * @param delay Minimum time between calls in milliseconds
+ * @returns Throttled function
+ */
+function throttle<T extends (...args: never[]) => void>(fn: T, delay: number) {
+  let lastCall = 0;
+  let timeoutHandle: number | undefined;
+  return (...args: Parameters<T>) => {
+    const now = Date.now();
+    const timeSinceLastCall = now - lastCall;
+
+    if (timeSinceLastCall >= delay) {
+      lastCall = now;
+      fn(...args);
+    } else {
+      // Schedule a call for the remaining time
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+      timeoutHandle = window.setTimeout(() => {
+        lastCall = Date.now();
+        fn(...args);
+        timeoutHandle = undefined;
+      }, delay - timeSinceLastCall);
+    }
+  };
+}
+
 function getComputedVar(
   name: string,
   fallbackVar?: string,
@@ -882,7 +969,7 @@ function getComputedVar(
 }
 
 function applyTerminalHeight(value: number, persist = true) {
-  const clamped = Math.min(Math.max(value, 220), 1000);
+  const clamped = validateTerminalHeight(value);
   terminalHeight = clamped;
   if (terminalShell) {
     terminalShell.style.setProperty('--terminal-height', `${clamped}px`);
