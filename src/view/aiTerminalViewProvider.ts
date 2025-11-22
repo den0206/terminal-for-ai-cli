@@ -535,6 +535,48 @@ export class AiTerminalViewProvider
     this.sessionImages.clear();
   }
 
+  /**
+   * Cleanup orphaned images from previous sessions that weren't properly cleaned up.
+   * This is called on extension activation and can be called manually.
+   * @returns The number of deleted files
+   */
+  async cleanupOrphanedImages(): Promise<number> {
+    try {
+      const storageUri = this.context.globalStorageUri;
+      const imagesDir = vscode.Uri.joinPath(storageUri, 'images');
+
+      let files: [string, vscode.FileType][];
+      try {
+        files = await vscode.workspace.fs.readDirectory(imagesDir);
+      } catch {
+        // Directory doesn't exist, nothing to clean up
+        return 0;
+      }
+
+      let deletedCount = 0;
+      for (const [fileName, fileType] of files) {
+        if (fileType === vscode.FileType.File) {
+          try {
+            const fileUri = vscode.Uri.joinPath(imagesDir, fileName);
+            await vscode.workspace.fs.delete(fileUri, {useTrash: false});
+            deletedCount++;
+          } catch (error) {
+            Logger.warn(`Failed to delete orphaned image ${fileName}`, error);
+          }
+        }
+      }
+
+      if (deletedCount > 0) {
+        Logger.info(`Cleaned up ${deletedCount} orphaned image(s)`);
+      }
+
+      return deletedCount;
+    } catch (error) {
+      Logger.error('Failed to cleanup orphaned images', error);
+      return 0;
+    }
+  }
+
   private getThemeValues(): ThemeSnapshot {
     const config = vscode.workspace.getConfiguration('aiTerminal');
     const rawPresetKey = config.get<string>('themePreset');
