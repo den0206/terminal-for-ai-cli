@@ -47,6 +47,10 @@
       {
         "command": "terminal-for-ai-cli.newSession",
         "title": "Terminal For AI CLI: 新しいセッション"
+      },
+      {
+        "command": "terminal-for-ai-cli.cleanupImages",
+        "title": "Terminal For AI CLI: 画像をクリーンアップ"
       }
     ],
     "configuration": {

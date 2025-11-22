@@ -23,7 +23,8 @@ Terminal for AI CLI is a VS Code / Cursor extension that anchors a multi-session
 - **Type-safe**: Strict TypeScript with discriminated unions for message handling (zero `any` types).
 - **Tested**: Comprehensive test suite with Vitest (33+ tests covering utilities, validation, and logging).
 - **Robust logging**: Centralized logging system using VS Code Output Channel for better debugging and troubleshooting.
-- **Resource management**: Automatic cleanup of session buffers and message queue limits to prevent memory leaks.
+- **Resource management**: Automatic cleanup of session buffers, message queue limits, and orphaned images to prevent memory leaks and storage bloat.
+- **Image cleanup**: Automatic cleanup of orphaned images on extension startup, plus manual cleanup command available from the command palette.
 - Pure TypeScript codebase (`src/extension.ts`, `src/webview/main.ts`, `src/terminal/sessionManager.ts`) with esbuild + `tsc` outputs committed to `media/` and `dist/`.
 
 ---
@@ -48,6 +49,16 @@ Terminal for AI CLI is a VS Code / Cursor extension that anchors a multi-session
    - **Clear all sessions**: open the confirmation panel below the Theme section to terminate every shell.
    - **Theme selector**: pick any preset; the palette updates instantly.
    - **Resize handle**: drag to change the terminal height (value is saved).
+
+---
+
+## Commands
+
+| Command | Description |
+| --- | --- |
+| `Terminal For AI CLI: フォーカス` | Focus and reveal the terminal view. |
+| `Terminal For AI CLI: 新しいセッション` | Create a new terminal session. |
+| `Terminal For AI CLI: 画像をクリーンアップ` | Manually delete all saved images from global storage. Shows confirmation dialog before deletion. |
 
 ---
 
