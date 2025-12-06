@@ -181,6 +181,26 @@ All checks must pass before merging pull requests.
 | Logging | `src/utils/logger.ts` | Centralized logging system using VS Code Output Channel. |
 | Utilities | `src/utils/nonce.ts` | Generates cryptographically secure nonces for CSP. |
 
+### Webview Architecture (`src/webview/main.ts`)
+
+The Webview UI is built with a class-based architecture for better maintainability and testability:
+
+| Class | Responsibility |
+| --- | --- |
+| `Constants` | Centralized configuration values (MAX_SESSIONS, BUFFER_SIZE, etc.). |
+| `DOMElements` | Manages all DOM element references in one place. |
+| `SessionStateManager` | Handles session state (activeSession, sessionIds, buffers). |
+| `UIStateManager` | Manages UI state (pendingRequest, viewMode, splitRatio, paneSessions). |
+| `ThemeStateManager` | Manages theme state (currentThemeKey, availablePresets). |
+| `TerminalManager` | Handles xterm.js terminal instances and DOM operations. |
+| `AppController` | Main controller that orchestrates event handling and state coordination. |
+
+This architecture provides:
+- **Encapsulation**: All global variables are encapsulated in class private fields.
+- **Single Responsibility**: Each class has a clear, focused responsibility.
+- **Testability**: Independent state managers make unit testing easier.
+- **Maintainability**: State changes are easy to trace and debug.
+
 ---
 
 ## Localization

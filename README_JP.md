@@ -180,6 +180,26 @@ Terminal For AI CLI は、一般的な脆弱性から保護するための複数
 | ロギング | `src/utils/logger.ts` | VS Code Output チャンネルを使用した一元化されたロギングシステム。 |
 | ユーティリティ | `src/utils/nonce.ts` | CSP 用の暗号学的に安全な nonce を生成。 |
 
+### Webview アーキテクチャ (`src/webview/main.ts`)
+
+Webview UI は保守性とテスト容易性を向上させるため、クラスベースのアーキテクチャで構築されています：
+
+| クラス | 役割 |
+| --- | --- |
+| `Constants` | 設定値の一元管理（MAX_SESSIONS、BUFFER_SIZE など）。 |
+| `DOMElements` | すべての DOM 要素参照を一箇所で管理。 |
+| `SessionStateManager` | セッション状態の管理（activeSession、sessionIds、buffers）。 |
+| `UIStateManager` | UI 状態の管理（pendingRequest、viewMode、splitRatio、paneSessions）。 |
+| `ThemeStateManager` | テーマ状態の管理（currentThemeKey、availablePresets）。 |
+| `TerminalManager` | xterm.js ターミナルインスタンスと DOM 操作の管理。 |
+| `AppController` | イベント処理と状態調整を統括するメインコントローラー。 |
+
+このアーキテクチャの利点：
+- **カプセル化**: すべてのグローバル変数がクラスのプライベートフィールドにカプセル化。
+- **単一責任**: 各クラスが明確で集中した責任を持つ。
+- **テスト容易性**: 独立した状態管理によりユニットテストが容易。
+- **保守性**: 状態変更の追跡とデバッグが容易。
+
 ---
 
 ## ローカライズ
