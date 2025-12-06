@@ -181,6 +181,11 @@ export class AiTerminalViewProvider
 
   dispose() {
     vscode.Disposable.from(...this.disposables).dispose();
+    this.sessionLabels.clear();
+    this.sessionImages.clear();
+    this.messageQueue.length = 0;
+    this.webviewView = undefined;
+    this.webviewReady = false;
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView) {
@@ -195,9 +200,10 @@ export class AiTerminalViewProvider
 
     webview.html = this.getHtml(webview);
 
-    webview.onDidReceiveMessage((message) => {
+    const messageDisposable = webview.onDidReceiveMessage((message) => {
       this.handleMessage(message);
     });
+    this.disposables.push(messageDisposable);
   }
 
   reveal() {
@@ -214,9 +220,10 @@ export class AiTerminalViewProvider
     try {
       switch (message.type) {
         case 'webview-ready':
+          // Flush queued messages before setting webviewReady to maintain message ordering
+          this.flushQueuedMessages();
           this.webviewReady = true;
           this.postSessionCount();
-          this.flushQueuedMessages();
           this.postThemeUpdate();
           this.postExistingSessions();
           this.ensureInitialSession();
@@ -385,17 +392,18 @@ export class AiTerminalViewProvider
   }
 
   private flushQueuedMessages() {
-    if (
-      !this.webviewView ||
-      !this.webviewReady ||
-      this.messageQueue.length === 0
-    ) {
+    if (!this.webviewView || this.messageQueue.length === 0) {
       return;
     }
     while (this.messageQueue.length > 0) {
       const message = this.messageQueue.shift();
       if (message) {
-        this.webviewView.webview.postMessage(message);
+        try {
+          this.webviewView.webview.postMessage(message);
+        } catch (error) {
+          Logger.error('Failed to flush queued message to webview', error);
+          // Continue flushing remaining messages
+        }
       }
     }
   }
@@ -736,9 +744,10 @@ export class AiTerminalViewProvider
       }
 
       const imagePath = imageUri.fsPath;
-      const quotedPath = imagePath.includes(' ') ? `"${imagePath}"` : imagePath;
+      // Properly escape shell special characters to prevent injection
+      const escapedPath = this.escapeShellPath(imagePath);
 
-      this.sessionManager.write(sessionId, `${quotedPath}`);
+      this.sessionManager.write(sessionId, escapedPath);
     } catch (error) {
       Logger.error('Failed to save image', error);
       vscode.window.showErrorMessage(
@@ -747,6 +756,19 @@ export class AiTerminalViewProvider
         }`
       );
     }
+  }
+
+  /**
+   * Escape shell special characters in a path to prevent command injection
+   */
+  private escapeShellPath(filePath: string): string {
+    if (process.platform === 'win32') {
+      // Windows: wrap in double quotes and escape internal double quotes
+      return `"${filePath.replace(/"/g, '""')}"`;
+    }
+    // Unix: wrap in single quotes (single quotes prevent all interpretation)
+    // Escape any existing single quotes by ending the quote, adding escaped quote, and starting new quote
+    return `'${filePath.replace(/'/g, "'\\''")}'`;
   }
 
   private getHtml(webview: vscode.Webview): string {

@@ -170,6 +170,7 @@ type LaunchResult = {
 
 class ShellSession implements vscode.Disposable {
   private readonly stdin = this.child.stdin;
+  private killTimer?: NodeJS.Timeout;
 
   constructor(
     public readonly id: string,
@@ -212,9 +213,17 @@ class ShellSession implements vscode.Disposable {
   }
 
   dispose() {
+    this.clearKillTimer();
     this.killProcessTree();
     if (this.resizeControl && !this.resizeControl.destroyed) {
       this.resizeControl.end();
+    }
+  }
+
+  private clearKillTimer() {
+    if (this.killTimer) {
+      clearTimeout(this.killTimer);
+      this.killTimer = undefined;
     }
   }
 
@@ -241,7 +250,7 @@ class ShellSession implements vscode.Disposable {
         process.kill(-pid, 'SIGTERM');
 
         // Schedule SIGKILL if process doesn't terminate within 2 seconds
-        const killTimer = setTimeout(() => {
+        this.killTimer = setTimeout(() => {
           try {
             if (!this.child.killed) {
               process.kill(-pid, 'SIGKILL');
@@ -249,10 +258,11 @@ class ShellSession implements vscode.Disposable {
           } catch {
             // Process already terminated
           }
+          this.killTimer = undefined;
         }, 2000);
 
         // Clear timer if process exits normally
-        this.child.once('exit', () => clearTimeout(killTimer));
+        this.child.once('exit', () => this.clearKillTimer());
       } catch {
         // Fallback to standard kill if process group kill fails
         this.child.kill();
@@ -325,6 +335,14 @@ export class SessionManager implements vscode.Disposable {
       this.onExitEmitter.fire({id, code, signal});
     });
 
+    child.on('error', (error) => {
+      Logger.error(`Shell process error for session ${id}`, error);
+      // Clean up the session on spawn/process errors
+      this.sessions.delete(id);
+      this.sessionInfos.delete(id);
+      this.onExitEmitter.fire({id, code: 1, signal: null});
+    });
+
     for (const cmd of options.startupCommands ?? []) {
       if (cmd.trim().length > 0) {
         session.write(`${cmd}\r`);
@@ -365,6 +383,7 @@ export class SessionManager implements vscode.Disposable {
       session.dispose();
     }
     this.sessions.clear();
+    this.sessionInfos.clear();
     this.onDataEmitter.dispose();
     this.onExitEmitter.dispose();
   }
