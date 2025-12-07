@@ -1,16 +1,34 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import {TERMINAL_CONSTRAINTS, SPLIT_VIEW} from '../constants';
+import {Logger} from './logger';
 
-// Conditional import to avoid issues in test environment
-let Logger: typeof import('./logger').Logger;
-try {
-  const loggerModule = require('./logger');
-  Logger = loggerModule.Logger;
-} catch {
-  // Fallback for test environment
-  Logger = {
-    warn: (...args: unknown[]) => console.warn(...args),
-  } as typeof import('./logger').Logger;
+/**
+ * Logger interface for dependency injection in tests
+ */
+interface ILogger {
+  warn(message: string, ...details: unknown[]): void;
+}
+
+/**
+ * Get logger instance - can be replaced in tests
+ */
+let loggerInstance: ILogger = Logger;
+
+/**
+ * Set custom logger instance (for testing)
+ * @internal
+ */
+export function setLogger(logger: ILogger): void {
+  loggerInstance = logger;
+}
+
+/**
+ * Reset logger to default
+ * @internal
+ */
+export function resetLogger(): void {
+  loggerInstance = Logger;
 }
 
 /**
@@ -130,7 +148,7 @@ export function validateStartupCommands(commands: unknown): string[] {
 
       for (const pattern of dangerousPatterns) {
         if (pattern.test(cmd)) {
-          Logger.warn(`Potentially dangerous startup command detected: ${cmd.substring(0, 50)}...`);
+          loggerInstance.warn(`Potentially dangerous startup command detected: ${cmd.substring(0, 50)}...`);
         }
       }
 
@@ -195,14 +213,11 @@ export function validateNumericRange(
  * @returns Validated terminal height (220-1000 pixels)
  */
 export function validateTerminalHeight(value: unknown): number {
-  const MIN_TERMINAL_HEIGHT = 220;
-  const MAX_TERMINAL_HEIGHT = 1000;
-  const DEFAULT_TERMINAL_HEIGHT = 640;
   return validateNumericRange(
     value,
-    MIN_TERMINAL_HEIGHT,
-    MAX_TERMINAL_HEIGHT,
-    DEFAULT_TERMINAL_HEIGHT
+    TERMINAL_CONSTRAINTS.MIN_HEIGHT,
+    TERMINAL_CONSTRAINTS.MAX_HEIGHT,
+    TERMINAL_CONSTRAINTS.DEFAULT_HEIGHT
   );
 }
 
@@ -215,11 +230,10 @@ export function validateTerminalHeight(value: unknown): number {
  */
 export function validateSplitRatio(
   value: unknown,
-  minRatio = 0.2,
-  maxRatio = 0.8
+  minRatio = SPLIT_VIEW.MIN_RATIO,
+  maxRatio = SPLIT_VIEW.MAX_RATIO
 ): number {
-  const DEFAULT_RATIO = 0.5;
-  return validateNumericRange(value, minRatio, maxRatio, DEFAULT_RATIO);
+  return validateNumericRange(value, minRatio, maxRatio, SPLIT_VIEW.DEFAULT_RATIO);
 }
 
 /**
@@ -232,17 +246,12 @@ export function validateTerminalDimensions(
   cols?: number,
   rows?: number
 ): {cols: number; rows: number} {
-  const MIN_COLS = 2;
-  const MIN_ROWS = 1;
-  const DEFAULT_COLS = 80;
-  const DEFAULT_ROWS = 24;
-
   return {
-    cols: typeof cols === 'number' && Number.isFinite(cols) && cols >= MIN_COLS
+    cols: typeof cols === 'number' && Number.isFinite(cols) && cols >= TERMINAL_CONSTRAINTS.MIN_COLS
       ? cols
-      : DEFAULT_COLS,
-    rows: typeof rows === 'number' && Number.isFinite(rows) && rows >= MIN_ROWS
+      : TERMINAL_CONSTRAINTS.DEFAULT_COLS,
+    rows: typeof rows === 'number' && Number.isFinite(rows) && rows >= TERMINAL_CONSTRAINTS.MIN_ROWS
       ? rows
-      : DEFAULT_ROWS,
+      : TERMINAL_CONSTRAINTS.DEFAULT_ROWS,
   };
 }

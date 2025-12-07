@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
-import {
+import type {
   ThemePalette,
   ThemePresetKey,
   ThemePreview,
-} from '../theming/themePresets';
+} from '../types/theme';
 
 export type ThemeOption = {
   key: ThemePresetKey;

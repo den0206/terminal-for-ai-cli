@@ -1,5 +1,10 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import {
+  MAX_SESSIONS,
+  MAX_IMAGE_SIZE_BYTES,
+  MAX_IMAGE_FILENAME_LENGTH,
+} from '../constants';
 import {SessionManager} from '../terminal/sessionManager';
 import {
   THEME_PRESETS,
@@ -15,10 +20,6 @@ import {
   validateStartupCommands,
 } from '../utils/validation';
 import {ThemeSnapshot, buildWebviewHtml} from './htmlTemplate';
-
-const MAX_SESSIONS = 2;
-const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
-const MAX_IMAGE_FILENAME_LENGTH = 255;
 
 type ThemeOption = {
   key: ThemePresetKey;
@@ -123,7 +124,7 @@ type ThemeSelectMessage = {
 
 type ImageDropMessage = {
   type: 'image-drop';
-  payload: {fileName: string; data: string; sessionId: string};
+  payload: {fileName: string; mimeType: string; data: string; sessionId: string};
 };
 
 type InboundMessage =
@@ -260,6 +261,7 @@ export class AiTerminalViewProvider
         case 'image-drop':
           await this.handleImageDrop(
             message.payload.fileName,
+            message.payload.mimeType,
             message.payload.data,
             message.payload.sessionId
           );
@@ -588,8 +590,18 @@ export class AiTerminalViewProvider
   private getThemeValues(): ThemeSnapshot {
     const config = vscode.workspace.getConfiguration('aiTerminal');
     const rawPresetKey = config.get<string>('themePreset');
-    const presetKey: ThemePresetKey =
-      rawPresetKey && isValidPresetKey(rawPresetKey) ? rawPresetKey : 'modern';
+
+    let presetKey: ThemePresetKey = 'modern';
+    if (rawPresetKey && isValidPresetKey(rawPresetKey)) {
+      presetKey = rawPresetKey;
+    } else if (rawPresetKey) {
+      // Log warning when user has configured an invalid theme preset
+      Logger.warn(
+        `Invalid theme preset configured: "${rawPresetKey}". Using default "modern" theme instead. ` +
+        `Valid options: ${Object.keys(THEME_PRESETS).join(', ')}`
+      );
+    }
+
     const activePreset = THEME_PRESETS[presetKey] ?? THEME_PRESETS.modern;
     const palette = activePreset.palette;
     const presets: ThemeOption[] = Object.entries(THEME_PRESETS)
@@ -655,10 +667,16 @@ export class AiTerminalViewProvider
 
   private async handleImageDrop(
     fileName: string,
+    mimeType: string,
     base64Data: string,
     sessionId: string
   ) {
     try {
+      // Validate MIME type
+      if (!mimeType || !mimeType.startsWith('image/')) {
+        throw new Error('Invalid file type: Only image files are supported');
+      }
+
       // Validate base64 data
       if (
         !base64Data ||

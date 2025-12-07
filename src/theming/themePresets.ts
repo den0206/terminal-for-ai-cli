@@ -1,29 +1,12 @@
-export type ThemePalette = {
-  background: string;
-  foreground: string;
-  cursor: string;
-  selection: string;
-};
+import type {
+  ThemePalette,
+  ThemePreview,
+  ThemePreset,
+  ThemePresetKey,
+} from '../types/theme';
 
-export type ThemePreview = {background: string; foreground: string};
-
-export type ThemePreset = {
-  label: string;
-  description: string;
-  palette: ThemePalette;
-  preview: ThemePreview;
-};
-
-export type ThemePresetKey =
-  | 'modern'
-  | 'basic'
-  | 'clearDark'
-  | 'clearLight'
-  | 'grass'
-  | 'homebrew'
-  | 'manPage'
-  | 'ocean'
-  | 'pro';
+// Re-export types for backward compatibility
+export type {ThemePalette, ThemePreview, ThemePreset, ThemePresetKey};
 
 export const THEME_PRESETS: Record<ThemePresetKey, ThemePreset> = {
   modern: {

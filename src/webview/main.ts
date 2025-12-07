@@ -1,594 +1,35 @@
 import {FitAddon} from '@xterm/addon-fit';
 import {Terminal} from '@xterm/xterm';
 
-// ============================================================================
-// Types
-// ============================================================================
-
-interface VSCodeApi<State = unknown> {
-  postMessage<T = unknown>(message: T): void;
-  setState(state: State): void;
-  getState(): State | undefined;
-}
+// Import shared modules
+import {Constants} from './lib/constants';
+import {DOMElements} from './lib/dom';
+import {
+  SessionStateManager,
+  UIStateManager,
+  ThemeStateManager,
+} from './lib/state-managers';
+import type {
+  VSCodeApi,
+  ThemePalette,
+  ThemePresetInfo,
+  InboundMessage,
+  OutboundMessage,
+  ViewState,
+  ViewMode,
+  Pane,
+  PaneContext,
+} from './lib/types';
+import {
+  debounce,
+  throttle,
+  getComputedVar,
+  clampSplitRatio,
+  isValidViewState,
+  type CancellableFunction,
+} from './lib/utils';
 
 declare const acquireVsCodeApi: <State = undefined>() => VSCodeApi<State>;
-
-type ThemePalette = {
-  background: string;
-  foreground: string;
-  cursor: string;
-  selection: string;
-};
-
-type ThemePresetInfo = {
-  key: string;
-  label: string;
-  description: string;
-  preview: {background: string; foreground: string};
-};
-
-type ThemeUpdatePayload = {
-  presetKey: string;
-  palette: ThemePalette;
-  presets: ThemePresetInfo[];
-};
-
-type ViewMode = 'single' | 'split';
-type Pane = 'primary' | 'secondary';
-
-type InboundMessage =
-  | {type: 'session-count'; payload: {total: number}}
-  | {
-      type: 'session-created';
-      payload: {
-        id: string;
-        shell: string;
-        pid?: number;
-        label?: string;
-        restored?: boolean;
-      };
-    }
-  | {type: 'session-data'; payload: {sessionId: string; data: string}}
-  | {
-      type: 'session-exited';
-      payload: {sessionId: string; code: number | null; signal: string | null};
-    }
-  | {type: 'session-error'; payload: {message: string}}
-  | {type: 'session-limit-reached'; payload: {max: number}}
-  | {type: 'theme-update'; payload: ThemeUpdatePayload}
-  | {type: 'all-sessions-cleared'};
-
-type OutboundMessage =
-  | {type: 'webview-ready'}
-  | {type: 'request-new-session'; payload?: {cols: number; rows: number}}
-  | {type: 'terminal-input'; payload: {sessionId: string; data: string}}
-  | {
-      type: 'terminal-resize';
-      payload: {sessionId: string; cols: number; rows: number};
-    }
-  | {type: 'dispose-session'; payload: {sessionId: string}}
-  | {type: 'dispose-all-sessions'}
-  | {type: 'theme-select'; payload: {presetKey: string}}
-  | {
-      type: 'image-drop';
-      payload: {
-        fileName: string;
-        mimeType: string;
-        data: string;
-        sessionId: string;
-      };
-    };
-
-type SessionMeta = {shell: string; label: string};
-
-type ViewState = {
-  activeSessionId?: string;
-  totalSessions: number;
-  sessionIds: string[];
-  terminalHeight?: number;
-  sessionMeta?: Record<string, SessionMeta>;
-  viewMode?: ViewMode;
-  splitRatio?: number;
-};
-
-type PaneContext = {terminal: Terminal; fitAddon: FitAddon};
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-const Constants = {
-  MAX_SESSIONS: 2,
-  MIN_SPLIT_RATIO: 0.2,
-  MAX_SPLIT_RATIO: 0.8,
-  MAX_IMAGE_SIZE_BYTES: 10 * 1024 * 1024, // 10MB
-  MAX_BUFFER_SIZE: 200_000,
-  MAX_BUFFER_COUNT: 10,
-  MIN_TERMINAL_HEIGHT: 220,
-  MAX_TERMINAL_HEIGHT: 1000,
-  DEFAULT_TERMINAL_HEIGHT: 640,
-} as const;
-
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
-type CancellableFunction<T extends (...args: never[]) => void> = ((
-  ...args: Parameters<T>
-) => void) & {cancel: () => void};
-
-function debounce<T extends (...args: never[]) => void>(
-  fn: T,
-  delay: number
-): CancellableFunction<T> {
-  let handle: number | undefined;
-  const debounced = (...args: Parameters<T>) => {
-    if (handle) {
-      clearTimeout(handle);
-    }
-    handle = window.setTimeout(() => {
-      fn(...args);
-      handle = undefined;
-    }, delay);
-  };
-  debounced.cancel = () => {
-    if (handle) {
-      clearTimeout(handle);
-      handle = undefined;
-    }
-  };
-  return debounced;
-}
-
-function throttle<T extends (...args: never[]) => void>(
-  fn: T,
-  delay: number
-): CancellableFunction<T> {
-  let lastCall = 0;
-  let timeoutHandle: number | undefined;
-  const throttled = (...args: Parameters<T>) => {
-    const now = Date.now();
-    const timeSinceLastCall = now - lastCall;
-
-    if (timeSinceLastCall >= delay) {
-      lastCall = now;
-      fn(...args);
-    } else {
-      if (timeoutHandle) {
-        clearTimeout(timeoutHandle);
-      }
-      timeoutHandle = window.setTimeout(() => {
-        lastCall = Date.now();
-        fn(...args);
-        timeoutHandle = undefined;
-      }, delay - timeSinceLastCall);
-    }
-  };
-  throttled.cancel = () => {
-    if (timeoutHandle) {
-      clearTimeout(timeoutHandle);
-      timeoutHandle = undefined;
-    }
-  };
-  return throttled;
-}
-
-function getComputedVar(
-  name: string,
-  fallbackVar?: string,
-  fallbackValue?: string
-): string {
-  const styles = getComputedStyle(document.documentElement);
-  const value = styles.getPropertyValue(name)?.trim();
-  if (value) {
-    return value;
-  }
-  if (fallbackVar) {
-    const nested = styles.getPropertyValue(fallbackVar)?.trim();
-    if (nested) {
-      return nested;
-    }
-  }
-  return fallbackValue ?? '';
-}
-
-function validateTerminalHeight(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return Constants.DEFAULT_TERMINAL_HEIGHT;
-  }
-  return Math.min(
-    Constants.MAX_TERMINAL_HEIGHT,
-    Math.max(Constants.MIN_TERMINAL_HEIGHT, value)
-  );
-}
-
-function clampSplitRatio(value: number): number {
-  if (!Number.isFinite(value)) {
-    return 0.5;
-  }
-  return Math.min(
-    Constants.MAX_SPLIT_RATIO,
-    Math.max(Constants.MIN_SPLIT_RATIO, value)
-  );
-}
-
-function isValidViewState(state: unknown): state is ViewState {
-  if (!state || typeof state !== 'object') {
-    return false;
-  }
-  const s = state as Record<string, unknown>;
-  return (
-    (s.totalSessions === undefined || typeof s.totalSessions === 'number') &&
-    (s.sessionIds === undefined || Array.isArray(s.sessionIds)) &&
-    (s.activeSessionId === undefined ||
-      typeof s.activeSessionId === 'string') &&
-    (s.terminalHeight === undefined || typeof s.terminalHeight === 'number') &&
-    (s.sessionMeta === undefined ||
-      (typeof s.sessionMeta === 'object' && s.sessionMeta !== null)) &&
-    (s.viewMode === undefined ||
-      s.viewMode === 'single' ||
-      s.viewMode === 'split') &&
-    (s.splitRatio === undefined || typeof s.splitRatio === 'number')
-  );
-}
-
-// ============================================================================
-// DOM Elements Manager
-// ============================================================================
-
-class DOMElements {
-  readonly status = document.querySelector(
-    '[data-session-status]'
-  ) as HTMLSpanElement | null;
-  readonly addSessionButton = document.querySelector(
-    '[data-session-add]'
-  ) as HTMLButtonElement | null;
-  readonly viewToggleButton = document.querySelector(
-    '[data-view-toggle]'
-  ) as HTMLButtonElement | null;
-  readonly viewToggleIcon = document.querySelector(
-    '[data-view-toggle-icon]'
-  ) as HTMLSpanElement | null;
-  readonly removeSessionButton = document.querySelector(
-    '[data-session-remove]'
-  ) as HTMLButtonElement | null;
-  readonly terminalShell = document.querySelector(
-    '[data-terminal-shell]'
-  ) as HTMLDivElement | null;
-  readonly terminalStack = document.querySelector(
-    '[data-terminal-stack]'
-  ) as HTMLDivElement | null;
-  readonly splitResizer = document.querySelector(
-    '[data-split-resizer]'
-  ) as HTMLDivElement | null;
-  readonly resizer = document.querySelector(
-    '[data-terminal-resizer]'
-  ) as HTMLDivElement | null;
-  readonly sessionSelect = document.querySelector(
-    '[data-session-select]'
-  ) as HTMLSelectElement | null;
-  readonly themeSelect = document.querySelector(
-    '[data-theme-select]'
-  ) as HTMLSelectElement | null;
-  readonly themeActiveLabel = document.querySelector(
-    '[data-theme-active-label]'
-  ) as HTMLSpanElement | null;
-  readonly themePreviewText = document.querySelector(
-    '[data-theme-preview-text]'
-  ) as HTMLSpanElement | null;
-  readonly themePreviewSwatch = document.querySelector(
-    '[data-theme-swatch]'
-  ) as HTMLSpanElement | null;
-  readonly clearAllButton = document.querySelector(
-    '[data-session-clear-all]'
-  ) as HTMLButtonElement | null;
-  readonly clearAllConfirm = document.querySelector(
-    '[data-clear-all-confirm]'
-  ) as HTMLDivElement | null;
-  readonly clearAllConfirmAccept = document.querySelector(
-    '[data-clear-all-confirm-accept]'
-  ) as HTMLButtonElement | null;
-  readonly clearAllConfirmCancel = document.querySelector(
-    '[data-clear-all-confirm-cancel]'
-  ) as HTMLButtonElement | null;
-
-  readonly paneElements: Record<Pane, HTMLDivElement | null> = {
-    primary: document.querySelector(
-      '[data-terminal-pane="primary"]'
-    ) as HTMLDivElement | null,
-    secondary: document.querySelector(
-      '[data-terminal-pane="secondary"]'
-    ) as HTMLDivElement | null,
-  };
-
-  readonly paneLabels: Record<Pane, HTMLSpanElement | null> = {
-    primary: document.querySelector(
-      '[data-pane-label="primary"]'
-    ) as HTMLSpanElement | null,
-    secondary: document.querySelector(
-      '[data-pane-label="secondary"]'
-    ) as HTMLSpanElement | null,
-  };
-
-  readonly paneRoots: Record<Pane, HTMLDivElement | null> = {
-    primary: document.querySelector(
-      '[data-terminal-root="primary"]'
-    ) as HTMLDivElement | null,
-    secondary: document.querySelector(
-      '[data-terminal-root="secondary"]'
-    ) as HTMLDivElement | null,
-  };
-}
-
-// ============================================================================
-// Session State Manager
-// ============================================================================
-
-class SessionStateManager {
-  private _activeSessionId: string | undefined;
-  private _sessionIds: string[] = [];
-  private _sessionMeta: Record<string, SessionMeta> = {};
-  private _totalSessions = 0;
-  private readonly _buffers = new Map<string, string>();
-
-  constructor(savedState: ViewState) {
-    this._activeSessionId = savedState.activeSessionId;
-    this._totalSessions = savedState.totalSessions ?? 0;
-    this._sessionIds = Array.isArray(savedState.sessionIds)
-      ? savedState.sessionIds.filter(
-          (id): id is string => typeof id === 'string'
-        )
-      : [];
-    this._sessionMeta = savedState.sessionMeta ?? {};
-
-    // Initialize buffers for existing sessions
-    this._sessionIds.forEach((id, index) => {
-      if (!this._buffers.has(id)) {
-        this._buffers.set(id, '');
-      }
-      this._sessionMeta[id] =
-        this._sessionMeta[id] ??
-        ({shell: 'Shell', label: `Terminal ${index + 1}`} as SessionMeta);
-    });
-  }
-
-  get activeSessionId(): string | undefined {
-    return this._activeSessionId;
-  }
-
-  set activeSessionId(value: string | undefined) {
-    this._activeSessionId = value;
-  }
-
-  get sessionIds(): string[] {
-    return this._sessionIds;
-  }
-
-  get totalSessions(): number {
-    return this._totalSessions;
-  }
-
-  set totalSessions(value: number) {
-    this._totalSessions = value;
-  }
-
-  get sessionMeta(): Record<string, SessionMeta> {
-    return this._sessionMeta;
-  }
-
-  getSessionLabel(sessionId: string, fallbackIndex?: number): string {
-    return (
-      this._sessionMeta[sessionId]?.label ??
-      (typeof fallbackIndex === 'number'
-        ? `Terminal ${fallbackIndex + 1}`
-        : sessionId)
-    );
-  }
-
-  addSession(id: string, shell: string, label?: string): void {
-    this._sessionIds = this._sessionIds.filter((sid) => sid !== id);
-    this._sessionIds.push(id);
-    this._sessionMeta[id] = {
-      shell,
-      label: label ?? `Terminal ${this._sessionIds.length}`,
-    };
-    this._buffers.set(id, '');
-  }
-
-  removeSession(sessionId: string): void {
-    this._sessionIds = this._sessionIds.filter((id) => id !== sessionId);
-    delete this._sessionMeta[sessionId];
-    this._buffers.delete(sessionId);
-  }
-
-  clearAll(): void {
-    this._sessionIds = [];
-    this._sessionMeta = {};
-    this._activeSessionId = undefined;
-    this._totalSessions = 0;
-    this._buffers.clear();
-  }
-
-  ensureActiveSession(): boolean {
-    if (this._activeSessionId && this._sessionIds.includes(this._activeSessionId)) {
-      return false;
-    }
-    const fallbackId = this._sessionIds[this._sessionIds.length - 1];
-    this._activeSessionId = fallbackId;
-    return true;
-  }
-
-  // Buffer management
-  appendToBuffer(sessionId: string, chunk: string): void {
-    const current = this._buffers.get(sessionId) ?? '';
-    let next = current + chunk;
-    if (next.length > Constants.MAX_BUFFER_SIZE) {
-      next = next.slice(next.length - Constants.MAX_BUFFER_SIZE);
-    }
-    this._buffers.set(sessionId, next);
-    this.cleanupOldBuffers();
-  }
-
-  getBuffer(sessionId: string): string | undefined {
-    return this._buffers.get(sessionId);
-  }
-
-  private cleanupOldBuffers(): void {
-    if (this._buffers.size <= Constants.MAX_BUFFER_COUNT) {
-      return;
-    }
-
-    const keysToRemove: string[] = [];
-    for (const key of this._buffers.keys()) {
-      if (!this._sessionIds.includes(key)) {
-        keysToRemove.push(key);
-      }
-    }
-
-    const excessCount = this._buffers.size - Constants.MAX_BUFFER_COUNT;
-    for (let i = 0; i < Math.min(keysToRemove.length, excessCount); i++) {
-      this._buffers.delete(keysToRemove[i]);
-    }
-  }
-
-  toViewState(uiState: UIStateManager, _themeState: ThemeStateManager): ViewState {
-    return {
-      activeSessionId: this._activeSessionId,
-      totalSessions: this._totalSessions,
-      sessionIds: this._sessionIds,
-      terminalHeight: uiState.terminalHeight,
-      sessionMeta: this._sessionMeta,
-      viewMode: uiState.viewMode,
-      splitRatio: uiState.splitRatio,
-    };
-  }
-}
-
-// ============================================================================
-// UI State Manager
-// ============================================================================
-
-class UIStateManager {
-  private _pendingSessionRequest = false;
-  private _clearingAll = false;
-  private _confirmingClearAll = false;
-  private _terminalHeight: number;
-  private _viewMode: ViewMode;
-  private _splitRatio: number;
-  readonly paneSessions: Record<Pane, string | undefined> = {
-    primary: undefined,
-    secondary: undefined,
-  };
-
-  constructor(savedState: ViewState) {
-    this._terminalHeight = validateTerminalHeight(savedState.terminalHeight);
-    this._viewMode = savedState.viewMode === 'split' ? 'split' : 'single';
-    this._splitRatio = clampSplitRatio(
-      typeof savedState.splitRatio === 'number' ? savedState.splitRatio : 0.5
-    );
-  }
-
-  get pendingSessionRequest(): boolean {
-    return this._pendingSessionRequest;
-  }
-
-  set pendingSessionRequest(value: boolean) {
-    this._pendingSessionRequest = value;
-  }
-
-  get clearingAll(): boolean {
-    return this._clearingAll;
-  }
-
-  set clearingAll(value: boolean) {
-    this._clearingAll = value;
-  }
-
-  get confirmingClearAll(): boolean {
-    return this._confirmingClearAll;
-  }
-
-  set confirmingClearAll(value: boolean) {
-    this._confirmingClearAll = value;
-  }
-
-  get terminalHeight(): number {
-    return this._terminalHeight;
-  }
-
-  set terminalHeight(value: number) {
-    this._terminalHeight = validateTerminalHeight(value);
-  }
-
-  get viewMode(): ViewMode {
-    return this._viewMode;
-  }
-
-  set viewMode(value: ViewMode) {
-    this._viewMode = value;
-  }
-
-  get splitRatio(): number {
-    return this._splitRatio;
-  }
-
-  set splitRatio(value: number) {
-    this._splitRatio = clampSplitRatio(value);
-  }
-
-  isSplitModeActive(): boolean {
-    return (
-      this._viewMode === 'split' &&
-      Boolean(this.paneSessions.primary && this.paneSessions.secondary)
-    );
-  }
-
-  getPaneForSession(sessionId?: string): Pane | undefined {
-    if (!sessionId) {
-      return undefined;
-    }
-    return (['primary', 'secondary'] as const).find(
-      (pane) => this.paneSessions[pane] === sessionId
-    );
-  }
-
-  resetClearAllState(): void {
-    this._clearingAll = false;
-    this._pendingSessionRequest = false;
-    this._confirmingClearAll = false;
-  }
-}
-
-// ============================================================================
-// Theme State Manager
-// ============================================================================
-
-class ThemeStateManager {
-  private _currentThemeKey: string | undefined;
-  private _availablePresets: ThemePresetInfo[] = [];
-
-  get currentThemeKey(): string | undefined {
-    return this._currentThemeKey;
-  }
-
-  set currentThemeKey(value: string | undefined) {
-    this._currentThemeKey = value;
-  }
-
-  get availablePresets(): ThemePresetInfo[] {
-    return this._availablePresets;
-  }
-
-  set availablePresets(value: ThemePresetInfo[]) {
-    this._availablePresets = value;
-  }
-
-  getActivePreset(): ThemePresetInfo | undefined {
-    return this._availablePresets.find(
-      (preset) => preset.key === this._currentThemeKey
-    );
-  }
-}
 
 // ============================================================================
 // Terminal Manager
@@ -613,7 +54,7 @@ class TerminalManager {
       allowTransparency: true,
       convertEol: true,
       cursorBlink: true,
-      scrollback: 2000,
+      scrollback: Constants.TERMINAL_SCROLLBACK_LINES,
       fontFamily: getComputedVar(
         '--vscode-editor-font-family',
         'var(--monaco-monospace-font)',
@@ -734,6 +175,32 @@ class TerminalManager {
     this.paneContexts[pane].terminal.write(data);
   }
 
+  /**
+   * Dispose a single pane's terminal and fit addon to free memory
+   * @param pane The pane to dispose
+   */
+  disposePane(pane: Pane): void {
+    const context = this.paneContexts[pane];
+    if (context) {
+      try {
+        context.fitAddon.dispose();
+        context.terminal.dispose();
+      } catch (error) {
+        console.error(`Failed to dispose ${pane} pane:`, error);
+      }
+    }
+  }
+
+  /**
+   * Dispose all terminal instances to prevent memory leaks
+   * Should be called on page unload or extension deactivation
+   */
+  disposeAll(): void {
+    (['primary', 'secondary'] as const).forEach((pane) => {
+      this.disposePane(pane);
+    });
+  }
+
   scrollToBottom(pane: Pane): void {
     this.paneContexts[pane].terminal.scrollToBottom();
   }
@@ -794,6 +261,27 @@ class AppController {
     }, 150);
 
     this.initialize();
+
+    // Cleanup on page unload to prevent memory leaks
+    window.addEventListener('beforeunload', () => {
+      this.cleanup();
+    });
+  }
+
+  /**
+   * Cleanup all resources to prevent memory leaks
+   * Called on page unload or when webview is disposed
+   */
+  private cleanup(): void {
+    // Cancel pending resize operations
+    this.throttledResize.cancel();
+    this.debouncedResize.cancel();
+
+    // Dispose all terminal instances
+    this.terminalManager.disposeAll();
+
+    // Clear session buffers
+    this.sessionState.clearAll();
   }
 
   private initialize(): void {
@@ -1401,9 +889,7 @@ class AppController {
   }
 
   private persistState(): void {
-    this.vscode.setState(
-      this.sessionState.toViewState(this.uiState, this.themeState)
-    );
+    this.vscode.setState(this.sessionState.toViewState(this.uiState));
   }
 
   private applyTerminalHeight(value: number, persist = true): void {

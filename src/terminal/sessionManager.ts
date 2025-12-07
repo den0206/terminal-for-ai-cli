@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type {IPty} from 'node-pty';
 import {spawn as spawnPty} from 'node-pty';
+import {PROCESS_TERMINATION} from '../constants';
 import {Logger} from '../utils/logger';
 import {
   validateShellPath,
@@ -60,8 +61,9 @@ class ShellSession implements vscode.Disposable {
     if (!this.disposed) {
       try {
         this.pty.write(data);
-      } catch {
-        // ignore write failures
+      } catch (error) {
+        // Log write failures but don't throw - the session may be in the process of closing
+        Logger.warn(`Failed to write to PTY (session ${this.id})`, error);
       }
     }
   }
@@ -69,8 +71,9 @@ class ShellSession implements vscode.Disposable {
   resize(cols: number, rows: number) {
     try {
       this.pty.resize(cols, rows);
-    } catch {
-      // ignore resize errors
+    } catch (error) {
+      // Log resize failures but don't throw - the session may be in the process of closing
+      Logger.warn(`Failed to resize PTY (session ${this.id})`, error);
     }
   }
 
@@ -113,7 +116,7 @@ class ShellSession implements vscode.Disposable {
         // Negative PID sends signal to the process group
         process.kill(-pid, 'SIGTERM');
 
-        // Schedule SIGKILL if process doesn't terminate within 2 seconds
+        // Schedule SIGKILL if process doesn't terminate within the grace period
         this.killTimer = setTimeout(() => {
           try {
             process.kill(-pid, 'SIGKILL');
@@ -121,7 +124,7 @@ class ShellSession implements vscode.Disposable {
             // Process already terminated
           }
           this.killTimer = undefined;
-        }, 2000);
+        }, PROCESS_TERMINATION.SIGKILL_DELAY_MS);
 
         // Clear timer if process exits normally
         this.pty.onExit(() => this.clearKillTimer());
@@ -355,12 +358,13 @@ export class SessionManager implements vscode.Disposable {
   }
 
   /**
-   * Generates a cryptographically secure session ID
-   * @returns A unique session identifier
+   * Generates a cryptographically secure session ID using UUID v4
+   * @returns A unique session identifier (UUID format)
    */
   private generateSessionId(): string {
     // Use crypto.randomUUID() for cryptographically secure random IDs
-    return `session-${randomUUID()}`;
+    // UUID alone is sufficient for uniqueness - no prefix needed
+    return randomUUID();
   }
 
 }
