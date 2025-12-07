@@ -1,141 +1,16 @@
-import {
-  ChildProcessWithoutNullStreams,
-  spawn,
-  SpawnOptions,
-  spawnSync,
-} from 'node:child_process';
+import {spawn as spawnChildProcess} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {Writable} from 'node:stream';
 import * as vscode from 'vscode';
+import type {IPty} from 'node-pty';
+import {spawn as spawnPty} from 'node-pty';
 import {Logger} from '../utils/logger';
 import {
   validateShellPath,
   validateTerminalDimensions,
   validateWorkingDirectory,
 } from '../utils/validation';
-
-const PYTHON_PTY_BRIDGE = String.raw`
-import fcntl
-import json
-import os
-import pty
-import select
-import signal
-import struct
-import sys
-import termios
-
-
-child_pid = None
-
-
-def set_winsize(fd, rows, cols):
-    fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', rows, cols, 0, 0))
-
-
-def signal_handler(signum, frame):
-    """Handle SIGTERM by killing child process"""
-    global child_pid
-    if child_pid:
-        try:
-            os.kill(child_pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-    sys.exit(0)
-
-
-def main():
-    global child_pid
-
-    argv = sys.argv[1:]
-    if not argv:
-        sys.stderr.write('No shell specified for PTY bridge\n')
-        sys.stderr.flush()
-        sys.exit(1)
-
-    # Set up signal handler to properly terminate child process
-    signal.signal(signal.SIGTERM, signal_handler)
-
-    rows = int(os.environ.get('AI_TERM_ROWS', '24') or '24')
-    cols = int(os.environ.get('AI_TERM_COLS', '80') or '80')
-
-    master_fd, slave_fd = pty.openpty()
-    pid = os.fork()
-    if pid == 0:
-        try:
-            os.setsid()
-        except OSError:
-            pass
-        os.close(master_fd)
-        os.dup2(slave_fd, 0)
-        os.dup2(slave_fd, 1)
-        os.dup2(slave_fd, 2)
-        if slave_fd > 2:
-            os.close(slave_fd)
-        try:
-            os.execvp(argv[0], argv)
-        except OSError as exc:
-            sys.stderr.write(f'Failed to launch {argv[0]}: {exc}\n')
-            sys.stderr.flush()
-            os._exit(1)
-
-    child_pid = pid
-    os.close(slave_fd)
-    set_winsize(master_fd, rows, cols)
-    control_fd = 3
-    control_buffer = b''
-
-    while True:
-        read_fds = [master_fd, sys.stdin.fileno()]
-        if control_fd >= 0:
-            read_fds.append(control_fd)
-        rlist, _, _ = select.select(read_fds, [], [])
-
-        if master_fd in rlist:
-            data = os.read(master_fd, 4096)
-            if not data:
-                break
-            os.write(sys.stdout.fileno(), data)
-
-        if sys.stdin.fileno() in rlist:
-            data = os.read(sys.stdin.fileno(), 4096)
-            if not data:
-                os.close(master_fd)
-                break
-            os.write(master_fd, data)
-
-        if control_fd >= 0 and control_fd in rlist:
-            chunk = os.read(control_fd, 4096)
-            if not chunk:
-                os.close(control_fd)
-                control_fd = -1
-            else:
-                control_buffer += chunk
-                while b'\n' in control_buffer:
-                    line, control_buffer = control_buffer.split(b'\n', 1)
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        cmd = json.loads(line.decode('utf-8'))
-                    except Exception:
-                        continue
-                    if cmd.get('type') == 'resize':
-                        rows = int(cmd.get('rows', rows) or rows)
-                        cols = int(cmd.get('cols', cols) or cols)
-                        set_winsize(master_fd, rows, cols)
-
-    try:
-        os.waitpid(pid, 0)
-    finally:
-        os.close(master_fd)
-
-
-if __name__ == '__main__':
-    main()
-`;
 
 type SessionOptions = {
   shell?: string;
@@ -162,62 +37,50 @@ type SessionExitEvent = {
 
 type Dimensions = {cols: number; rows: number};
 
-type LaunchResult = {
-  child: ChildProcessWithoutNullStreams;
-  usesPtyHelper: boolean;
-  resizeControl?: Writable;
-};
+const SIGNAL_ENTRIES = Object.entries(os.constants?.signals ?? {});
+
+function resolveSignal(signalCode?: number): NodeJS.Signals | null {
+  if (typeof signalCode !== 'number') {
+    return null;
+  }
+  const match = SIGNAL_ENTRIES.find(([, value]) => value === signalCode);
+  return (match?.[0] as NodeJS.Signals | undefined) ?? null;
+}
 
 class ShellSession implements vscode.Disposable {
-  private readonly stdin = this.child.stdin;
   private killTimer?: NodeJS.Timeout;
+  private disposed = false;
 
   constructor(
     public readonly id: string,
-    private readonly child: ChildProcessWithoutNullStreams,
-    private readonly usesPtyHelper: boolean,
-    private readonly resizeControl?: Writable
+    private readonly pty: IPty
   ) {}
 
   write(data: string) {
-    if (!this.stdin.destroyed) {
-      this.stdin.write(data);
+    if (!this.disposed) {
+      try {
+        this.pty.write(data);
+      } catch {
+        // ignore write failures
+      }
     }
   }
 
   resize(cols: number, rows: number) {
-    if (this.resizeControl && !this.resizeControl.destroyed) {
-      try {
-        this.resizeControl.write(
-          `${JSON.stringify({type: 'resize', cols, rows})}\n`,
-          'utf8'
-        );
-      } catch {
-        // ignore resize errors
-      }
-      return;
-    }
-    // When we rely on the OS helper a SIGWINCH is enough to notify the wrapped shell.
-    if (
-      !this.usesPtyHelper ||
-      !this.child.pid ||
-      process.platform === 'win32'
-    ) {
-      return;
-    }
     try {
-      process.kill(this.child.pid, 'SIGWINCH');
+      this.pty.resize(cols, rows);
     } catch {
       // ignore resize errors
     }
   }
 
   dispose() {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
     this.clearKillTimer();
     this.killProcessTree();
-    if (this.resizeControl && !this.resizeControl.destroyed) {
-      this.resizeControl.end();
-    }
   }
 
   private clearKillTimer() {
@@ -228,19 +91,20 @@ class ShellSession implements vscode.Disposable {
   }
 
   private killProcessTree() {
-    if (this.child.killed || !this.child.pid) {
+    const pid = this.pty.pid;
+    if (!pid) {
       return;
     }
-
-    const pid = this.child.pid;
 
     if (process.platform === 'win32') {
       // Windows: Use taskkill to terminate the entire process tree
       try {
-        spawn('taskkill', ['/F', '/T', '/PID', String(pid)], {stdio: 'ignore'});
+        spawnChildProcess('taskkill', ['/F', '/T', '/PID', String(pid)], {
+          stdio: 'ignore',
+        });
       } catch {
         // Fallback to standard kill
-        this.child.kill();
+        this.pty.kill();
       }
     } else {
       // Unix-like systems: Kill the process group
@@ -252,9 +116,7 @@ class ShellSession implements vscode.Disposable {
         // Schedule SIGKILL if process doesn't terminate within 2 seconds
         this.killTimer = setTimeout(() => {
           try {
-            if (!this.child.killed) {
-              process.kill(-pid, 'SIGKILL');
-            }
+            process.kill(-pid, 'SIGKILL');
           } catch {
             // Process already terminated
           }
@@ -262,10 +124,14 @@ class ShellSession implements vscode.Disposable {
         }, 2000);
 
         // Clear timer if process exits normally
-        this.child.once('exit', () => this.clearKillTimer());
+        this.pty.onExit(() => this.clearKillTimer());
       } catch {
-        // Fallback to standard kill if process group kill fails
-        this.child.kill();
+        // Fallback to pty.kill if process group kill fails
+        try {
+          this.pty.kill();
+        } catch {
+          // ignore failures
+        }
       }
     }
   }
@@ -275,7 +141,6 @@ export class SessionManager implements vscode.Disposable {
   private readonly sessions = new Map<string, ShellSession>();
   private readonly onDataEmitter = new vscode.EventEmitter<SessionDataEvent>();
   private readonly onExitEmitter = new vscode.EventEmitter<SessionExitEvent>();
-  private pythonExecutable: string | null | undefined;
   private readonly sessionInfos = new Map<string, SessionInfo>();
 
   readonly onDidWriteData = this.onDataEmitter.event;
@@ -302,45 +167,30 @@ export class SessionManager implements vscode.Disposable {
       cols: validatedDimensions.cols,
       rows: validatedDimensions.rows,
     };
-    const {child, usesPtyHelper, resizeControl} = this.launchShellProcess(
-      shell,
-      dimensions,
-      options
-    );
+    const ptyProcess = this.launchShellProcess(shell, dimensions, options);
 
-    const session = new ShellSession(id, child, usesPtyHelper, resizeControl);
+    const session = new ShellSession(id, ptyProcess);
     this.sessions.set(id, session);
     const info: SessionInfo = {
       id,
-      pid: child.pid ?? undefined,
+      pid: ptyProcess.pid ?? undefined,
       shell,
       createdAt: Date.now(),
     };
     this.sessionInfos.set(id, info);
 
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-
-    child.stdout.on('data', (data: string) => {
+    ptyProcess.onData((data) => {
       this.onDataEmitter.fire({id, data});
     });
 
-    child.stderr.on('data', (data: string) => {
-      this.onDataEmitter.fire({id, data});
-    });
-
-    child.on('close', (code, signal) => {
+    ptyProcess.onExit(({exitCode, signal}) => {
       this.sessions.delete(id);
       this.sessionInfos.delete(id);
-      this.onExitEmitter.fire({id, code, signal});
-    });
-
-    child.on('error', (error) => {
-      Logger.error(`Shell process error for session ${id}`, error);
-      // Clean up the session on spawn/process errors
-      this.sessions.delete(id);
-      this.sessionInfos.delete(id);
-      this.onExitEmitter.fire({id, code: 1, signal: null});
+      this.onExitEmitter.fire({
+        id,
+        code: exitCode,
+        signal: resolveSignal(signal),
+      });
     });
 
     for (const cmd of options.startupCommands ?? []) {
@@ -351,7 +201,7 @@ export class SessionManager implements vscode.Disposable {
 
     return {
       id,
-      pid: child.pid ?? undefined,
+      pid: ptyProcess.pid ?? undefined,
       shell,
       createdAt: Date.now(),
     };
@@ -392,7 +242,7 @@ export class SessionManager implements vscode.Disposable {
     shell: string,
     dimensions: Dimensions,
     options: SessionOptions
-  ): LaunchResult {
+  ): IPty {
     // Validate and sanitize working directory
     const requestedCwd = options.cwd ?? this.getDefaultCwd();
     const cwd = validateWorkingDirectory(requestedCwd) ?? this.getDefaultCwd();
@@ -404,47 +254,20 @@ export class SessionManager implements vscode.Disposable {
 
     const env = this.buildEnv(options.env, dimensions);
     const shellArgs = this.getShellArgs(shell);
-    const stdio: SpawnOptions['stdio'] = 'pipe';
+    const termName = env.TERM ?? 'xterm-256color';
 
-    const python = this.getPythonExecutable();
-    if (python && process.platform !== 'win32') {
-      const pythonEnv = {
-        ...env,
-        AI_TERM_ROWS: String(dimensions.rows),
-        AI_TERM_COLS: String(dimensions.cols),
-      };
-      const child = spawn(
-        python,
-        ['-u', '-c', PYTHON_PTY_BRIDGE, shell, ...shellArgs],
-        {
-          cwd,
-          env: pythonEnv,
-          stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
-        }
-      ) as ChildProcessWithoutNullStreams;
-      const resizeControl = child.stdio?.[3] as Writable | undefined;
-      if (resizeControl) {
-        resizeControl.setDefaultEncoding?.('utf8');
-        resizeControl.write(
-          `${JSON.stringify({
-            type: 'resize',
-            cols: dimensions.cols,
-            rows: dimensions.rows,
-          })}\n`
-        );
-      }
-      return {child, usesPtyHelper: true, resizeControl};
+    try {
+      return spawnPty(shell, shellArgs, {
+        cols: dimensions.cols,
+        rows: dimensions.rows,
+        cwd,
+        env,
+        name: termName,
+      });
+    } catch (error) {
+      Logger.error('Failed to create PTY session with node-pty', error);
+      throw error instanceof Error ? error : new Error(String(error));
     }
-
-    const child = spawn(shell, shellArgs, {
-      cwd,
-      env,
-      stdio,
-    }) as ChildProcessWithoutNullStreams;
-    return {
-      child: child as ChildProcessWithoutNullStreams,
-      usesPtyHelper: false,
-    };
   }
 
   private buildEnv(
@@ -540,27 +363,4 @@ export class SessionManager implements vscode.Disposable {
     return `session-${randomUUID()}`;
   }
 
-  private getPythonExecutable(): string | null {
-    if (this.pythonExecutable !== undefined) {
-      return this.pythonExecutable;
-    }
-    if (process.platform === 'win32') {
-      this.pythonExecutable = null;
-      return null;
-    }
-    const candidates = ['python3', 'python'];
-    for (const cmd of candidates) {
-      try {
-        const result = spawnSync(cmd, ['-c', 'import pty'], {stdio: 'ignore'});
-        if (result.status === 0) {
-          this.pythonExecutable = cmd;
-          return cmd;
-        }
-      } catch {
-        // ignore
-      }
-    }
-    this.pythonExecutable = null;
-    return null;
-  }
 }

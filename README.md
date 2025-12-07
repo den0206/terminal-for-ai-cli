@@ -4,7 +4,7 @@
 [![PR Check](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/pr-check.yml/badge.svg)](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/pr-check.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Terminal for AI CLI is a VS Code / Cursor extension that anchors a multi-session terminal inside the secondary sidebar. It is powered by `xterm.js`, communicates with a lightweight `SessionManager` (Node.js + Python bridge), and keeps UI state in the Webview so you can switch shells without context switching to another window.
+Terminal for AI CLI is a VS Code / Cursor extension that anchors a multi-session terminal inside the secondary sidebar. It is powered by `xterm.js`, streams process data via a lightweight `SessionManager` backed by `node-pty`, and keeps UI state in the Webview so you can switch shells without leaving the editor.
 
 > 🇯🇵 Looking for the Japanese documentation? Check [`README_JP.md`](README_JP.md). This file and the Japanese version are intentionally kept in sync.
 
@@ -76,8 +76,8 @@ Terminal for AI CLI is a VS Code / Cursor extension that anchors a multi-session
 
 | Item | Description |
 | --- | --- |
-| Windows PTY fallback | Windows uses a simple `spawn` fallback instead of the Python PTY bridge, so full-screen applications and cursor control may be unstable. |
-| Resize propagation | The Python bridge proxies resize events via JSON/SIGWINCH; some environments may see a short delay. |
+| Windows PTY quirks | Windows relies on `node-pty` (ConPTY/winpty). Most scenarios are stable, but some full-screen or cursor-sensitive apps can still behave differently from the OS terminal. |
+| Resize propagation | `node-pty` propagates resize events immediately, but Electron Webview/layout changes can still introduce a tiny delay on slower machines. |
 | Session restoration | Webview reloads restore buffered output, but a full IDE restart still kills OS processes. A persistent session registry is on the roadmap. |
 | Theme customization | Only built-in presets are supported today; user-defined palettes are a future task. |
 
@@ -130,8 +130,23 @@ Terminal For AI CLI implements multiple security measures to protect against com
 - `npm test` – runs the test suite with Vitest.
 - `npm run test:watch` – runs tests in watch mode.
 - `npm run test:coverage` – generates test coverage report.
-- Dependencies: `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, `vitest`, VS Code `@types`, and Python 3 (Unix PTY bridge).
+- Dependencies: `node-pty`, `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, `vitest`, and VS Code `@types`.
 - Outputs: extension host bundle (`dist/extension.js`), Webview bundle (`media/webview.js`, `media/webview.js.map`, `media/xterm.css`).
+
+### Rebuilding node-pty
+
+The VS Code / Cursor extension host ships its own Electron/Node runtime, so `node-pty` must be rebuilt against that version. If you see errors such as `NODE_MODULE_VERSION 131 ... requires NODE_MODULE_VERSION 136`, follow these steps:
+
+1. Check the Electron version used by your editor via **Help → About** (macOS: **Code → About**), or by running `code --status`.
+2. Rebuild `node-pty` for that Electron version (example uses Electron 31.4.0):
+
+   ```bash
+   npm run rebuild:pty -- --electron 31.4.0
+   ```
+
+   On Apple Silicon you can add `--arch=x64` when producing an x64 VSIX.
+
+3. Run the command before packaging (e.g., prior to `npm run package`) so that the rebuilt `node_modules/node-pty/build/Release/pty.node` is included in the VSIX.
 
 ### Extension Icons
 
@@ -176,7 +191,7 @@ All checks must pass before merging pull requests.
 | View provider | `src/view/aiTerminalViewProvider.ts` | Routes messages, manages sessions, and feeds theme data to the Webview. |
 | Webview template | `src/view/htmlTemplate.ts` | Generates the HTML/CSS shell for the Webview UI. |
 | Theming | `src/theming/themePresets.ts` | Defines palette presets, previews, and validation helpers. |
-| Session management | `src/terminal/sessionManager.ts` | Spawns shells, proxies PTY data via Python bridge or OS fallback. |
+| Session management | `src/terminal/sessionManager.ts` | Spawns shells via `node-pty`, streams output to the Webview, and coordinates cleanup. |
 | Security & validation | `src/utils/validation.ts` | Validates shell paths, startup commands, and working directories. |
 | Logging | `src/utils/logger.ts` | Centralized logging system using VS Code Output Channel. |
 | Utilities | `src/utils/nonce.ts` | Generates cryptographically secure nonces for CSP. |

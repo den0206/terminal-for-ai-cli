@@ -103,6 +103,7 @@
   "scripts": {
     "bundle:webview": "esbuild src/webview/main.ts --bundle --format=iife --outfile=media/webview.js --platform=browser --sourcemap",
     "compile": "npm run bundle:webview && tsc -p ./",
+    "rebuild:pty": "node scripts/rebuild-pty.mjs",
     "watch": "tsc -w -p ./",
     "lint": "eslint src --ext .ts",
     "test": "vitest run",
@@ -114,19 +115,20 @@
   "devDependencies": {
     "@types/node": "^24.10.1",
     "@types/vscode": "^1.99.0",
-    "@typescript-eslint/eslint-plugin": "^8.46.4",
-    "@typescript-eslint/parser": "^8.46.4",
-    "@vitest/ui": "^3.2.4",
+    "@typescript-eslint/eslint-plugin": "^8.48.1",
+    "@typescript-eslint/parser": "^8.48.1",
+    "@vitest/ui": "^4.0.15",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
-    "esbuild": "^0.27.0",
+    "esbuild": "^0.27.1",
     "eslint": "^9.39.1",
     "globals": "^16.5.0",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.4",
-    "vsce": "^2.15.0"
+    "vitest": "^4.0.15",
+    "vsce": "^1.97.0"
   },
   "dependencies": {
+    "node-pty": "^1.0.0",
     "tslib": "^2.8.1"
   }
 }

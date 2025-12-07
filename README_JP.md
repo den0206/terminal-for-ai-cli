@@ -4,7 +4,7 @@
 [![PR Check](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/pr-check.yml/badge.svg)](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/pr-check.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Terminal for AI CLI は Cursor / VS Code のセカンダリサイドバーに常駐するマルチセッション対応ターミナル拡張です。`xterm.js` をベースにした Webview と、Node.js + Python ブリッジで構成された `SessionManager` により、IDE 内で複数シェルを高速に切り替えられます。
+Terminal for AI CLI は Cursor / VS Code のセカンダリサイドバーに常駐するマルチセッション対応ターミナル拡張です。`xterm.js` をベースにした Webview と、`node-pty` を利用する軽量な `SessionManager` により、IDE 内で複数シェルを高速に切り替えられます。
 
 > 🇺🇸 英語版はこちら: [`README.md`](README.md)。内容は両ファイルで同期されています。
 
@@ -75,8 +75,8 @@ Terminal for AI CLI は Cursor / VS Code のセカンダリサイドバーに常
 
 | 項目 | 説明 |
 | --- | --- |
-| Windows での PTY | Windows では Python PTY ブリッジの代わりに単純な `spawn` fallback を使用するため、全画面アプリやカーソル制御が不安定になる場合があります。 |
-| リサイズ伝搬 | Python ブリッジ経由で JSON / SIGWINCH 事件を送るため、環境によっては反映がわずかに遅れることがあります。 |
+| Windows での PTY | Windows では `node-pty`（ConPTY / winpty）を利用しており概ね安定していますが、全画面アプリや特殊なカーソル制御では OS のターミナルと挙動が異なる場合があります。 |
+| リサイズ伝搬 | `node-pty` で即時にリサイズを通知しますが、Webview レイアウトの再計算により遅延が発生するケースがあります。 |
 | セッション復元 | Webview の再読み込みでは出力を復元できる一方、IDE 自体を再起動すると OS 側のプロセスは終了します。永続化ロジックを強化予定です。 |
 | テーマカスタム | 現状はプリセットのみ。ユーザー定義の配色を受け付ける API は今後実装予定。 |
 
@@ -129,8 +129,23 @@ Terminal For AI CLI は、一般的な脆弱性から保護するための複数
 - `npm test`：Vitest でテストスイートを実行。
 - `npm run test:watch`：テストをウォッチモードで実行。
 - `npm run test:coverage`：テストカバレッジレポートを生成。
-- 主要依存: `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, `vitest`, VS Code API, Python 3 (Unix での PTY ブリッジ用)。
+- 主要依存: `node-pty`, `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, `vitest`, VS Code API。
 - 生成物: `dist/extension.js`, `media/webview.js`, `media/webview.js.map`, `media/xterm.css`。
+
+### node-pty の再ビルド
+
+VS Code / Cursor の拡張ホストでは Electron 固有の Node.js が使われるため、`node-pty` をその Electron 版に合わせて再ビルドする必要があります。`NODE_MODULE_VERSION` の不一致（例: 131 vs 136）で拡張の有効化に失敗した場合は、次の手順で解消できます。
+
+1. VS Code の「ヘルプ > バージョン情報」（macOS は「Code > バージョン情報」）や `code --status` で Electron のバージョンを確認する。
+2. リポジトリ直下で以下を実行する（例: Electron 31.4.0 の場合）。
+
+   ```bash
+   npm run rebuild:pty -- --electron 31.4.0
+   ```
+
+   Apple Silicon で x64 版 VSIX を作る場合は `--arch=x64` を追加できます。
+
+3. VSIX の作成や CI ビルドの前にも同コマンドを実行し、生成された `node_modules/node-pty/build/Release/pty.node` を配布物に含める。
 
 ### 拡張機能アイコン
 
@@ -175,7 +190,7 @@ Terminal For AI CLI は、一般的な脆弱性から保護するための複数
 | ビュープロバイダー | `src/view/aiTerminalViewProvider.ts` | メッセージ処理、セッション管理、テーマ情報の送信。 |
 | Webview テンプレート | `src/view/htmlTemplate.ts` | Webview の HTML / CSS 骨格を生成。 |
 | テーマ定義 | `src/theming/themePresets.ts` | プリセット配色・プレビュー・バリデーションを提供。 |
-| セッション管理 | `src/terminal/sessionManager.ts` | シェル起動、Python PTY ブリッジ／OS fallback を扱う。 |
+| セッション管理 | `src/terminal/sessionManager.ts` | `node-pty` でシェルを起動し、Webview との入出力・クリーンアップを調整。 |
 | セキュリティ・検証 | `src/utils/validation.ts` | シェルパス、起動コマンド、作業ディレクトリの検証。 |
 | ロギング | `src/utils/logger.ts` | VS Code Output チャンネルを使用した一元化されたロギングシステム。 |
 | ユーティリティ | `src/utils/nonce.ts` | CSP 用の暗号学的に安全な nonce を生成。 |
