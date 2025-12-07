@@ -21,6 +21,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Rebuild node-pty for VS Code Electron runtime
+        run: npm run rebuild:pty -- --electron 37.7.0
+
       - name: Build extension
         run: npm run compile
 
