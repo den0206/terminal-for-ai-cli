@@ -137,6 +137,11 @@ type InboundMessage =
   | ThemeSelectMessage
   | ImageDropMessage;
 
+/**
+ * Provides the webview view for Terminal For AI CLI.
+ * Manages communication between the extension host and webview,
+ * handles session lifecycle, theme management, and image handling.
+ */
 export class AiTerminalViewProvider
   implements vscode.WebviewViewProvider, vscode.Disposable
 {
@@ -147,6 +152,12 @@ export class AiTerminalViewProvider
   private readonly sessionLabels = new Map<string, string>();
   private readonly sessionImages = new Map<string, Set<string>>();
 
+  /**
+   * Creates a new webview provider instance.
+   *
+   * @param context - The extension context
+   * @param sessionManager - The session manager instance
+   */
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly sessionManager: SessionManager
@@ -189,6 +200,12 @@ export class AiTerminalViewProvider
     this.webviewReady = false;
   }
 
+  /**
+   * Resolves the webview view when it becomes visible.
+   * Sets up the webview HTML and message handlers.
+   *
+   * @param webviewView - The webview view instance
+   */
   resolveWebviewView(webviewView: vscode.WebviewView) {
     this.webviewView = webviewView;
     this.webviewReady = false;
@@ -207,12 +224,19 @@ export class AiTerminalViewProvider
     this.disposables.push(messageDisposable);
   }
 
+  /**
+   * Reveals the webview view in the sidebar.
+   */
   reveal() {
     if (this.webviewView) {
       this.webviewView.show?.(true);
     }
   }
 
+  /**
+   * Creates a new terminal session.
+   * Called from the command palette or programmatically.
+   */
   newSession() {
     this.handleSessionRequest();
   }
@@ -314,6 +338,9 @@ export class AiTerminalViewProvider
       if (validateShellPath(configuredShell)) {
         shell = configuredShell;
       } else {
+        Logger.warn(
+          `Invalid shell path configured: "${configuredShell}". Using default shell instead.`
+        );
         vscode.window.showWarningMessage(
           `Invalid shell path configured: "${configuredShell}". Using default shell instead.`
         );
@@ -325,6 +352,17 @@ export class AiTerminalViewProvider
 
     // Validate and sanitize startup commands
     const startupCommands = validateStartupCommands(configuredCommands);
+
+    // Log validation results for debugging
+    if (configuredCommands && configuredCommands.length > 0) {
+      const validCount = startupCommands.length;
+      const invalidCount = configuredCommands.length - validCount;
+      if (invalidCount > 0) {
+        Logger.warn(
+          `Filtered out ${invalidCount} invalid startup command(s). ${validCount} valid command(s) will be executed.`
+        );
+      }
+    }
 
     try {
       const info = this.sessionManager.createSession({
@@ -340,13 +378,29 @@ export class AiTerminalViewProvider
       this.postSessionCount();
     } catch (error) {
       Logger.error('Failed to create Terminal For AI CLI session', error);
+
+      // Provide user-friendly error messages
+      let userMessage = 'Failed to create a terminal session.';
+      if (error instanceof Error) {
+        const errorMessage = error.message.toLowerCase();
+        if (errorMessage.includes('enoent') || errorMessage.includes('not found')) {
+          userMessage = `Shell not found. Please check your "aiTerminal.defaultShell" setting or ensure your default shell is available.`;
+        } else if (errorMessage.includes('eacces') || errorMessage.includes('permission')) {
+          userMessage = `Permission denied. Please check that the shell is executable.`;
+        } else if (errorMessage.includes('spawn')) {
+          userMessage = `Failed to start shell process. Please check your shell configuration.`;
+        } else {
+          userMessage = `Failed to create session: ${error.message}`;
+        }
+      }
+
       vscode.window.showErrorMessage(
-        'Terminal For AI CLI: Failed to create a session. Please check the Output channel for details.'
+        `Terminal For AI CLI: ${userMessage} Check the Output channel for details.`
       );
       this.postMessage({
         type: 'session-error',
         payload: {
-          message: error instanceof Error ? error.message : String(error),
+          message: userMessage,
         },
       });
     }
@@ -768,11 +822,25 @@ export class AiTerminalViewProvider
       this.sessionManager.write(sessionId, escapedPath);
     } catch (error) {
       Logger.error('Failed to save image', error);
-      vscode.window.showErrorMessage(
-        `Failed to save image: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
+
+      // Provide user-friendly error messages
+      let userMessage = 'Failed to save image.';
+      if (error instanceof Error) {
+        const errorMessage = error.message.toLowerCase();
+        if (errorMessage.includes('too large')) {
+          userMessage = error.message; // Already user-friendly
+        } else if (errorMessage.includes('invalid file type')) {
+          userMessage = 'Only image files are supported.';
+        } else if (errorMessage.includes('invalid base64')) {
+          userMessage = 'Invalid image data. Please try dropping the image again.';
+        } else if (errorMessage.includes('invalid filename')) {
+          userMessage = 'Invalid filename. Please use a valid file name.';
+        } else {
+          userMessage = `Failed to save image: ${error.message}`;
+        }
+      }
+
+      vscode.window.showErrorMessage(`Terminal For AI CLI: ${userMessage}`);
     }
   }
 

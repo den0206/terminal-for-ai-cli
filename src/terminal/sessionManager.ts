@@ -48,15 +48,30 @@ function resolveSignal(signalCode?: number): NodeJS.Signals | null {
   return (match?.[0] as NodeJS.Signals | undefined) ?? null;
 }
 
+/**
+ * Represents a single shell session with a PTY process.
+ * Handles process lifecycle, input/output, and cleanup.
+ */
 class ShellSession implements vscode.Disposable {
   private killTimer?: NodeJS.Timeout;
   private disposed = false;
 
+  /**
+   * Creates a new shell session.
+   *
+   * @param id - Unique identifier for this session
+   * @param pty - The PTY process instance
+   */
   constructor(
     public readonly id: string,
     private readonly pty: IPty
   ) {}
 
+  /**
+   * Writes data to the PTY process.
+   *
+   * @param data - The data to write to the terminal
+   */
   write(data: string) {
     if (!this.disposed) {
       try {
@@ -68,6 +83,12 @@ class ShellSession implements vscode.Disposable {
     }
   }
 
+  /**
+   * Resizes the PTY terminal dimensions.
+   *
+   * @param cols - Number of columns
+   * @param rows - Number of rows
+   */
   resize(cols: number, rows: number) {
     try {
       this.pty.resize(cols, rows);
@@ -77,6 +98,10 @@ class ShellSession implements vscode.Disposable {
     }
   }
 
+  /**
+   * Disposes the session and kills the associated process tree.
+   * Safe to call multiple times.
+   */
   dispose() {
     if (this.disposed) {
       return;
@@ -140,6 +165,10 @@ class ShellSession implements vscode.Disposable {
   }
 }
 
+/**
+ * Manages multiple shell sessions using node-pty.
+ * Handles session creation, lifecycle, input/output, and cleanup.
+ */
 export class SessionManager implements vscode.Disposable {
   private readonly sessions = new Map<string, ShellSession>();
   private readonly onDataEmitter = new vscode.EventEmitter<SessionDataEvent>();
@@ -149,6 +178,13 @@ export class SessionManager implements vscode.Disposable {
   readonly onDidWriteData = this.onDataEmitter.event;
   readonly onDidExit = this.onExitEmitter.event;
 
+  /**
+   * Creates a new terminal session.
+   *
+   * @param options - Session configuration options
+   * @returns Session information including ID, PID, shell, and creation timestamp
+   * @throws Error if session creation fails
+   */
   createSession(options: SessionOptions = {}): SessionInfo {
     const id = this.generateSessionId();
     let shell = options.shell?.trim() || this.getDefaultShell();

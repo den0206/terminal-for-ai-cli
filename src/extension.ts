@@ -6,6 +6,13 @@ import {AiTerminalViewProvider} from './view/aiTerminalViewProvider';
 const VIEW_ID = 'terminal-for-ai-cli-view';
 const CONTAINER_COMMAND = 'workbench.view.extension.terminal-for-ai-cli';
 
+/**
+ * Activates the Terminal For AI CLI extension.
+ * Initializes the logger, session manager, and webview provider.
+ * Registers commands and sets up event handlers.
+ *
+ * @param context - The extension context provided by VS Code
+ */
 export function activate(context: vscode.ExtensionContext) {
   // Initialize logger first
   Logger.initialize(context);
@@ -58,6 +65,10 @@ export function activate(context: vscode.ExtensionContext) {
   );
 }
 
+/**
+ * Deactivates the Terminal For AI CLI extension.
+ * Cleanup is handled automatically by disposables registered in activate().
+ */
 export function deactivate() {
   // handled by disposables registered in activate()
 }
