@@ -16,10 +16,6 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onView:terminal-for-ai-cli-view",
-    "onCommand:terminal-for-ai-cli.focus"
-  ],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
