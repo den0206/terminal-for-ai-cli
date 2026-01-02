@@ -147,6 +147,7 @@ export class AiTerminalViewProvider
 {
   private webviewView?: vscode.WebviewView;
   private webviewReady = false;
+  private initialSessionEnsured = false;
   private readonly messageQueue: OutboundMessage[] = [];
   private readonly disposables: vscode.Disposable[] = [];
   private readonly sessionLabels = new Map<string, string>();
@@ -162,6 +163,8 @@ export class AiTerminalViewProvider
     private readonly context: vscode.ExtensionContext,
     private readonly sessionManager: SessionManager
   ) {
+    // Validate configuration on initialization
+    this.validateConfiguration();
     this.disposables.push(
       this.sessionManager.onDidWriteData(({id, data}) => {
         this.postMessage({
@@ -187,6 +190,10 @@ export class AiTerminalViewProvider
         ) {
           this.postThemeUpdate();
         }
+        // Validate configuration changes
+        if (event.affectsConfiguration('aiTerminal')) {
+          this.validateConfiguration();
+        }
       })
     );
   }
@@ -198,6 +205,7 @@ export class AiTerminalViewProvider
     this.messageQueue.length = 0;
     this.webviewView = undefined;
     this.webviewReady = false;
+    this.initialSessionEnsured = false;
   }
 
   /**
@@ -209,6 +217,7 @@ export class AiTerminalViewProvider
   resolveWebviewView(webviewView: vscode.WebviewView) {
     this.webviewView = webviewView;
     this.webviewReady = false;
+    this.initialSessionEnsured = false;
 
     const webview = webviewView.webview;
     webview.options = {
@@ -241,10 +250,25 @@ export class AiTerminalViewProvider
     this.handleSessionRequest();
   }
 
+  /**
+   * Handles incoming messages from the webview.
+   *
+   * Routes messages to appropriate handlers based on message type.
+   * All message types are handled with exhaustive type checking.
+   *
+   * @param message - The incoming message from the webview
+   * @throws {Error} If message handling fails, logs error and sends error message to webview
+   * @private
+   */
   private async handleMessage(message: InboundMessage): Promise<void> {
     try {
       switch (message.type) {
         case 'webview-ready':
+          // Prevent duplicate webview-ready processing
+          if (this.webviewReady) {
+            Logger.debug('Duplicate webview-ready message received, ignoring');
+            break;
+          }
           // Flush queued messages before setting webviewReady to maintain message ordering
           this.flushQueuedMessages();
           this.webviewReady = true;
@@ -252,6 +276,8 @@ export class AiTerminalViewProvider
           this.postThemeUpdate();
           this.postExistingSessions();
           this.ensureInitialSession();
+          // Check performance after initialization
+          this.checkMessageQueuePerformance();
           break;
         case 'request-new-session':
           this.handleSessionRequest(message.payload);
@@ -317,6 +343,18 @@ export class AiTerminalViewProvider
     }
   }
 
+  /**
+   * Handles a request to create a new terminal session.
+   *
+   * Validates configuration (shell path, startup commands), checks session limits,
+   * and creates a new session via SessionManager. Sends appropriate messages to webview
+   * on success or failure.
+   *
+   * @param dimensions - Optional terminal dimensions (cols, rows) from the webview
+   * @remarks If session limit is reached, shows warning and sends limit-reached message.
+   *          Invalid shell paths fall back to default shell with warning.
+   * @private
+   */
   private handleSessionRequest(dimensions?: {cols?: number; rows?: number}) {
     if (this.sessionManager.getSessionCount() >= MAX_SESSIONS) {
       vscode.window.showWarningMessage(
@@ -406,6 +444,11 @@ export class AiTerminalViewProvider
     }
   }
 
+  /**
+   * Posts the current session count to the webview.
+   *
+   * @private
+   */
   private postSessionCount() {
     this.postMessage({
       type: 'session-count',
@@ -413,14 +456,27 @@ export class AiTerminalViewProvider
     });
   }
 
+  /**
+   * Posts a message to the webview, or queues it if the webview is not ready.
+   *
+   * Messages are queued when the webview is not ready and flushed when it becomes ready.
+   * The queue has a maximum size of 100 messages; older messages are dropped if exceeded.
+   *
+   * @param message - The message to send to the webview
+   * @private
+   */
   private postMessage(message: OutboundMessage): void {
     if (!this.webviewView || !this.webviewReady) {
       // Limit queue size to prevent memory issues
-      if (this.messageQueue.length >= 100) {
+      const MAX_QUEUE_SIZE = 100;
+      if (this.messageQueue.length >= MAX_QUEUE_SIZE) {
         Logger.warn('Message queue is full, dropping oldest message');
         this.messageQueue.shift();
       }
       this.messageQueue.push(message);
+
+      // Check for performance warnings
+      this.checkMessageQueuePerformance();
       return;
     }
     try {
@@ -430,10 +486,54 @@ export class AiTerminalViewProvider
     }
   }
 
+  /**
+   * Checks message queue performance and logs warnings if thresholds are exceeded.
+   *
+   * @private
+   */
+  private checkMessageQueuePerformance(): void {
+    const config = vscode.workspace.getConfiguration('aiTerminal');
+    const monitoringEnabled = config.get<boolean>('enablePerformanceMonitoring', true);
+
+    if (!monitoringEnabled) {
+      return;
+    }
+
+    const MAX_QUEUE_SIZE = 100;
+    const queueSize = this.messageQueue.length;
+    const queuePercentage = (queueSize / MAX_QUEUE_SIZE) * 100;
+
+    // Warn if queue exceeds 80% of limit
+    if (queuePercentage >= 80) {
+      Logger.warn(
+        `Message queue is ${queueSize}/${MAX_QUEUE_SIZE} (${Math.round(queuePercentage)}% full). ` +
+        `Consider checking webview connection status.`
+      );
+    }
+
+    // Check session manager performance
+    const sessionWarnings = this.sessionManager.checkPerformanceWarnings();
+    for (const warning of sessionWarnings) {
+      Logger.warn(warning);
+    }
+  }
+
+  /**
+   * Posts the current theme configuration to the webview.
+   *
+   * @private
+   */
   private postThemeUpdate() {
     this.postMessage({type: 'theme-update', payload: this.getThemeValues()});
   }
 
+  /**
+   * Updates the theme preset in VS Code settings and notifies the webview.
+   *
+   * @param presetKey - The theme preset key to apply
+   * @remarks Invalid preset keys are ignored. The change is saved to global settings.
+   * @private
+   */
   private async updateThemePreset(presetKey: string) {
     if (!isValidPresetKey(presetKey)) {
       return;
@@ -447,6 +547,14 @@ export class AiTerminalViewProvider
     this.postThemeUpdate();
   }
 
+  /**
+   * Flushes all queued messages to the webview.
+   *
+   * Called when the webview becomes ready to ensure no messages are lost.
+   * Continues flushing even if individual messages fail.
+   *
+   * @private
+   */
   private flushQueuedMessages() {
     if (!this.webviewView || this.messageQueue.length === 0) {
       return;
@@ -464,6 +572,14 @@ export class AiTerminalViewProvider
     }
   }
 
+  /**
+   * Removes all messages related to a session from the message queue.
+   *
+   * Used when a session is disposed to prevent sending stale data to the webview.
+   *
+   * @param sessionId - The session ID whose messages should be removed
+   * @private
+   */
   private removeSessionFromQueue(sessionId: string) {
     for (let i = this.messageQueue.length - 1; i >= 0; i--) {
       const message = this.messageQueue[i];
@@ -485,12 +601,46 @@ export class AiTerminalViewProvider
     }
   }
 
+  /**
+   * Ensures at least one session exists when the webview becomes ready.
+   *
+   * Creates a new session if no sessions are currently active.
+   * Prevents duplicate session creation by tracking if initial session has been ensured.
+   *
+   * @private
+   */
   private ensureInitialSession() {
-    if (this.sessionManager.getSessionCount() === 0) {
+    // Prevent duplicate initial session creation
+    if (this.initialSessionEnsured) {
+      Logger.debug('Initial session already ensured, skipping');
+      return;
+    }
+
+    const sessionCount = this.sessionManager.getSessionCount();
+    if (sessionCount === 0) {
+      this.initialSessionEnsured = true;
       this.handleSessionRequest();
+    } else {
+      // Mark as ensured even if sessions already exist (e.g., restored from previous state)
+      this.initialSessionEnsured = true;
+      Logger.debug(`Initial session check: ${sessionCount} session(s) already exist`);
     }
   }
 
+  /**
+   * Resolves the working directory for new sessions.
+   *
+   * Priority order:
+   * 1. Active editor's workspace folder
+   * 2. Active editor's file directory
+   * 3. First workspace folder
+   * 4. Cursor-specific environment variables
+   * 5. Standard environment variables (PWD, INIT_CWD)
+   * 6. process.cwd()
+   *
+   * @returns The resolved working directory path, or undefined if resolution fails
+   * @private
+   */
   private resolveWorkingDirectory(): string | undefined {
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor) {
@@ -534,6 +684,14 @@ export class AiTerminalViewProvider
     }
   }
 
+  /**
+   * Handles clearing all terminal sessions.
+   *
+   * Disposes all active sessions, clears session labels and images,
+   * and notifies the webview. Safe to call when no sessions exist.
+   *
+   * @private
+   */
   private async handleClearAllSessions() {
     const sessions = this.sessionManager.getActiveSessions();
     if (sessions.length === 0) {
@@ -553,6 +711,13 @@ export class AiTerminalViewProvider
     await this.clearAllImages();
   }
 
+  /**
+   * Deletes all images associated with a session.
+   *
+   * @param sessionId - The session ID whose images should be deleted
+   * @remarks Continues deleting other images even if one fails.
+   * @private
+   */
   private async deleteSessionImages(sessionId: string) {
     const imagePaths = this.sessionImages.get(sessionId);
     if (!imagePaths || imagePaths.size === 0) {
@@ -572,6 +737,14 @@ export class AiTerminalViewProvider
     this.sessionImages.delete(sessionId);
   }
 
+  /**
+   * Clears all saved images from global storage.
+   *
+   * Deletes the entire images directory and clears session image tracking.
+   * Errors are logged but not shown to the user as this is a background operation.
+   *
+   * @private
+   */
   private async clearAllImages() {
     try {
       const storageUri = this.context.globalStorageUri;
@@ -641,6 +814,15 @@ export class AiTerminalViewProvider
     }
   }
 
+  /**
+   * Gets the current theme configuration from VS Code settings.
+   *
+   * Validates the theme preset key and falls back to 'modern' if invalid.
+   * Returns the active palette and all available presets for the webview.
+   *
+   * @returns Theme snapshot containing preset key, palette, and available presets
+   * @private
+   */
   private getThemeValues(): ThemeSnapshot {
     const config = vscode.workspace.getConfiguration('aiTerminal');
     const rawPresetKey = config.get<string>('themePreset');
@@ -679,6 +861,14 @@ export class AiTerminalViewProvider
     return {presetKey, palette, presets};
   }
 
+  /**
+   * Posts all existing active sessions to the webview.
+   *
+   * Called when the webview becomes ready to restore session state.
+   * Sessions are marked as 'restored' to distinguish from newly created sessions.
+   *
+   * @private
+   */
   private postExistingSessions() {
     const sessions = this.sessionManager.getActiveSessions();
     if (!sessions.length) {
@@ -693,6 +883,16 @@ export class AiTerminalViewProvider
     }
   }
 
+  /**
+   * Gets or creates a label for a session.
+   *
+   * Returns existing label if available, otherwise creates a new label
+   * using the next available index (e.g., "Terminal 1", "Terminal 2").
+   *
+   * @param sessionId - The session ID to get or create a label for
+   * @returns The session label
+   * @private
+   */
   private getOrCreateLabel(sessionId: string) {
     const existing = this.sessionLabels.get(sessionId);
     if (existing) {
@@ -703,6 +903,15 @@ export class AiTerminalViewProvider
     return label;
   }
 
+  /**
+   * Finds the next available label index for a new session.
+   *
+   * Scans existing labels and finds the lowest unused index starting from 1.
+   * Reuses freed numbers (e.g., if Terminal 1 and 3 exist, returns 2).
+   *
+   * @returns The next available label index
+   * @private
+   */
   private findNextLabelIndex() {
     const usedIndexes = new Set<number>();
     for (const label of this.sessionLabels.values()) {
@@ -719,6 +928,21 @@ export class AiTerminalViewProvider
     return index;
   }
 
+  /**
+   * Handles image drop events from the webview.
+   *
+   * Validates the image file (MIME type, size, filename), saves it to global storage,
+   * and writes the escaped file path to the terminal session to prevent command injection.
+   *
+   * @param fileName - The original filename of the dropped image
+   * @param mimeType - The MIME type of the image (must start with 'image/')
+   * @param base64Data - Base64-encoded image data
+   * @param sessionId - The ID of the session to write the image path to
+   * @throws {Error} If the image is invalid, too large (>10MB), or save fails
+   * @remarks File names are sanitized and truncated if necessary. The path is properly
+   *          escaped for shell execution to prevent command injection attacks.
+   * @private
+   */
   private async handleImageDrop(
     fileName: string,
     mimeType: string,
@@ -845,7 +1069,14 @@ export class AiTerminalViewProvider
   }
 
   /**
-   * Escape shell special characters in a path to prevent command injection
+   * Escapes shell special characters in a path to prevent command injection.
+   *
+   * - Windows: Wraps path in double quotes and escapes internal double quotes
+   * - Unix-like: Wraps path in single quotes (which prevent all interpretation)
+   *
+   * @param filePath - The file path to escape
+   * @returns The escaped file path safe for shell execution
+   * @private
    */
   private escapeShellPath(filePath: string): string {
     if (process.platform === 'win32') {
@@ -857,6 +1088,73 @@ export class AiTerminalViewProvider
     return `'${filePath.replace(/'/g, "'\\''")}'`;
   }
 
+  /**
+   * Validates configuration values and corrects invalid settings.
+   *
+   * Checks and validates:
+   * - Shell path (if configured)
+   * - Startup commands
+   * - Theme preset
+   *
+   * Invalid values are logged and corrected automatically where possible.
+   *
+   * @private
+   */
+  private validateConfiguration(): void {
+    const config = vscode.workspace.getConfiguration('aiTerminal');
+
+    // Validate shell path
+    const configuredShell = config.get<string>('defaultShell')?.trim();
+    if (configuredShell && !validateShellPath(configuredShell)) {
+      Logger.warn(
+        `Invalid shell path in configuration: "${configuredShell}". ` +
+        `Please update the "aiTerminal.defaultShell" setting with a valid absolute path.`
+      );
+    }
+
+    // Validate startup commands
+    const configuredCommands = config.get<unknown>('startupCommands');
+    const validatedCommands = validateStartupCommands(configuredCommands);
+    if (
+      Array.isArray(configuredCommands) &&
+      configuredCommands.length !== validatedCommands.length
+    ) {
+      const invalidCount = configuredCommands.length - validatedCommands.length;
+      Logger.warn(
+        `Filtered out ${invalidCount} invalid startup command(s) from configuration. ` +
+        `${validatedCommands.length} valid command(s) will be used.`
+      );
+    }
+
+    // Validate theme preset
+    const rawPresetKey = config.get<string>('themePreset');
+    if (rawPresetKey && !isValidPresetKey(rawPresetKey)) {
+      Logger.warn(
+        `Invalid theme preset in configuration: "${rawPresetKey}". ` +
+        `Using default "modern" theme. Please update "aiTerminal.themePreset" setting.`
+      );
+    }
+
+    // Validate log level
+    const logLevel = config.get<string>('logLevel');
+    const validLogLevels = ['error', 'warn', 'info', 'debug'];
+    if (logLevel && !validLogLevels.includes(logLevel)) {
+      Logger.warn(
+        `Invalid log level in configuration: "${logLevel}". ` +
+        `Using default "info". Valid options: ${validLogLevels.join(', ')}`
+      );
+    }
+  }
+
+  /**
+   * Generates the HTML content for the webview.
+   *
+   * Builds the HTML template with CSP nonce, theme configuration, and resource URIs.
+   *
+   * @param webview - The webview instance to generate HTML for
+   * @returns The complete HTML string for the webview
+   * @private
+   */
   private getHtml(webview: vscode.Webview): string {
     const nonce = getNonce();
     const theme = this.getThemeValues();
