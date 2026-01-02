@@ -92,6 +92,22 @@
             "シルバーの筐体風ダークグレー配色"
           ],
           "description": "Webview 内のターミナルテーマ。Terminal For AI CLI ビュー内でも選択できます。"
+        },
+        "aiTerminal.logLevel": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warn",
+            "info",
+            "debug"
+          ],
+          "default": "info",
+          "description": "ログ出力レベル。'error'（エラーのみ）、'warn'（警告以上）、'info'（情報以上）、'debug'（すべて）から選択できます。"
+        },
+        "aiTerminal.enablePerformanceMonitoring": {
+          "type": "boolean",
+          "default": true,
+          "description": "パフォーマンス監視を有効にします。メッセージキューサイズやセッション数の警告を表示します。"
         }
       }
     }

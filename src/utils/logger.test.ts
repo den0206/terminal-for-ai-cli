@@ -10,16 +10,34 @@ vi.mock('vscode', () => {
     dispose: vi.fn(),
   };
 
+  const mockConfiguration = {
+    get: vi.fn((key: string, defaultValue?: unknown) => {
+      if (key === 'logLevel') {
+        return defaultValue ?? 'info';
+      }
+      return defaultValue;
+    }),
+  };
+
+  const mockWorkspace = {
+    getConfiguration: vi.fn(() => mockConfiguration),
+    onDidChangeConfiguration: vi.fn(() => ({
+      dispose: vi.fn(),
+    })),
+  };
+
   return {
     window: {
       createOutputChannel: vi.fn(() => mockOutputChannel),
     },
+    workspace: mockWorkspace,
   };
 });
 
 describe('Logger', () => {
   let mockContext: vscode.ExtensionContext;
   let mockOutputChannel: vscode.OutputChannel;
+  let mockConfig: {get: ReturnType<typeof vi.fn>};
 
   beforeEach(() => {
     mockOutputChannel = {
@@ -32,6 +50,19 @@ describe('Logger', () => {
     (vi.mocked(vscode.window.createOutputChannel) as unknown as {
       mockReturnValue: (value: vscode.OutputChannel) => void;
     }).mockReturnValue(mockOutputChannel);
+
+    mockConfig = {
+      get: vi.fn((key: string, defaultValue?: unknown) => {
+        if (key === 'logLevel') {
+          return defaultValue ?? 'info';
+        }
+        return defaultValue;
+      }),
+    };
+
+    vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
+      mockConfig as unknown as vscode.WorkspaceConfiguration
+    );
 
     mockContext = {
       subscriptions: [] as vscode.Disposable[],
@@ -136,32 +167,89 @@ describe('Logger', () => {
   });
 
   describe('debug', () => {
-    it('should log debug message in development mode', () => {
-      const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'development';
-
+    it('should log debug message when log level is debug', () => {
+      mockConfig.get.mockReturnValue('debug');
       Logger.initialize(mockContext);
       Logger.debug('Test debug message');
 
       expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
         expect.stringContaining('[DEBUG]')
       );
-
-      process.env.NODE_ENV = originalEnv;
     });
 
-    it('should not log debug message in production mode', () => {
-      const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'production';
-
+    it('should not log debug message when log level is info', () => {
+      mockConfig.get.mockReturnValue('info');
       Logger.initialize(mockContext);
       Logger.debug('Test debug message');
 
       expect(mockOutputChannel.appendLine).not.toHaveBeenCalledWith(
         expect.stringContaining('[DEBUG]')
       );
+    });
 
-      process.env.NODE_ENV = originalEnv;
+    it('should not log debug message when log level is warn', () => {
+      mockConfig.get.mockReturnValue('warn');
+      Logger.initialize(mockContext);
+      Logger.debug('Test debug message');
+
+      expect(mockOutputChannel.appendLine).not.toHaveBeenCalledWith(
+        expect.stringContaining('[DEBUG]')
+      );
+    });
+
+    it('should not log debug message when log level is error', () => {
+      mockConfig.get.mockReturnValue('error');
+      Logger.initialize(mockContext);
+      Logger.debug('Test debug message');
+
+      expect(mockOutputChannel.appendLine).not.toHaveBeenCalledWith(
+        expect.stringContaining('[DEBUG]')
+      );
+    });
+  });
+
+  describe('log level filtering', () => {
+    it('should filter messages based on log level setting', () => {
+      mockConfig.get.mockReturnValue('error');
+      Logger.initialize(mockContext);
+
+      Logger.error('Error message');
+      Logger.warn('Warning message');
+      Logger.info('Info message');
+      Logger.debug('Debug message');
+
+      // Only error should be logged
+      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
+        expect.stringContaining('[ERROR]')
+      );
+      expect(mockOutputChannel.appendLine).not.toHaveBeenCalledWith(
+        expect.stringContaining('[WARN]')
+      );
+      expect(mockOutputChannel.appendLine).not.toHaveBeenCalledWith(
+        expect.stringContaining('[INFO]')
+      );
+      expect(mockOutputChannel.appendLine).not.toHaveBeenCalledWith(
+        expect.stringContaining('[DEBUG]')
+      );
+    });
+
+    it('should log warn and error when log level is warn', () => {
+      mockConfig.get.mockReturnValue('warn');
+      Logger.initialize(mockContext);
+
+      Logger.error('Error message');
+      Logger.warn('Warning message');
+      Logger.info('Info message');
+
+      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
+        expect.stringContaining('[ERROR]')
+      );
+      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
+        expect.stringContaining('[WARN]')
+      );
+      expect(mockOutputChannel.appendLine).not.toHaveBeenCalledWith(
+        expect.stringContaining('[INFO]')
+      );
     });
   });
 
