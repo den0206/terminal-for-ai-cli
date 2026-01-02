@@ -8,10 +8,17 @@ const CONTAINER_COMMAND = 'workbench.view.extension.terminal-for-ai-cli';
 
 /**
  * Activates the Terminal For AI CLI extension.
- * Initializes the logger, session manager, and webview provider.
- * Registers commands and sets up event handlers.
  *
- * @param context - The extension context provided by VS Code
+ * This is the main entry point for the extension. It performs the following initialization:
+ * 1. Initializes the centralized logging system
+ * 2. Creates the session manager for terminal process management
+ * 3. Creates the webview provider for UI rendering
+ * 4. Registers VS Code commands (focus, new session, cleanup images)
+ * 5. Sets up automatic cleanup of orphaned images on startup
+ *
+ * All resources are registered as disposables to ensure proper cleanup on deactivation.
+ *
+ * @param context - The extension context provided by VS Code, used for managing subscriptions and storage
  */
 export function activate(context: vscode.ExtensionContext) {
   // Initialize logger first
