@@ -3,7 +3,16 @@ import {SessionManager} from './terminal/sessionManager';
 import {Logger} from './utils/logger';
 import {AiTerminalViewProvider} from './view/aiTerminalViewProvider';
 
+/**
+ * View ID for the Terminal For AI CLI webview
+ * @internal
+ */
 const VIEW_ID = 'terminal-for-ai-cli-view';
+
+/**
+ * Command ID to open the Terminal For AI CLI container in the activity bar
+ * @internal
+ */
 const CONTAINER_COMMAND = 'workbench.view.extension.terminal-for-ai-cli';
 
 /**
@@ -19,6 +28,18 @@ const CONTAINER_COMMAND = 'workbench.view.extension.terminal-for-ai-cli';
  * All resources are registered as disposables to ensure proper cleanup on deactivation.
  *
  * @param context - The extension context provided by VS Code, used for managing subscriptions and storage
+ *
+ * @example
+ * ```typescript
+ * // This function is automatically called by VS Code when the extension is activated
+ * activate(context);
+ * ```
+ *
+ * @remarks
+ * The extension is activated when:
+ * - The user opens the Terminal For AI CLI view
+ * - Any registered command is executed
+ * - On VS Code startup (if configured in package.json)
  */
 export function activate(context: vscode.ExtensionContext) {
   // Initialize logger first
@@ -74,8 +95,23 @@ export function activate(context: vscode.ExtensionContext) {
 
 /**
  * Deactivates the Terminal For AI CLI extension.
- * Cleanup is handled automatically by disposables registered in activate().
+ *
+ * This function is called when the extension is deactivated (e.g., VS Code is closing
+ * or the extension is being disabled). Cleanup is handled automatically by disposables
+ * registered in the activate() function.
+ *
+ * @remarks
+ * All disposables (SessionManager, AiTerminalViewProvider, commands, etc.) are
+ * automatically disposed when the extension context is disposed, so no manual
+ * cleanup is needed here.
+ *
+ * @example
+ * ```typescript
+ * // This function is automatically called by VS Code when the extension is deactivated
+ * deactivate();
+ * ```
  */
 export function deactivate() {
-  // handled by disposables registered in activate()
+  // Cleanup is handled automatically by disposables registered in activate()
+  // No manual cleanup needed here
 }

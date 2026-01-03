@@ -50,7 +50,26 @@ function resolveSignal(signalCode?: number): NodeJS.Signals | null {
 
 /**
  * Represents a single shell session with a PTY process.
- * Handles process lifecycle, input/output, and cleanup.
+ *
+ * This class encapsulates a PTY (pseudo-terminal) process and provides methods
+ * for interacting with it. Each session has a unique ID and manages its own
+ * PTY lifecycle, including graceful termination with SIGTERM/SIGKILL.
+ *
+ * @remarks
+ * The session uses a two-phase termination process:
+ * 1. Send SIGTERM to allow graceful shutdown
+ * 2. If process doesn't exit within grace period, send SIGKILL
+ *
+ * On Windows, uses `taskkill /F /T` to terminate the entire process tree.
+ * On Unix-like systems, sends signals to the process group (negative PID).
+ *
+ * @example
+ * ```typescript
+ * const session = new ShellSession('session-123', ptyProcess);
+ * session.write('ls -la\r');
+ * session.resize(120, 30);
+ * session.dispose(); // Cleanup when done
+ * ```
  */
 class ShellSession implements vscode.Disposable {
   private killTimer?: NodeJS.Timeout;
@@ -97,7 +116,22 @@ class ShellSession implements vscode.Disposable {
 
   /**
    * Disposes the session and kills the associated process tree.
-   * Safe to call multiple times.
+   *
+   * This method ensures proper cleanup of the PTY process and its children:
+   * - On Unix: Sends SIGTERM to process group, then SIGKILL after grace period
+   * - On Windows: Uses taskkill /F /T to terminate the entire process tree
+   *
+   * Safe to call multiple times - subsequent calls are no-ops.
+   *
+   * @remarks
+   * The grace period before SIGKILL is controlled by PROCESS_TERMINATION.SIGKILL_DELAY_MS
+   * (default: 2000ms). This allows processes to clean up resources before forced termination.
+   *
+   * @example
+   * ```typescript
+   * session.dispose(); // First call terminates the process
+   * session.dispose(); // Subsequent calls do nothing
+   * ```
    */
   dispose() {
     if (this.disposed) {
