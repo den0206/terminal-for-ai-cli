@@ -1,0 +1,109 @@
+name: Pull Request Check
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  pr-validation:
+    name: PR Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build extension
+        run: npm run compile
+
+      - name: Check for TODO/FIXME comments
+        run: |
+          if git grep -n "TODO\|FIXME\|XXX\|HACK" -- ':!*.md' ':!.github/*' ':!IMPROVEMENTS*.md'; then
+            echo "⚠️ Warning: Found TODO/FIXME comments. Consider addressing them."
+          else
+            echo "✓ No TODO/FIXME comments found"
+          fi
+        continue-on-error: true
+
+      - name: Check bundle size
+        run: |
+          EXTENSION_SIZE=$(stat -f%z "dist/extension.js" 2>/dev/null || stat -c%s "dist/extension.js")
+          WEBVIEW_SIZE=$(stat -f%z "media/webview.js" 2>/dev/null || stat -c%s "media/webview.js")
+
+          echo "📦 Bundle sizes:"
+          echo "  - extension.js: $(numfmt --to=iec-i --suffix=B $EXTENSION_SIZE 2>/dev/null || echo "${EXTENSION_SIZE} bytes")"
+          echo "  - webview.js: $(numfmt --to=iec-i --suffix=B $WEBVIEW_SIZE 2>/dev/null || echo "${WEBVIEW_SIZE} bytes")"
+
+          # Warn if extension bundle is > 1MB
+          if [ $EXTENSION_SIZE -gt 1048576 ]; then
+            echo "⚠️ Warning: extension.js is larger than 1MB"
+          fi
+
+          # Warn if webview bundle is > 500KB
+          if [ $WEBVIEW_SIZE -gt 512000 ]; then
+            echo "⚠️ Warning: webview.js is larger than 500KB"
+          fi
+        shell: bash
+        continue-on-error: true
+
+      - name: Comment PR with results
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const extensionSize = fs.statSync('dist/extension.js').size;
+            const webviewSize = fs.statSync('media/webview.js').size;
+
+            const formatBytes = (bytes) => {
+              if (bytes === 0) return '0 Bytes';
+              const k = 1024;
+              const sizes = ['Bytes', 'KB', 'MB'];
+              const i = Math.floor(Math.log(bytes) / Math.log(k));
+              return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+            };
+
+            const body = `## 🔍 Build Check Results
+
+            ### 📦 Bundle Sizes
+            - \`extension.js\`: ${formatBytes(extensionSize)}
+            - \`webview.js\`: ${formatBytes(webviewSize)}
+
+            ### ✅ Status
+            - ESLint: Passed
+            - TypeScript Compilation: Passed
+            - Tests: Passed
+            - Build: Successful
+
+            ${extensionSize > 1048576 ? '⚠️ **Warning:** extension.js exceeds 1MB\n' : ''}
+            ${webviewSize > 512000 ? '⚠️ **Warning:** webview.js exceeds 500KB\n' : ''}
+            `;
+
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+        continue-on-error: true
+
