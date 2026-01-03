@@ -139,8 +139,54 @@ type InboundMessage =
 
 /**
  * Provides the webview view for Terminal For AI CLI.
- * Manages communication between the extension host and webview,
- * handles session lifecycle, theme management, and image handling.
+ *
+ * This class is the main bridge between the VS Code extension host and the webview UI.
+ * It manages the complete lifecycle of terminal sessions, handles bidirectional
+ * communication with the webview, and coordinates theme management, image handling,
+ * and session state.
+ *
+ * ## Responsibilities
+ * - Webview lifecycle management (creation, disposal, message routing)
+ * - Session lifecycle management (creation, disposal, cleanup)
+ * - Theme management (preset selection, application, synchronization)
+ * - Image handling (drag & drop, storage, cleanup)
+ * - Configuration validation and monitoring
+ * - Message queue management for webview communication
+ *
+ * ## Architecture
+ * The provider uses a message-based architecture:
+ * - **Inbound messages** (Webview → Extension): User actions, terminal input, resize events
+ * - **Outbound messages** (Extension → Webview): Session data, events, theme updates
+ *
+ * Messages are queued when the webview is not ready and flushed on initialization.
+ *
+ * ## Message Flow
+ * ```
+ * User Action → Webview → InboundMessage → handleMessage() → SessionManager
+ *                                                           → Update state
+ *                                                           → OutboundMessage → Webview
+ * ```
+ *
+ * @remarks
+ * - The provider maintains session labels (e.g., "Terminal 1", "Terminal 2") that
+ *   intelligently reuse freed numbers when sessions are closed.
+ * - Images dropped into the terminal are saved to global storage and tracked per session
+ *   for automatic cleanup on session disposal.
+ * - Performance monitoring can be enabled via settings to log warnings about queue size
+ *   and session count.
+ *
+ * @example
+ * ```typescript
+ * const provider = new AiTerminalViewProvider(context, sessionManager);
+ * context.subscriptions.push(
+ *   vscode.window.registerWebviewViewProvider(VIEW_ID, provider, {
+ *     webviewOptions: { retainContextWhenHidden: true }
+ *   })
+ * );
+ * ```
+ *
+ * @see {@link SessionManager} for terminal process management
+ * @see {@link buildWebviewHtml} for HTML template generation
  */
 export class AiTerminalViewProvider
   implements vscode.WebviewViewProvider, vscode.Disposable
@@ -198,6 +244,30 @@ export class AiTerminalViewProvider
     );
   }
 
+  /**
+   * Disposes the provider and cleans up all resources.
+   *
+   * This method ensures complete cleanup of:
+   * - All event listeners and disposables
+   * - Session label mappings
+   * - Session image tracking
+   * - Queued messages
+   * - Webview references
+   *
+   * Safe to call multiple times - subsequent calls are no-ops.
+   *
+   * @remarks
+   * This method is automatically called by VS Code when the extension is deactivated
+   * or when the provider is explicitly disposed. All subscriptions registered via
+   * `context.subscriptions.push()` will also be disposed.
+   *
+   * @example
+   * ```typescript
+   * const provider = new AiTerminalViewProvider(context, sessionManager);
+   * // ... use provider ...
+   * provider.dispose(); // Cleanup when done
+   * ```
+   */
   dispose() {
     vscode.Disposable.from(...this.disposables).dispose();
     this.sessionLabels.clear();
@@ -210,9 +280,30 @@ export class AiTerminalViewProvider
 
   /**
    * Resolves the webview view when it becomes visible.
-   * Sets up the webview HTML and message handlers.
    *
-   * @param webviewView - The webview view instance
+   * This method is called by VS Code when the webview view is first shown.
+   * It performs the following initialization:
+   * 1. Configures webview options (scripts enabled, resource roots)
+   * 2. Generates and sets the HTML content with CSP nonce
+   * 3. Sets up message listener for bidirectional communication
+   * 4. Resets internal state flags for fresh initialization
+   *
+   * The webview is not considered "ready" until it sends a 'webview-ready' message,
+   * at which point queued messages are flushed and initial session creation begins.
+   *
+   * @param webviewView - The webview view instance provided by VS Code
+   *
+   * @remarks
+   * The `retainContextWhenHidden: true` option (set during registration) ensures
+   * that the webview maintains its state when hidden, avoiding unnecessary reloads.
+   *
+   * @example
+   * ```typescript
+   * // This method is automatically called by VS Code
+   * vscode.window.registerWebviewViewProvider(VIEW_ID, provider, {
+   *   webviewOptions: { retainContextWhenHidden: true }
+   * });
+   * ```
    */
   resolveWebviewView(webviewView: vscode.WebviewView) {
     this.webviewView = webviewView;
@@ -235,6 +326,20 @@ export class AiTerminalViewProvider
 
   /**
    * Reveals the webview view in the sidebar.
+   *
+   * Brings the Terminal For AI CLI view into focus, making it visible in the
+   * activity bar's secondary sidebar. If the view is already visible, this
+   * ensures it has focus.
+   *
+   * @remarks
+   * This method is typically called from the 'terminal-for-ai-cli.focus' command.
+   * The `show(true)` parameter preserves focus on the webview.
+   *
+   * @example
+   * ```typescript
+   * // Programmatically show the terminal view
+   * provider.reveal();
+   * ```
    */
   reveal() {
     if (this.webviewView) {
@@ -244,7 +349,29 @@ export class AiTerminalViewProvider
 
   /**
    * Creates a new terminal session.
-   * Called from the command palette or programmatically.
+   *
+   * This is a public API method that can be called from command palette
+   * or programmatically. It delegates to the internal `handleSessionRequest()`
+   * method which performs validation and session creation.
+   *
+   * @remarks
+   * - Checks session limit (MAX_SESSIONS) before creating
+   * - Validates configuration (shell path, startup commands)
+   * - Creates session with appropriate dimensions from webview
+   * - Updates UI state and notifies webview on success/failure
+   *
+   * @example
+   * ```typescript
+   * // From command palette
+   * vscode.commands.registerCommand('terminal-for-ai-cli.newSession', () => {
+   *   provider.newSession();
+   * });
+   *
+   * // Programmatically
+   * provider.newSession();
+   * ```
+   *
+   * @see {@link handleSessionRequest} for implementation details
    */
   newSession() {
     this.handleSessionRequest();
@@ -1089,16 +1216,47 @@ export class AiTerminalViewProvider
   }
 
   /**
-   * Validates configuration values and corrects invalid settings.
+   * Validates configuration values and logs warnings for invalid settings.
    *
-   * Checks and validates:
-   * - Shell path (if configured)
-   * - Startup commands
-   * - Theme preset
+   * This method is called during initialization and when configuration changes.
+   * It performs comprehensive validation of all extension settings:
    *
-   * Invalid values are logged and corrected automatically where possible.
+   * - **Shell path** (`aiTerminal.defaultShell`):
+   *   - Must be an absolute path
+   *   - Must exist and be executable
+   *   - Falls back to default shell if invalid
+   *
+   * - **Startup commands** (`aiTerminal.startupCommands`):
+   *   - Must be an array of strings
+   *   - Dangerous commands (rm -rf, fork bombs) trigger warnings but are not blocked
+   *   - Invalid commands are filtered out
+   *
+   * - **Theme preset** (`aiTerminal.themePreset`):
+   *   - Must be one of the predefined preset keys
+   *   - Falls back to "modern" if invalid
+   *
+   * - **Log level** (`aiTerminal.logLevel`):
+   *   - Must be one of: error, warn, info, debug
+   *   - Falls back to "info" if invalid
+   *
+   * @remarks
+   * This method does not modify configuration - it only validates and logs warnings.
+   * Actual fallback to safe defaults happens at runtime when values are used.
    *
    * @private
+   *
+   * @example
+   * ```typescript
+   * // Called automatically during initialization
+   * this.validateConfiguration();
+   *
+   * // Called when configuration changes
+   * vscode.workspace.onDidChangeConfiguration((event) => {
+   *   if (event.affectsConfiguration('aiTerminal')) {
+   *     this.validateConfiguration();
+   *   }
+   * });
+   * ```
    */
   private validateConfiguration(): void {
     const config = vscode.workspace.getConfiguration('aiTerminal');
@@ -1149,11 +1307,37 @@ export class AiTerminalViewProvider
   /**
    * Generates the HTML content for the webview.
    *
-   * Builds the HTML template with CSP nonce, theme configuration, and resource URIs.
+   * Builds a complete HTML document with:
+   * - Content Security Policy (CSP) with nonce for script execution
+   * - Theme configuration (palette, presets, active selection)
+   * - Resource URIs (webview.js, xterm.css, icon)
+   * - Inline styles for custom theming
+   *
+   * The generated HTML includes:
+   * - Terminal display area with xterm.js integration
+   * - Session management controls (add, remove, select)
+   * - Theme selector dropdown
+   * - Split view toggle
+   * - Resize handles
    *
    * @param webview - The webview instance to generate HTML for
    * @returns The complete HTML string for the webview
+   *
+   * @remarks
+   * - Uses CSP nonce to prevent XSS attacks while allowing inline scripts
+   * - All resource URIs are converted to webview URIs for security
+   * - Theme values are embedded directly to avoid flash of unstyled content
+   *
    * @private
+   *
+   * @example
+   * ```typescript
+   * const webview = webviewView.webview;
+   * webview.html = this.getHtml(webview);
+   * ```
+   *
+   * @see {@link buildWebviewHtml} for HTML template generation
+   * @see {@link getNonce} for CSP nonce generation
    */
   private getHtml(webview: vscode.Webview): string {
     const nonce = getNonce();
