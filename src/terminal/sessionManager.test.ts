@@ -112,7 +112,8 @@ describe('SessionManager', () => {
     });
 
     it('should create a session with custom shell', () => {
-      const customShell = '/bin/zsh';
+      // Use /bin/sh which exists on all Unix-like systems including CI environments
+      const customShell = '/bin/sh';
       const info = sessionManager.createSession({shell: customShell});
 
       expect(info.shell).toBe(customShell);
