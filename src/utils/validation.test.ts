@@ -1,4 +1,6 @@
 import {describe, expect, it} from 'vitest';
+import {isAbsolute} from 'node:path';
+import {tmpdir} from 'node:os';
 import {
   getDefaultShell,
   validateShellPath,
@@ -44,7 +46,8 @@ describe('validation', () => {
 
     it('should return an absolute path', () => {
       const shell = getDefaultShell();
-      expect(shell.startsWith('/')).toBe(true);
+      // Use Node's path.isAbsolute to check for absolute paths on any platform
+      expect(isAbsolute(shell)).toBe(true);
     });
   });
 
@@ -97,10 +100,10 @@ describe('validation', () => {
     });
 
     it('should return absolute path for valid directories', () => {
-      // Test with /tmp which should exist on Unix systems
-      const result = validateWorkingDirectory('/tmp');
+      // Use os.tmpdir() which works on all platforms (Unix: /tmp, Windows: C:\Users\...\Temp)
+      const result = validateWorkingDirectory(tmpdir());
       expect(result).toBeTruthy();
-      expect(result?.startsWith('/')).toBe(true);
+      expect(isAbsolute(result!)).toBe(true);
     });
 
     it('should reject files (only directories allowed)', () => {
