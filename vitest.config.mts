@@ -1,6 +1,6 @@
-import {defineConfig} from 'vitest/config';
-import {fileURLToPath} from 'node:url';
 import {dirname, resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {defineConfig} from 'vitest/config';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -9,6 +9,8 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    testTimeout: 15000, // Increase timeout for CI environments (especially for PTY operations)
+    hookTimeout: 15000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

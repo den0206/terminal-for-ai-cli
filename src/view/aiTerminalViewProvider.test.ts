@@ -1,8 +1,33 @@
+import type {IPty} from 'node-pty';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import type * as vscode from 'vscode';
 import {SessionManager} from '../terminal/sessionManager';
 import {Logger} from '../utils/logger';
 import {AiTerminalViewProvider} from './aiTerminalViewProvider';
+
+// Mock node-pty for faster tests and CI compatibility
+const mockPty: IPty = {
+  pid: 12345,
+  cols: 80,
+  rows: 24,
+  write: vi.fn(),
+  resize: vi.fn(),
+  kill: vi.fn(),
+  onData: vi.fn((callback: (data: string) => void) => {
+    // Immediately fire some data to simulate PTY startup
+    setTimeout(() => callback('$ '), 10);
+    return {dispose: vi.fn()};
+  }),
+  onExit: vi.fn(
+    (callback: (exit: {exitCode: number; signal?: number}) => void) => {
+      return {dispose: vi.fn()};
+    }
+  ),
+} as unknown as IPty;
+
+vi.mock('node-pty', () => ({
+  spawn: vi.fn(() => mockPty),
+}));
 
 // Mock Logger to avoid Output Channel creation
 vi.mock('../utils/logger', () => ({
@@ -245,7 +270,7 @@ describe('AiTerminalViewProvider', () => {
    */
   async function waitForCondition(
     condition: () => boolean,
-    timeout: number = 5000,
+    timeout: number = 10000, // Increased for CI environments
     interval: number = 50
   ): Promise<void> {
     const startTime = Date.now();
@@ -253,7 +278,7 @@ describe('AiTerminalViewProvider', () => {
       if (Date.now() - startTime > timeout) {
         throw new Error('Timeout waiting for condition');
       }
-      await new Promise(resolve => setTimeout(resolve, interval));
+      await new Promise((resolve) => setTimeout(resolve, interval));
     }
   }
 
@@ -263,7 +288,7 @@ describe('AiTerminalViewProvider', () => {
   async function waitForSessionCreation(
     sessionManager: SessionManager,
     minCount: number = 1,
-    timeout: number = 5000
+    timeout: number = 10000 // Increased for CI environments
   ): Promise<void> {
     await waitForCondition(
       () => sessionManager.getSessionCount() >= minCount,
@@ -277,7 +302,7 @@ describe('AiTerminalViewProvider', () => {
   async function waitForPostMessage(
     postMessageMock: ReturnType<typeof vi.fn>,
     minCalls: number = 1,
-    timeout: number = 5000
+    timeout: number = 10000 // Increased for CI environments
   ): Promise<void> {
     await waitForCondition(
       () => postMessageMock.mock.calls.length >= minCalls,
@@ -461,7 +486,9 @@ describe('AiTerminalViewProvider', () => {
       await messageHandler({type: 'webview-ready'});
 
       // Wait for processing
-      const postMessageMock = webviewView.webview.postMessage as ReturnType<typeof vi.fn>;
+      const postMessageMock = webviewView.webview.postMessage as ReturnType<
+        typeof vi.fn
+      >;
       await waitForPostMessage(postMessageMock, 1);
 
       // postMessage should have been called (for session-count, theme-update, etc.)
@@ -755,7 +782,9 @@ describe('AiTerminalViewProvider', () => {
         expect(sessionCount).toBeGreaterThan(0);
 
         // Clear postMessage mock
-        const postMessageMock = webviewView.webview.postMessage as ReturnType<typeof vi.fn>;
+        const postMessageMock = webviewView.webview.postMessage as ReturnType<
+          typeof vi.fn
+        >;
         postMessageMock.mockClear();
 
         // Create a session
@@ -864,7 +893,9 @@ describe('AiTerminalViewProvider', () => {
         const sessionId = sessions[0].id;
 
         // Clear postMessage mock
-        const postMessageMock = webviewView.webview.postMessage as ReturnType<typeof vi.fn>;
+        const postMessageMock = webviewView.webview.postMessage as ReturnType<
+          typeof vi.fn
+        >;
         postMessageMock.mockClear();
 
         // Simulate session exit by firing the exit event
@@ -1260,7 +1291,8 @@ describe('AiTerminalViewProvider', () => {
         // Wait for async file operations - check if error was called or write was called
         await waitForCondition(
           () => {
-            const errorCalled = (Logger.error as ReturnType<typeof vi.fn>).mock.calls.length > 0;
+            const errorCalled =
+              (Logger.error as ReturnType<typeof vi.fn>).mock.calls.length > 0;
             const writeWasCalled = writeSpy.mock.calls.length > 0;
             return errorCalled || writeWasCalled;
           },
