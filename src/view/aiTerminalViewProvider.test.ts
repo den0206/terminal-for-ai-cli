@@ -19,7 +19,7 @@ const mockPty: IPty = {
     return {dispose: vi.fn()};
   }),
   onExit: vi.fn(
-    (callback: (exit: {exitCode: number; signal?: number}) => void) => {
+    (_callback: (exit: {exitCode: number; signal?: number}) => void) => {
       return {dispose: vi.fn()};
     }
   ),
@@ -225,7 +225,7 @@ describe('AiTerminalViewProvider', () => {
     // Wrap provider creation in try-catch to handle initialization errors
     try {
       provider = new AiTerminalViewProvider(context, sessionManager);
-    } catch (error) {
+    } catch {
       // If provider creation fails, set to undefined
       provider = undefined as unknown as AiTerminalViewProvider;
     }
@@ -411,8 +411,6 @@ describe('AiTerminalViewProvider', () => {
       provider.newSession();
       await waitForSessionCreation(sessionManager, 2);
 
-      const sessionCount = sessionManager.getSessionCount();
-
       // Try to create one more
       provider.newSession();
       // Give some time but should not exceed limit
@@ -561,8 +559,6 @@ describe('AiTerminalViewProvider', () => {
         payload: {cols: 80, rows: 24},
       });
       await new Promise((resolve) => setTimeout(resolve, 100));
-
-      const limitCount = sessionManager.getSessionCount();
 
       // Try to exceed limit
       await messageHandler({

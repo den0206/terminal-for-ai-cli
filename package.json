@@ -16,6 +16,9 @@
   "categories": [
     "Other"
   ],
+  "activationEvents": [
+    "onView:terminal-for-ai-cli-view"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
