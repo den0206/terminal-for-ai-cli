@@ -1,5 +1,10 @@
 import {Constants} from './constants';
-import {validateTerminalHeight, clampSplitRatio} from './utils';
+import {
+  validateTerminalHeight,
+  clampSplitRatio,
+  debounce,
+  type CancellableFunction,
+} from './utils';
 import type {
   SessionMeta,
   ViewState,
@@ -18,6 +23,7 @@ export class SessionStateManager {
   private _sessionMeta: Record<string, SessionMeta> = {};
   private _totalSessions = 0;
   private readonly _buffers = new Map<string, string>();
+  private readonly _debouncedCleanup: CancellableFunction<() => void>;
 
   constructor(savedState: ViewState) {
     this._activeSessionId = savedState.activeSessionId;
@@ -38,6 +44,13 @@ export class SessionStateManager {
         this._sessionMeta[id] ??
         ({shell: 'Shell', label: `Terminal ${index + 1}`} as SessionMeta);
     });
+
+    // Debounce buffer cleanup to avoid performance issues during high-frequency updates
+    // Cleanup runs 300ms after the last appendToBuffer call
+    // This is short enough to be responsive but long enough to batch rapid updates
+    this._debouncedCleanup = debounce(() => {
+      this.cleanupOldBuffers();
+    }, 300);
   }
 
   get activeSessionId(): string | undefined {
@@ -90,6 +103,8 @@ export class SessionStateManager {
   }
 
   clearAll(): void {
+    // Cancel pending cleanup operations
+    this._debouncedCleanup.cancel();
     this._sessionIds = [];
     this._sessionMeta = {};
     this._activeSessionId = undefined;
@@ -117,7 +132,8 @@ export class SessionStateManager {
       next = next.slice(next.length - Constants.MAX_BUFFER_SIZE);
     }
     this._buffers.set(sessionId, next);
-    this.cleanupOldBuffers();
+    // Use debounced cleanup to avoid performance issues during high-frequency updates
+    this._debouncedCleanup();
   }
 
   getBuffer(sessionId: string): string | undefined {

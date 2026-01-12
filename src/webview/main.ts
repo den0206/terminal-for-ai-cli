@@ -98,6 +98,8 @@ class TerminalManager {
     if (root) {
       terminal.open(root);
     }
+    // Note: terminal.onData() returns IDisposable, but Terminal.dispose()
+    // automatically cleans up all event listeners, so we don't need to track it
     terminal.onData((data) => {
       const sessionId = this.uiState.paneSessions[pane];
       if (sessionId) {
@@ -183,6 +185,8 @@ class TerminalManager {
     const context = this.paneContexts[pane];
     if (context) {
       try {
+        // Dispose addon first, then terminal
+        // Terminal.dispose() automatically cleans up all event listeners
         context.fitAddon.dispose();
         context.terminal.dispose();
       } catch (error) {
@@ -231,6 +235,12 @@ class AppController {
   private readonly terminalManager: TerminalManager;
   private readonly throttledResize: CancellableFunction<() => void>;
   private readonly debouncedResize: CancellableFunction<() => void>;
+  // Store event listener references for proper cleanup
+  private readonly _eventListeners: Array<{
+    target: EventTarget;
+    event: string;
+    handler: EventListener;
+  }> = [];
 
   constructor() {
     this.vscode = acquireVsCodeApi<ViewState>();
@@ -263,6 +273,8 @@ class AppController {
     this.initialize();
 
     // Cleanup on page unload to prevent memory leaks
+    // Note: This listener is intentionally not tracked in _eventListeners
+    // because it's the one responsible for cleanup itself
     window.addEventListener('beforeunload', () => {
       this.cleanup();
     });
@@ -277,11 +289,29 @@ class AppController {
     this.throttledResize.cancel();
     this.debouncedResize.cancel();
 
+    // Remove all event listeners
+    for (const {target, event, handler} of this._eventListeners) {
+      target.removeEventListener(event, handler);
+    }
+    this._eventListeners.length = 0;
+
     // Dispose all terminal instances
     this.terminalManager.disposeAll();
 
     // Clear session buffers
     this.sessionState.clearAll();
+  }
+
+  /**
+   * Helper method to add event listeners with automatic cleanup tracking
+   */
+  private addEventListener(
+    target: EventTarget,
+    event: string,
+    handler: EventListener
+  ): void {
+    target.addEventListener(event, handler);
+    this._eventListeners.push({target, event, handler});
   }
 
   private initialize(): void {
@@ -304,95 +334,111 @@ class AppController {
   }
 
   private setupEventListeners(): void {
-    window.addEventListener(
+    this.addEventListener(
+      window,
       'message',
-      (event: MessageEvent<InboundMessage>) => {
-        this.handleMessage(event.data);
+      (event: Event) => {
+        const messageEvent = event as MessageEvent<InboundMessage>;
+        this.handleMessage(messageEvent.data);
       }
     );
 
-    this.dom.addSessionButton?.addEventListener('click', () => {
-      this.requestNewSession();
-    });
-
-    this.dom.viewToggleButton?.addEventListener('click', () => {
-      if (this.dom.viewToggleButton?.disabled) {
-        return;
-      }
-      if (
-        this.uiState.viewMode === 'single' &&
-        this.sessionState.sessionIds.length < 2
-      ) {
-        this.setStatus('Add a second session to enable split view.');
-        return;
-      }
-      this.setViewMode(
-        this.uiState.viewMode === 'single' ? 'split' : 'single'
-      );
-    });
-
-    this.dom.removeSessionButton?.addEventListener('click', () => {
-      if (
-        !this.sessionState.activeSessionId ||
-        this.uiState.pendingSessionRequest
-      ) {
-        return;
-      }
-      this.setStatus('Ending session...');
-      this.updateSessionControls();
-      this.vscode.postMessage<OutboundMessage>({
-        type: 'dispose-session',
-        payload: {sessionId: this.sessionState.activeSessionId},
+    if (this.dom.addSessionButton) {
+      this.addEventListener(this.dom.addSessionButton, 'click', () => {
+        this.requestNewSession();
       });
-    });
+    }
 
-    this.dom.clearAllButton?.addEventListener('click', () => {
-      if (
-        this.uiState.pendingSessionRequest ||
-        this.uiState.clearingAll ||
-        this.sessionState.sessionIds.length === 0
-      ) {
-        return;
-      }
-      if (!this.uiState.confirmingClearAll) {
-        this.uiState.confirmingClearAll = true;
-        this.toggleClearAllConfirm(true);
-      }
-    });
+    if (this.dom.viewToggleButton) {
+      this.addEventListener(this.dom.viewToggleButton, 'click', () => {
+        if (this.dom.viewToggleButton?.disabled) {
+          return;
+        }
+        if (
+          this.uiState.viewMode === 'single' &&
+          this.sessionState.sessionIds.length < 2
+        ) {
+          this.setStatus('Add a second session to enable split view.');
+          return;
+        }
+        this.setViewMode(
+          this.uiState.viewMode === 'single' ? 'split' : 'single'
+        );
+      });
+    }
 
-    this.dom.clearAllConfirmAccept?.addEventListener('click', () => {
-      if (
-        this.uiState.pendingSessionRequest ||
-        this.uiState.clearingAll ||
-        this.sessionState.sessionIds.length === 0
-      ) {
-        return;
-      }
-      this.uiState.confirmingClearAll = false;
-      this.toggleClearAllConfirm(false);
-      this.uiState.clearingAll = true;
-      this.setStatus('Clearing all sessions...');
-      this.updateSessionControls();
-      this.vscode.postMessage<OutboundMessage>({type: 'dispose-all-sessions'});
-    });
+    if (this.dom.removeSessionButton) {
+      this.addEventListener(this.dom.removeSessionButton, 'click', () => {
+        if (
+          !this.sessionState.activeSessionId ||
+          this.uiState.pendingSessionRequest
+        ) {
+          return;
+        }
+        this.setStatus('Ending session...');
+        this.updateSessionControls();
+        this.vscode.postMessage<OutboundMessage>({
+          type: 'dispose-session',
+          payload: {sessionId: this.sessionState.activeSessionId},
+        });
+      });
+    }
 
-    this.dom.clearAllConfirmCancel?.addEventListener('click', () => {
-      this.uiState.confirmingClearAll = false;
-      this.toggleClearAllConfirm(false);
-    });
+    if (this.dom.clearAllButton) {
+      this.addEventListener(this.dom.clearAllButton, 'click', () => {
+        if (
+          this.uiState.pendingSessionRequest ||
+          this.uiState.clearingAll ||
+          this.sessionState.sessionIds.length === 0
+        ) {
+          return;
+        }
+        if (!this.uiState.confirmingClearAll) {
+          this.uiState.confirmingClearAll = true;
+          this.toggleClearAllConfirm(true);
+        }
+      });
+    }
 
-    this.dom.sessionSelect?.addEventListener('change', () => {
-      const nextSessionId = this.dom.sessionSelect?.value;
-      if (!nextSessionId || nextSessionId === this.sessionState.activeSessionId) {
-        return;
-      }
-      this.switchActiveSession(
-        nextSessionId,
-        `Switched to ${this.sessionState.getSessionLabel(nextSessionId)}`
-      );
-    });
+    if (this.dom.clearAllConfirmAccept) {
+      this.addEventListener(this.dom.clearAllConfirmAccept, 'click', () => {
+        if (
+          this.uiState.pendingSessionRequest ||
+          this.uiState.clearingAll ||
+          this.sessionState.sessionIds.length === 0
+        ) {
+          return;
+        }
+        this.uiState.confirmingClearAll = false;
+        this.toggleClearAllConfirm(false);
+        this.uiState.clearingAll = true;
+        this.setStatus('Clearing all sessions...');
+        this.updateSessionControls();
+        this.vscode.postMessage<OutboundMessage>({type: 'dispose-all-sessions'});
+      });
+    }
 
-    window.addEventListener('resize', () => {
+    if (this.dom.clearAllConfirmCancel) {
+      this.addEventListener(this.dom.clearAllConfirmCancel, 'click', () => {
+        this.uiState.confirmingClearAll = false;
+        this.toggleClearAllConfirm(false);
+      });
+    }
+
+    if (this.dom.sessionSelect) {
+      this.addEventListener(this.dom.sessionSelect, 'change', () => {
+        const nextSessionId = this.dom.sessionSelect?.value;
+        if (!nextSessionId || nextSessionId === this.sessionState.activeSessionId) {
+          return;
+        }
+        this.switchActiveSession(
+          nextSessionId,
+          `Switched to ${this.sessionState.getSessionLabel(nextSessionId)}`
+        );
+      });
+    }
+
+    this.addEventListener(window, 'resize', () => {
       this.throttledResize();
       this.debouncedResize();
     });
@@ -405,7 +451,10 @@ class AppController {
   }
 
   private setupResizer(): void {
-    this.dom.resizer?.addEventListener('pointerdown', (event) => {
+    if (!this.dom.resizer) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
       event.preventDefault();
       const pointerId = event.pointerId;
       const startY = event.clientY;
@@ -430,17 +479,22 @@ class AppController {
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', cleanup);
         window.removeEventListener('pointercancel', cleanup);
+        throttledMove.cancel();
         this.persistState();
       };
 
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', cleanup);
       window.addEventListener('pointercancel', cleanup);
-    });
+    };
+    this.addEventListener(this.dom.resizer, 'pointerdown', handlePointerDown);
   }
 
   private setupSplitResizer(): void {
-    this.dom.splitResizer?.addEventListener('pointerdown', (event) => {
+    if (!this.dom.splitResizer) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
       if (!this.uiState.isSplitModeActive()) {
         return;
       }
@@ -473,33 +527,47 @@ class AppController {
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', cleanup);
         window.removeEventListener('pointercancel', cleanup);
+        throttledMove.cancel();
         this.persistState();
       };
 
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', cleanup);
       window.addEventListener('pointercancel', cleanup);
-    });
+    };
+    this.addEventListener(
+      this.dom.splitResizer,
+      'pointerdown',
+      handlePointerDown
+    );
   }
 
   private setupThemeSelect(): void {
-    this.dom.themeSelect?.addEventListener('change', () => {
-      const presetKey = this.dom.themeSelect?.value;
-      if (!presetKey || presetKey === this.themeState.currentThemeKey) {
-        return;
-      }
-      this.vscode.postMessage<OutboundMessage>({
-        type: 'theme-select',
-        payload: {presetKey},
+    if (this.dom.themeSelect) {
+      this.addEventListener(this.dom.themeSelect, 'change', () => {
+        const presetKey = this.dom.themeSelect?.value;
+        if (!presetKey || presetKey === this.themeState.currentThemeKey) {
+          return;
+        }
+        this.vscode.postMessage<OutboundMessage>({
+          type: 'theme-select',
+          payload: {presetKey},
+        });
       });
-    });
+    }
   }
 
   private setupPaneFocus(): void {
     (['primary', 'secondary'] as const).forEach((pane) => {
       const root = this.dom.paneRoots[pane];
-      root?.addEventListener('pointerdown', () => this.handlePaneFocus(pane));
-      root?.addEventListener('focusin', () => this.handlePaneFocus(pane));
+      if (root) {
+        this.addEventListener(root, 'pointerdown', () =>
+          this.handlePaneFocus(pane)
+        );
+        this.addEventListener(root, 'focusin', () =>
+          this.handlePaneFocus(pane)
+        );
+      }
     });
   }
 
@@ -569,8 +637,8 @@ class AppController {
       }
     };
 
-    document.addEventListener('dragover', handleDragOver);
-    document.addEventListener('drop', handleDrop);
+    this.addEventListener(document, 'dragover', handleDragOver);
+    this.addEventListener(document, 'drop', handleDrop);
   }
 
   private handleMessage(message: InboundMessage): void {
