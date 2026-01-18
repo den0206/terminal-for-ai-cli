@@ -4,10 +4,19 @@ on:
   push:
     branches:
       - 'release/**'
+  workflow_dispatch:
+    inputs:
+      electronVersion:
+        description: 'VS Code/Cursor の Electron バージョン（node-pty rebuild 用）'
+        required: true
+        default: '37.7.0'
 
 jobs:
   package:
     runs-on: ubuntu-latest
+    env:
+      # 優先順位: workflow_dispatch inputs > repository variables > fallback
+      ELECTRON_VERSION: ${{ inputs.electronVersion || vars.VSCODE_ELECTRON_VERSION || '37.7.0' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,7 +31,7 @@ jobs:
         run: npm ci
 
       - name: Rebuild node-pty for VS Code Electron runtime
-        run: npm run rebuild:pty -- --electron 37.7.0
+        run: npm run rebuild:pty -- --electron "${ELECTRON_VERSION}"
 
       - name: Build extension
         run: npm run compile

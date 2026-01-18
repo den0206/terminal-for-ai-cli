@@ -6,6 +6,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   test: {
+    // Use worker threads instead of forking processes.
+    // Some sandboxed environments disallow killing forked workers (EPERM).
+    pool: 'threads',
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.ts'],

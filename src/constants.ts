@@ -1,72 +1,57 @@
 /**
- * Global constants for Terminal For AI CLI
+ * Global constants for Terminal For AI CLI (Extension Host)
  *
- * ⚠️ IMPORTANT: When updating these constants, also update the corresponding
- * values in src/webview/lib/constants.ts to maintain consistency.
- * Run `npm test` to verify consistency between extension and webview constants.
+ * Source of truth lives in `src/shared/constants.ts` so the webview bundle and
+ * extension host stay in sync without duplicating raw values.
  */
+
+import { SHARED_CONSTANTS } from './shared/constants';
 
 /**
  * Maximum number of concurrent terminal sessions allowed
  * @see src/webview/lib/constants.ts - Constants.MAX_SESSIONS
  */
-export const MAX_SESSIONS = 2;
+export const MAX_SESSIONS = SHARED_CONSTANTS.MAX_SESSIONS;
 
 /**
  * Maximum size in bytes for image files that can be dropped into the terminal
  * Default: 10MB
  * @see src/webview/lib/constants.ts - Constants.MAX_IMAGE_SIZE_BYTES
  */
-export const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+export const MAX_IMAGE_SIZE_BYTES = SHARED_CONSTANTS.MAX_IMAGE_SIZE_BYTES;
 
 /**
  * Maximum length for image file names to prevent filesystem limits
  */
-export const MAX_IMAGE_FILENAME_LENGTH = 255;
+export const MAX_IMAGE_FILENAME_LENGTH =
+  SHARED_CONSTANTS.MAX_IMAGE_FILENAME_LENGTH;
 
 /**
  * Terminal UI dimension constraints
  * @see src/webview/lib/constants.ts - Constants.MIN_TERMINAL_HEIGHT, MAX_TERMINAL_HEIGHT, DEFAULT_TERMINAL_HEIGHT
  */
-export const TERMINAL_CONSTRAINTS = {
-  MIN_HEIGHT: 220,
-  MAX_HEIGHT: 1000,
-  DEFAULT_HEIGHT: 640,
-  MIN_COLS: 2,
-  MIN_ROWS: 1,
-  DEFAULT_COLS: 80,
-  DEFAULT_ROWS: 24,
-} as const;
+export const TERMINAL_CONSTRAINTS = SHARED_CONSTANTS.TERMINAL_CONSTRAINTS;
 
 /**
  * Webview buffer management
  * @see src/webview/lib/constants.ts - Constants.MAX_BUFFER_SIZE, MAX_BUFFER_COUNT
  */
-export const BUFFER_CONSTRAINTS = {
-  MAX_SIZE: 200_000,
-  MAX_COUNT: 10,
-} as const;
+export const BUFFER_CONSTRAINTS = SHARED_CONSTANTS.BUFFER_CONSTRAINTS;
 
 /**
  * Split view constraints
  * @see src/webview/lib/constants.ts - Constants.MIN_SPLIT_RATIO, MAX_SPLIT_RATIO
  */
-export const SPLIT_VIEW = {
-  MIN_RATIO: 0.2,
-  MAX_RATIO: 0.8,
-  DEFAULT_RATIO: 0.5,
-} as const;
+export const SPLIT_VIEW = SHARED_CONSTANTS.SPLIT_VIEW;
 
 /**
  * Process termination timeouts (in milliseconds)
  */
-export const PROCESS_TERMINATION = {
-  /** Time to wait before sending SIGKILL after SIGTERM */
-  SIGKILL_DELAY_MS: 2000,
-} as const;
+export const PROCESS_TERMINATION = SHARED_CONSTANTS.PROCESS_TERMINATION;
 
 /**
  * Terminal scrollback buffer size (number of lines)
  * @see src/webview/lib/constants.ts - Constants.TERMINAL_SCROLLBACK_LINES
  */
-export const TERMINAL_SCROLLBACK_LINES = 2000;
+export const TERMINAL_SCROLLBACK_LINES =
+  SHARED_CONSTANTS.TERMINAL_SCROLLBACK_LINES;

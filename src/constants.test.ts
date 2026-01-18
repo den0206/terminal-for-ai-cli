@@ -1,101 +1,40 @@
-import {describe, expect, it} from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  BUFFER_CONSTRAINTS,
-  MAX_IMAGE_FILENAME_LENGTH,
-  MAX_IMAGE_SIZE_BYTES,
-  MAX_SESSIONS,
-  SPLIT_VIEW,
-  TERMINAL_CONSTRAINTS,
-  TERMINAL_SCROLLBACK_LINES,
+    BUFFER_CONSTRAINTS,
+    MAX_IMAGE_FILENAME_LENGTH,
+    MAX_IMAGE_SIZE_BYTES,
+    MAX_SESSIONS,
+    SPLIT_VIEW,
+    TERMINAL_CONSTRAINTS,
+    TERMINAL_SCROLLBACK_LINES,
 } from './constants';
 
-// Import webview constants to verify they match
-// Note: This is a dynamic import because webview constants are in a separate bundle
-// We'll read the file directly to compare values
-import * as fs from 'fs';
-import * as path from 'path';
+// Import webview constants (built from shared single source of truth)
+import { Constants as WebviewConstants } from './webview/lib/constants';
 
 describe('Constants', () => {
   describe('Constants consistency check', () => {
     it('should have matching values between extension and webview constants', () => {
-      // Read webview constants file
-      // Use path relative to the src directory (where this test file is located)
-      const srcDir = path.resolve(process.cwd(), 'src');
-      const webviewConstantsPath = path.resolve(
-        srcDir,
-        'webview',
-        'lib',
-        'constants.ts'
+      expect(WebviewConstants.MAX_SESSIONS).toBe(MAX_SESSIONS);
+      expect(WebviewConstants.MAX_IMAGE_SIZE_BYTES).toBe(MAX_IMAGE_SIZE_BYTES);
+      expect(WebviewConstants.TERMINAL_SCROLLBACK_LINES).toBe(
+        TERMINAL_SCROLLBACK_LINES
       );
-      const webviewConstantsContent = fs.readFileSync(
-        webviewConstantsPath,
-        'utf-8'
+      expect(WebviewConstants.MIN_TERMINAL_HEIGHT).toBe(
+        TERMINAL_CONSTRAINTS.MIN_HEIGHT
       );
-
-      // Extract values from webview constants using regex
-      // This is a simple approach - in a real scenario, you might want to parse the AST
-      const extractConstant = (name: string): number | undefined => {
-        // Match patterns like: MAX_SESSIONS: 2, or MAX_IMAGE_SIZE_BYTES: 10 * 1024 * 1024
-        const regex = new RegExp(`${name}:\\s*([^,}]+)`);
-        const match = webviewConstantsContent.match(regex);
-        if (!match) {
-          return undefined;
-        }
-        // Handle expressions like "10 * 1024 * 1024" or "200_000"
-        const value = match[1].trim();
-        // Remove underscores (numeric separators)
-        const cleaned = value.replace(/_/g, '');
-        // Handle simple multiplication expressions
-        if (cleaned.includes('*')) {
-          const parts = cleaned
-            .split('*')
-            .map((p) => Number.parseFloat(p.trim()));
-          if (parts.every((p) => !Number.isNaN(p))) {
-            return parts.reduce((acc, val) => acc * val, 1);
-          }
-        }
-        return Number.parseFloat(cleaned);
-      };
-
-      // Check MAX_SESSIONS
-      const webviewMaxSessions = extractConstant('MAX_SESSIONS');
-      expect(webviewMaxSessions).toBe(MAX_SESSIONS);
-
-      // Check MAX_IMAGE_SIZE_BYTES (handles expressions like "10 * 1024 * 1024")
-      const webviewMaxImageSize = extractConstant('MAX_IMAGE_SIZE_BYTES');
-      expect(webviewMaxImageSize).toBe(MAX_IMAGE_SIZE_BYTES);
-
-      // Check TERMINAL_SCROLLBACK_LINES
-      const webviewScrollback = extractConstant('TERMINAL_SCROLLBACK_LINES');
-      expect(webviewScrollback).toBe(TERMINAL_SCROLLBACK_LINES);
-
-      // Check MIN_TERMINAL_HEIGHT
-      const webviewMinHeight = extractConstant('MIN_TERMINAL_HEIGHT');
-      expect(webviewMinHeight).toBe(TERMINAL_CONSTRAINTS.MIN_HEIGHT);
-
-      // Check MAX_TERMINAL_HEIGHT
-      const webviewMaxHeight = extractConstant('MAX_TERMINAL_HEIGHT');
-      expect(webviewMaxHeight).toBe(TERMINAL_CONSTRAINTS.MAX_HEIGHT);
-
-      // Check DEFAULT_TERMINAL_HEIGHT
-      const webviewDefaultHeight = extractConstant('DEFAULT_TERMINAL_HEIGHT');
-      expect(webviewDefaultHeight).toBe(TERMINAL_CONSTRAINTS.DEFAULT_HEIGHT);
-
-      // Check MIN_SPLIT_RATIO
-      const webviewMinSplitRatio = extractConstant('MIN_SPLIT_RATIO');
-      expect(webviewMinSplitRatio).toBe(SPLIT_VIEW.MIN_RATIO);
-
-      // Check MAX_SPLIT_RATIO
-      const webviewMaxSplitRatio = extractConstant('MAX_SPLIT_RATIO');
-      expect(webviewMaxSplitRatio).toBe(SPLIT_VIEW.MAX_RATIO);
-
-      // Check MAX_BUFFER_SIZE (handles numeric separators like 200_000)
-      const webviewMaxBufferSize = extractConstant('MAX_BUFFER_SIZE');
-      expect(webviewMaxBufferSize).toBe(BUFFER_CONSTRAINTS.MAX_SIZE);
-
-      // Check MAX_BUFFER_COUNT
-      const webviewMaxBufferCount = extractConstant('MAX_BUFFER_COUNT');
-      expect(webviewMaxBufferCount).toBe(BUFFER_CONSTRAINTS.MAX_COUNT);
+      expect(WebviewConstants.MAX_TERMINAL_HEIGHT).toBe(
+        TERMINAL_CONSTRAINTS.MAX_HEIGHT
+      );
+      expect(WebviewConstants.DEFAULT_TERMINAL_HEIGHT).toBe(
+        TERMINAL_CONSTRAINTS.DEFAULT_HEIGHT
+      );
+      expect(WebviewConstants.MIN_SPLIT_RATIO).toBe(SPLIT_VIEW.MIN_RATIO);
+      expect(WebviewConstants.MAX_SPLIT_RATIO).toBe(SPLIT_VIEW.MAX_RATIO);
+      expect(WebviewConstants.MAX_BUFFER_SIZE).toBe(BUFFER_CONSTRAINTS.MAX_SIZE);
+      expect(WebviewConstants.MAX_BUFFER_COUNT).toBe(
+        BUFFER_CONSTRAINTS.MAX_COUNT
+      );
     });
   });
 
