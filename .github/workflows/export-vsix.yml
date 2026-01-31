@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # 優先順位: workflow_dispatch inputs > repository variables > fallback
-      ELECTRON_VERSION: ${{ inputs.electronVersion || vars.VSCODE_ELECTRON_VERSION || '37.7.0' }}
+      ELECTRON_VERSION: ${{ inputs.electronVersion || vars.VSCODE_ELECTRON_VERSION || '39.2.7' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
