@@ -2,20 +2,16 @@ import * as vscode from 'vscode';
 import type {
   ThemePalette,
   ThemePresetKey,
-  ThemePreview,
-} from '../types/theme';
+  ThemePresetInfo,
+} from '../shared/types';
 
-export type ThemeOption = {
-  key: ThemePresetKey;
-  label: string;
-  description: string;
-  preview: ThemePreview;
-};
+// Re-export for backward compatibility
+export type ThemeOption = ThemePresetInfo;
 
 export type ThemeSnapshot = {
   presetKey: ThemePresetKey;
   palette: ThemePalette;
-  presets: ThemeOption[];
+  presets: ThemePresetInfo[];
 };
 
 type HtmlTemplateParams = {

@@ -3,7 +3,7 @@ import type {
   ThemePreview,
   ThemePreset,
   ThemePresetKey,
-} from '../types/theme';
+} from '../shared/types';
 
 // Re-export types for backward compatibility
 export type {ThemePalette, ThemePreview, ThemePreset, ThemePresetKey};

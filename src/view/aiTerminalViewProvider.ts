@@ -1,11 +1,15 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {SHARED_CONSTANTS} from '../shared/constants';
+import type {
+  InboundMessage as WebviewInboundMessage,
+  OutboundMessage as WebviewOutboundMessage,
+  ThemePresetInfo,
+} from '../shared/types';
 import {SessionManager} from '../terminal/sessionManager';
 import {
   THEME_PRESETS,
   ThemePresetKey,
-  ThemePreview,
   isValidPresetKey,
 } from '../theming/themePresets';
 import {Logger} from '../utils/logger';
@@ -17,121 +21,9 @@ import {
 } from '../utils/validation';
 import {ThemeSnapshot, buildWebviewHtml} from './htmlTemplate';
 
-type ThemeOption = {
-  key: ThemePresetKey;
-  label: string;
-  description: string;
-  preview: ThemePreview;
-};
-
-// Outbound message types (Extension Host -> Webview)
-type SessionDataMessage = {
-  type: 'session-data';
-  payload: {sessionId: string; data: string};
-};
-
-type SessionCreatedMessage = {
-  type: 'session-created';
-  payload: {
-    id: string;
-    shell: string;
-    pid?: number;
-    label?: string;
-    restored?: boolean;
-  };
-};
-
-type SessionExitedMessage = {
-  type: 'session-exited';
-  payload: {
-    sessionId: string;
-    code: number | null;
-    signal: NodeJS.Signals | null;
-  };
-};
-
-type SessionErrorMessage = {
-  type: 'session-error';
-  payload: {message: string};
-};
-
-type SessionLimitReachedMessage = {
-  type: 'session-limit-reached';
-  payload: {max: number};
-};
-
-type SessionCountMessage = {
-  type: 'session-count';
-  payload: {total: number};
-};
-
-type ThemeUpdateMessage = {
-  type: 'theme-update';
-  payload: ThemeSnapshot;
-};
-
-type AllSessionsClearedMessage = {
-  type: 'all-sessions-cleared';
-};
-
-type OutboundMessage =
-  | SessionDataMessage
-  | SessionCreatedMessage
-  | SessionExitedMessage
-  | SessionErrorMessage
-  | SessionLimitReachedMessage
-  | SessionCountMessage
-  | ThemeUpdateMessage
-  | AllSessionsClearedMessage;
-
-// Message types from webview to extension
-type WebviewReadyMessage = {
-  type: 'webview-ready';
-};
-
-type RequestNewSessionMessage = {
-  type: 'request-new-session';
-  payload?: {cols?: number; rows?: number};
-};
-
-type TerminalInputMessage = {
-  type: 'terminal-input';
-  payload: {sessionId: string; data: string};
-};
-
-type TerminalResizeMessage = {
-  type: 'terminal-resize';
-  payload: {sessionId: string; cols: number; rows: number};
-};
-
-type DisposeSessionMessage = {
-  type: 'dispose-session';
-  payload: {sessionId: string};
-};
-
-type DisposeAllSessionsMessage = {
-  type: 'dispose-all-sessions';
-};
-
-type ThemeSelectMessage = {
-  type: 'theme-select';
-  payload: {presetKey: string};
-};
-
-type ImageDropMessage = {
-  type: 'image-drop';
-  payload: {fileName: string; mimeType: string; data: string; sessionId: string};
-};
-
-type InboundMessage =
-  | WebviewReadyMessage
-  | RequestNewSessionMessage
-  | TerminalInputMessage
-  | TerminalResizeMessage
-  | DisposeSessionMessage
-  | DisposeAllSessionsMessage
-  | ThemeSelectMessage
-  | ImageDropMessage;
+// Use shared message types
+type OutboundMessage = WebviewInboundMessage;
+type InboundMessage = WebviewOutboundMessage;
 
 /**
  * Provides the webview view for Terminal For AI CLI.
@@ -974,7 +866,7 @@ export class AiTerminalViewProvider
 
     const activePreset = THEME_PRESETS[presetKey] ?? THEME_PRESETS.modern;
     const palette = activePreset.palette;
-    const presets: ThemeOption[] = Object.entries(THEME_PRESETS)
+    const presets: ThemePresetInfo[] = Object.entries(THEME_PRESETS)
       .filter(
         (
           entry

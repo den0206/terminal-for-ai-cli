@@ -1,33 +1,12 @@
 /**
  * Shared theme type definitions
+ * Re-exports from shared types for backward compatibility
  */
 
-export type ThemePalette = {
-  background: string;
-  foreground: string;
-  cursor: string;
-  selection: string;
-};
-
-export type ThemePreview = {
-  background: string;
-  foreground: string;
-};
-
-export type ThemePreset = {
-  label: string;
-  description: string;
-  palette: ThemePalette;
-  preview: ThemePreview;
-};
-
-export type ThemePresetKey =
-  | 'modern'
-  | 'basic'
-  | 'clearDark'
-  | 'clearLight'
-  | 'grass'
-  | 'homebrew'
-  | 'manPage'
-  | 'ocean'
-  | 'pro';
+export type {
+  ThemePalette,
+  ThemePreview,
+  ThemePreset,
+  ThemePresetKey,
+  ThemePresetInfo,
+} from '../shared/types';

@@ -1,17 +1,12 @@
+import type {SessionMeta, ThemePresetInfo} from '../../shared/types';
 import {Constants} from './constants';
+import type {Pane, ViewMode, ViewState} from './types';
 import {
-  validateTerminalHeight,
   clampSplitRatio,
   debounce,
+  validateTerminalHeight,
   type CancellableFunction,
 } from './utils';
-import type {
-  SessionMeta,
-  ViewState,
-  ViewMode,
-  Pane,
-  ThemePresetInfo,
-} from './types';
 
 // ============================================================================
 // Session State Manager
