@@ -196,6 +196,7 @@ export class AiTerminalViewProvider
   private initialSessionEnsured = false;
   private readonly messageQueue: OutboundMessage[] = [];
   private readonly disposables: vscode.Disposable[] = [];
+  private messageDisposable?: vscode.Disposable;
   private readonly sessionLabels = new Map<string, string>();
   private readonly sessionImages = new Map<string, Set<string>>();
 
@@ -269,6 +270,11 @@ export class AiTerminalViewProvider
    * ```
    */
   dispose() {
+    // Dispose message listener separately as it's managed outside disposables array
+    if (this.messageDisposable) {
+      this.messageDisposable.dispose();
+      this.messageDisposable = undefined;
+    }
     vscode.Disposable.from(...this.disposables).dispose();
     this.sessionLabels.clear();
     this.sessionImages.clear();
@@ -318,10 +324,15 @@ export class AiTerminalViewProvider
 
     webview.html = this.getHtml(webview);
 
-    const messageDisposable = webview.onDidReceiveMessage((message) => {
+    // Clean up previous message listener if webview is re-resolved
+    if (this.messageDisposable) {
+      this.messageDisposable.dispose();
+      this.messageDisposable = undefined;
+    }
+
+    this.messageDisposable = webview.onDidReceiveMessage((message) => {
       this.handleMessage(message);
     });
-    this.disposables.push(messageDisposable);
   }
 
   /**

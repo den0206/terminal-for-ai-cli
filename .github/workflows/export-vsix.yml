@@ -9,7 +9,7 @@ on:
       electronVersion:
         description: 'VS Code/Cursor の Electron バージョン（node-pty rebuild 用）'
         required: true
-        default: '37.7.0'
+        default: '39.2.7'
 
 jobs:
   package:
@@ -45,3 +45,4 @@ jobs:
           name: terminal-for-ai-cli-${{ github.run_number }}
           path: vsix/*.vsix
           if-no-files-found: error
+          retention-days: 30

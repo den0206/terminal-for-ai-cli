@@ -241,6 +241,8 @@ class AppController {
     event: string;
     handler: EventListener;
   }> = [];
+  // Store active drag cleanup functions for proper cleanup on page unload
+  private _activeDragCleanup: (() => void) | null = null;
 
   constructor() {
     this.vscode = acquireVsCodeApi<ViewState>();
@@ -288,6 +290,12 @@ class AppController {
     // Cancel pending resize operations
     this.throttledResize.cancel();
     this.debouncedResize.cancel();
+
+    // Clean up any active drag operation listeners
+    if (this._activeDragCleanup) {
+      this._activeDragCleanup();
+      this._activeDragCleanup = null;
+    }
 
     // Remove all event listeners
     for (const {target, event, handler} of this._eventListeners) {
@@ -472,16 +480,22 @@ class AppController {
         throttledMove(delta);
       };
 
-      const cleanup = (moveEvent: PointerEvent) => {
-        if (moveEvent.pointerId !== pointerId) {
+      const cleanup = (moveEvent?: PointerEvent) => {
+        if (moveEvent && moveEvent.pointerId !== pointerId) {
           return;
         }
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', cleanup);
         window.removeEventListener('pointercancel', cleanup);
         throttledMove.cancel();
-        this.persistState();
+        this._activeDragCleanup = null;
+        if (moveEvent) {
+          this.persistState();
+        }
       };
+
+      // Store cleanup function for emergency cleanup on page unload
+      this._activeDragCleanup = () => cleanup();
 
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', cleanup);
@@ -520,16 +534,22 @@ class AppController {
         throttledMove(deltaRatio);
       };
 
-      const cleanup = (moveEvent: PointerEvent) => {
-        if (moveEvent.pointerId !== pointerId) {
+      const cleanup = (moveEvent?: PointerEvent) => {
+        if (moveEvent && moveEvent.pointerId !== pointerId) {
           return;
         }
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', cleanup);
         window.removeEventListener('pointercancel', cleanup);
         throttledMove.cancel();
-        this.persistState();
+        this._activeDragCleanup = null;
+        if (moveEvent) {
+          this.persistState();
+        }
       };
+
+      // Store cleanup function for emergency cleanup on page unload
+      this._activeDragCleanup = () => cleanup();
 
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', cleanup);

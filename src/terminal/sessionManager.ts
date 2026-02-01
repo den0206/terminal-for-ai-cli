@@ -73,6 +73,7 @@ function resolveSignal(signalCode?: number): NodeJS.Signals | null {
  */
 class ShellSession implements vscode.Disposable {
   private killTimer?: NodeJS.Timeout;
+  private exitListener?: vscode.Disposable;
   private disposed = false;
 
   /**
@@ -139,6 +140,7 @@ class ShellSession implements vscode.Disposable {
     }
     this.disposed = true;
     this.clearKillTimer();
+    this.disposeExitListener();
     this.killProcessTree();
   }
 
@@ -146,6 +148,13 @@ class ShellSession implements vscode.Disposable {
     if (this.killTimer) {
       clearTimeout(this.killTimer);
       this.killTimer = undefined;
+    }
+  }
+
+  private disposeExitListener() {
+    if (this.exitListener) {
+      this.exitListener.dispose();
+      this.exitListener = undefined;
     }
   }
 
@@ -183,7 +192,10 @@ class ShellSession implements vscode.Disposable {
         }, PROCESS_TERMINATION.SIGKILL_DELAY_MS);
 
         // Clear timer if process exits normally
-        this.pty.onExit(() => this.clearKillTimer());
+        // Store the disposable so it can be cleaned up properly
+        this.exitListener = {
+          dispose: this.pty.onExit(() => this.clearKillTimer()).dispose,
+        };
       } catch {
         // Fallback to pty.kill if process group kill fails
         try {
@@ -296,12 +308,8 @@ export class SessionManager implements vscode.Disposable {
       }
     }
 
-    return {
-      id,
-      pid: ptyProcess.pid ?? undefined,
-      shell,
-      createdAt: Date.now(),
-    };
+    // Return the same object stored in sessionInfos to avoid duplicate allocation
+    return info;
   }
 
   /**
