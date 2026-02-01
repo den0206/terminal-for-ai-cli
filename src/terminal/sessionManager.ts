@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import {MAX_SESSIONS, PROCESS_TERMINATION} from '../constants';
+import {SHARED_CONSTANTS} from '../shared/constants';
 import {Logger} from '../utils/logger';
 import {
   validateShellPath,
@@ -125,7 +125,7 @@ class ShellSession implements vscode.Disposable {
    * Safe to call multiple times - subsequent calls are no-ops.
    *
    * @remarks
-   * The grace period before SIGKILL is controlled by PROCESS_TERMINATION.SIGKILL_DELAY_MS
+   * The grace period before SIGKILL is controlled by SHARED_CONSTANTS.PROCESS_TERMINATION.SIGKILL_DELAY_MS
    * (default: 2000ms). This allows processes to clean up resources before forced termination.
    *
    * @example
@@ -189,7 +189,7 @@ class ShellSession implements vscode.Disposable {
             // Process already terminated
           }
           this.killTimer = undefined;
-        }, PROCESS_TERMINATION.SIGKILL_DELAY_MS);
+        }, SHARED_CONSTANTS.PROCESS_TERMINATION.SIGKILL_DELAY_MS);
 
         // Clear timer if process exits normally
         // Store the disposable so it can be cleaned up properly
@@ -508,7 +508,7 @@ export class SessionManager implements vscode.Disposable {
    */
   getPerformanceMetrics(): PerformanceMetrics {
     const sessionCount = this.sessions.size;
-    const maxSessions = MAX_SESSIONS;
+    const maxSessions = SHARED_CONSTANTS.MAX_SESSIONS;
     const sessionCountPercentage =
       maxSessions > 0 ? (sessionCount / maxSessions) * 100 : 0;
 

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import {TERMINAL_CONSTRAINTS, SPLIT_VIEW} from '../constants';
+import {SHARED_CONSTANTS} from '../shared/constants';
 import {Logger} from './logger';
 
 /**
@@ -131,8 +131,8 @@ export function validateStartupCommands(commands: unknown): string[] {
 
   return commands
     .filter((cmd): cmd is string => typeof cmd === 'string')
-    .map(cmd => cmd.trim())
-    .filter(cmd => {
+    .map((cmd) => cmd.trim())
+    .filter((cmd) => {
       // Filter out empty commands
       if (!cmd) {
         return false;
@@ -141,14 +141,19 @@ export function validateStartupCommands(commands: unknown): string[] {
       // Warn about potentially dangerous commands (but don't block them)
       // Users should have control, but we log warnings
       const dangerousPatterns = [
-        /^\s*rm\s+-rf\s+[/~]/,  // rm -rf / or ~
-        /^\s*:\(\)\{.*\}:/,       // fork bomb
-        /\bsudo\s+rm\b/,          // sudo rm
+        /^\s*rm\s+-rf\s+[/~]/, // rm -rf / or ~
+        /^\s*:\(\)\{.*\}:/, // fork bomb
+        /\bsudo\s+rm\b/, // sudo rm
       ];
 
       for (const pattern of dangerousPatterns) {
         if (pattern.test(cmd)) {
-          loggerInstance.warn(`Potentially dangerous startup command detected: ${cmd.substring(0, 50)}...`);
+          loggerInstance.warn(
+            `Potentially dangerous startup command detected: ${cmd.substring(
+              0,
+              50
+            )}...`
+          );
         }
       }
 
@@ -161,7 +166,9 @@ export function validateStartupCommands(commands: unknown): string[] {
  * @param cwd The directory path to validate
  * @returns The validated path or undefined if invalid
  */
-export function validateWorkingDirectory(cwd: string | undefined): string | undefined {
+export function validateWorkingDirectory(
+  cwd: string | undefined
+): string | undefined {
   if (!cwd || typeof cwd !== 'string') {
     return undefined;
   }
@@ -215,9 +222,9 @@ export function validateNumericRange(
 export function validateTerminalHeight(value: unknown): number {
   return validateNumericRange(
     value,
-    TERMINAL_CONSTRAINTS.MIN_HEIGHT,
-    TERMINAL_CONSTRAINTS.MAX_HEIGHT,
-    TERMINAL_CONSTRAINTS.DEFAULT_HEIGHT
+    SHARED_CONSTANTS.TERMINAL_CONSTRAINTS.MIN_HEIGHT,
+    SHARED_CONSTANTS.TERMINAL_CONSTRAINTS.MAX_HEIGHT,
+    SHARED_CONSTANTS.TERMINAL_CONSTRAINTS.DEFAULT_HEIGHT
   );
 }
 
@@ -230,10 +237,15 @@ export function validateTerminalHeight(value: unknown): number {
  */
 export function validateSplitRatio(
   value: unknown,
-  minRatio = SPLIT_VIEW.MIN_RATIO,
-  maxRatio = SPLIT_VIEW.MAX_RATIO
+  minRatio = SHARED_CONSTANTS.SPLIT_VIEW.MIN_RATIO,
+  maxRatio = SHARED_CONSTANTS.SPLIT_VIEW.MAX_RATIO
 ): number {
-  return validateNumericRange(value, minRatio, maxRatio, SPLIT_VIEW.DEFAULT_RATIO);
+  return validateNumericRange(
+    value,
+    minRatio,
+    maxRatio,
+    SHARED_CONSTANTS.SPLIT_VIEW.DEFAULT_RATIO
+  );
 }
 
 /**
@@ -247,11 +259,17 @@ export function validateTerminalDimensions(
   rows?: number
 ): {cols: number; rows: number} {
   return {
-    cols: typeof cols === 'number' && Number.isFinite(cols) && cols >= TERMINAL_CONSTRAINTS.MIN_COLS
-      ? cols
-      : TERMINAL_CONSTRAINTS.DEFAULT_COLS,
-    rows: typeof rows === 'number' && Number.isFinite(rows) && rows >= TERMINAL_CONSTRAINTS.MIN_ROWS
-      ? rows
-      : TERMINAL_CONSTRAINTS.DEFAULT_ROWS,
+    cols:
+      typeof cols === 'number' &&
+      Number.isFinite(cols) &&
+      cols >= SHARED_CONSTANTS.TERMINAL_CONSTRAINTS.MIN_COLS
+        ? cols
+        : SHARED_CONSTANTS.TERMINAL_CONSTRAINTS.DEFAULT_COLS,
+    rows:
+      typeof rows === 'number' &&
+      Number.isFinite(rows) &&
+      rows >= SHARED_CONSTANTS.TERMINAL_CONSTRAINTS.MIN_ROWS
+        ? rows
+        : SHARED_CONSTANTS.TERMINAL_CONSTRAINTS.DEFAULT_ROWS,
   };
 }

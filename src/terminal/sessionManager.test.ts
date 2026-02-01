@@ -1,6 +1,6 @@
 import type {IPty} from 'node-pty';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {MAX_SESSIONS} from '../constants';
+import {SHARED_CONSTANTS} from '../shared/constants';
 import {SessionManager} from './sessionManager';
 
 // Mock validation module to avoid platform-specific shell path validation
@@ -154,13 +154,13 @@ describe('SessionManager', () => {
       expect(info1.id).not.toBe(info2.id);
     });
 
-    it('should limit sessions to MAX_SESSIONS', () => {
+    it('should limit sessions to SHARED_CONSTANTS.MAX_SESSIONS', () => {
       // Create maximum sessions
-      for (let i = 0; i < MAX_SESSIONS; i++) {
+      for (let i = 0; i < SHARED_CONSTANTS.MAX_SESSIONS; i++) {
         sessionManager.createSession();
       }
 
-      expect(sessionManager.getSessionCount()).toBe(MAX_SESSIONS);
+      expect(sessionManager.getSessionCount()).toBe(SHARED_CONSTANTS.MAX_SESSIONS);
     });
   });
 

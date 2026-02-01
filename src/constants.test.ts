@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import {
+import {SHARED_CONSTANTS} from './shared/constants';
+
+// Import webview constants (built from shared single source of truth)
+import { Constants as WebviewConstants } from './webview/lib/constants';
+
+// Extract for convenience
+const {
     BUFFER_CONSTRAINTS,
     MAX_IMAGE_FILENAME_LENGTH,
     MAX_IMAGE_SIZE_BYTES,
@@ -7,10 +13,7 @@ import {
     SPLIT_VIEW,
     TERMINAL_CONSTRAINTS,
     TERMINAL_SCROLLBACK_LINES,
-} from './constants';
-
-// Import webview constants (built from shared single source of truth)
-import { Constants as WebviewConstants } from './webview/lib/constants';
+} = SHARED_CONSTANTS;
 
 describe('Constants', () => {
   describe('Constants consistency check', () => {

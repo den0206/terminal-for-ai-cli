@@ -1,10 +1,6 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import {
-  MAX_SESSIONS,
-  MAX_IMAGE_SIZE_BYTES,
-  MAX_IMAGE_FILENAME_LENGTH,
-} from '../constants';
+import {SHARED_CONSTANTS} from '../shared/constants';
 import {SessionManager} from '../terminal/sessionManager';
 import {
   THEME_PRESETS,
@@ -366,7 +362,7 @@ export class AiTerminalViewProvider
    * method which performs validation and session creation.
    *
    * @remarks
-   * - Checks session limit (MAX_SESSIONS) before creating
+   * - Checks session limit (SHARED_CONSTANTS.MAX_SESSIONS) before creating
    * - Validates configuration (shell path, startup commands)
    * - Creates session with appropriate dimensions from webview
    * - Updates UI state and notifies webview on success/failure
@@ -494,13 +490,13 @@ export class AiTerminalViewProvider
    * @private
    */
   private handleSessionRequest(dimensions?: {cols?: number; rows?: number}) {
-    if (this.sessionManager.getSessionCount() >= MAX_SESSIONS) {
+    if (this.sessionManager.getSessionCount() >= SHARED_CONSTANTS.MAX_SESSIONS) {
       vscode.window.showWarningMessage(
-        `Terminal For AI CLI supports up to ${MAX_SESSIONS} sessions.`
+        `Terminal For AI CLI supports up to ${SHARED_CONSTANTS.MAX_SESSIONS} sessions.`
       );
       this.postMessage({
         type: 'session-limit-reached',
-        payload: {max: MAX_SESSIONS},
+        payload: {max: SHARED_CONSTANTS.MAX_SESSIONS},
       });
       return;
     }
@@ -1111,9 +1107,9 @@ export class AiTerminalViewProvider
       }
 
       // Check file size limit
-      if (buffer.length > MAX_IMAGE_SIZE_BYTES) {
+      if (buffer.length > SHARED_CONSTANTS.MAX_IMAGE_SIZE_BYTES) {
         const sizeMB = (buffer.length / (1024 * 1024)).toFixed(2);
-        const maxMB = (MAX_IMAGE_SIZE_BYTES / (1024 * 1024)).toFixed(0);
+        const maxMB = (SHARED_CONSTANTS.MAX_IMAGE_SIZE_BYTES / (1024 * 1024)).toFixed(0);
         throw new Error(
           `Image file too large: ${sizeMB}MB (maximum: ${maxMB}MB)`
         );
@@ -1140,11 +1136,11 @@ export class AiTerminalViewProvider
       let uniqueFileName = `${timestamp}_${sanitizedFileName}`;
 
       // Ensure total filename length doesn't exceed filesystem limits
-      if (uniqueFileName.length > MAX_IMAGE_FILENAME_LENGTH) {
+      if (uniqueFileName.length > SHARED_CONSTANTS.MAX_IMAGE_FILENAME_LENGTH) {
         const extension = path.extname(sanitizedFileName);
         const nameWithoutExt = path.basename(sanitizedFileName, extension);
         const maxNameLength =
-          MAX_IMAGE_FILENAME_LENGTH -
+          SHARED_CONSTANTS.MAX_IMAGE_FILENAME_LENGTH -
           timestamp.toString().length -
           extension.length -
           2; // -2 for underscores
