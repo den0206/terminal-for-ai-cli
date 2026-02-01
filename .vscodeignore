@@ -1,0 +1,44 @@
+# Source files (compiled to dist/)
+src/**
+
+# Test files
+**/*.test.ts
+**/*.test.js
+**/__mocks__/**
+
+# Development configuration
+.vscode/**
+.github/**
+.git/**
+.gitignore
+
+# Build tools and scripts
+scripts/**
+vitest.config.mts
+eslint.config.mjs
+tsconfig.json
+
+# Source maps (not needed in production)
+**/*.map
+
+# Documentation (keep README.md and LICENSE.md)
+CHANGELOG.md
+
+# Package files
+node_modules/**
+*.vsix
+vsix/**
+
+# IDE and OS files
+.DS_Store
+*.swp
+*.swo
+
+# Claude/Cursor specific
+.claude/**
+.cursorrules
+
+# Additional documentation (only keep README.md and LICENSE.md)
+IMPROVEMENTS.md
+IMPROVEMENTS_JP.md
+README_JP.md
