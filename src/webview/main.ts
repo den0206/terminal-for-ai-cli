@@ -4,15 +4,15 @@ import {Terminal} from '@xterm/xterm';
 // Import shared modules
 import {Constants} from './lib/constants';
 import {DOMElements} from './lib/dom';
+import {ResizeController} from './lib/resize-controller';
 import {
   SessionStateManager,
   UIStateManager,
   ThemeStateManager,
 } from './lib/state-managers';
+import {ThemeController} from './lib/theme-controller';
 import type {
   VSCodeApi,
-  ThemePalette,
-  ThemePresetInfo,
   InboundMessage,
   OutboundMessage,
   ViewState,
@@ -24,7 +24,6 @@ import {
   debounce,
   throttle,
   getComputedVar,
-  clampSplitRatio,
   isValidViewState,
   type CancellableFunction,
 } from './lib/utils';
@@ -233,6 +232,8 @@ class AppController {
   private readonly uiState: UIStateManager;
   private readonly themeState: ThemeStateManager;
   private readonly terminalManager: TerminalManager;
+  private readonly resizeController: ResizeController;
+  private readonly themeController: ThemeController;
   private readonly throttledResize: CancellableFunction<() => void>;
   private readonly debouncedResize: CancellableFunction<() => void>;
   // Store event listener references for proper cleanup
@@ -241,8 +242,6 @@ class AppController {
     event: string;
     handler: EventListener;
   }> = [];
-  // Store active drag cleanup functions for proper cleanup on page unload
-  private _activeDragCleanup: (() => void) | null = null;
 
   constructor() {
     this.vscode = acquireVsCodeApi<ViewState>();
@@ -260,6 +259,23 @@ class AppController {
       this.dom,
       this.uiState,
       (msg) => this.vscode.postMessage(msg)
+    );
+
+    this.resizeController = new ResizeController(
+      this.dom,
+      this.uiState,
+      () => this.terminalManager.fitVisibleTerminals(),
+      (target, event, handler) => this.addEventListener(target, event, handler),
+      () => this.persistState(),
+      () => this.notifyResize()
+    );
+
+    this.themeController = new ThemeController(
+      this.dom,
+      this.themeState,
+      () => this.terminalManager.refreshTheme(),
+      (msg) => this.vscode.postMessage(msg),
+      (target, event, handler) => this.addEventListener(target, event, handler)
     );
 
     this.throttledResize = throttle(() => {
@@ -292,10 +308,7 @@ class AppController {
     this.debouncedResize.cancel();
 
     // Clean up any active drag operation listeners
-    if (this._activeDragCleanup) {
-      this._activeDragCleanup();
-      this._activeDragCleanup = null;
-    }
+    this.resizeController.cleanupActiveDrags();
 
     // Remove all event listeners
     for (const {target, event, handler} of this._eventListeners) {
@@ -324,7 +337,7 @@ class AppController {
 
   private initialize(): void {
     this.setupEventListeners();
-    this.applyTerminalHeight(this.uiState.terminalHeight, false);
+    this.resizeController.applyTerminalHeight(this.uiState.terminalHeight, false);
     this.terminalManager.refreshTheme();
     this.syncPaneAssignments(true);
     this.focusActivePane();
@@ -451,130 +464,11 @@ class AppController {
       this.debouncedResize();
     });
 
-    this.setupResizer();
-    this.setupSplitResizer();
-    this.setupThemeSelect();
+    this.resizeController.setupResizer();
+    this.resizeController.setupSplitResizer();
+    this.themeController.setupThemeSelect();
     this.setupPaneFocus();
     this.setupImageDragAndDrop();
-  }
-
-  private setupResizer(): void {
-    if (!this.dom.resizer) {
-      return;
-    }
-    const handlePointerDown = (event: PointerEvent) => {
-      event.preventDefault();
-      const pointerId = event.pointerId;
-      const startY = event.clientY;
-      const startHeight = this.uiState.terminalHeight;
-
-      const throttledMove = throttle((delta: number) => {
-        this.applyTerminalHeight(startHeight + delta, false);
-      }, 16);
-
-      const onMove = (moveEvent: PointerEvent) => {
-        if (moveEvent.pointerId !== pointerId) {
-          return;
-        }
-        const delta = moveEvent.clientY - startY;
-        throttledMove(delta);
-      };
-
-      const cleanup = (moveEvent?: PointerEvent) => {
-        if (moveEvent && moveEvent.pointerId !== pointerId) {
-          return;
-        }
-        window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', cleanup);
-        window.removeEventListener('pointercancel', cleanup);
-        throttledMove.cancel();
-        this._activeDragCleanup = null;
-        if (moveEvent) {
-          this.persistState();
-        }
-      };
-
-      // Store cleanup function for emergency cleanup on page unload
-      this._activeDragCleanup = () => cleanup();
-
-      window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', cleanup);
-      window.addEventListener('pointercancel', cleanup);
-    };
-    this.addEventListener(this.dom.resizer, 'pointerdown', handlePointerDown);
-  }
-
-  private setupSplitResizer(): void {
-    if (!this.dom.splitResizer) {
-      return;
-    }
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!this.uiState.isSplitModeActive()) {
-        return;
-      }
-      const stackRect = this.dom.terminalStack?.getBoundingClientRect();
-      if (!stackRect || stackRect.height <= 0) {
-        return;
-      }
-      event.preventDefault();
-      const pointerId = event.pointerId;
-      const startY = event.clientY;
-      const startRatio = this.uiState.splitRatio;
-
-      const throttledMove = throttle((deltaRatio: number) => {
-        this.setSplitRatio(startRatio + deltaRatio, false);
-      }, 16);
-
-      const onMove = (moveEvent: PointerEvent) => {
-        if (moveEvent.pointerId !== pointerId) {
-          return;
-        }
-        const delta = moveEvent.clientY - startY;
-        const deltaRatio = delta / stackRect.height;
-        throttledMove(deltaRatio);
-      };
-
-      const cleanup = (moveEvent?: PointerEvent) => {
-        if (moveEvent && moveEvent.pointerId !== pointerId) {
-          return;
-        }
-        window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', cleanup);
-        window.removeEventListener('pointercancel', cleanup);
-        throttledMove.cancel();
-        this._activeDragCleanup = null;
-        if (moveEvent) {
-          this.persistState();
-        }
-      };
-
-      // Store cleanup function for emergency cleanup on page unload
-      this._activeDragCleanup = () => cleanup();
-
-      window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', cleanup);
-      window.addEventListener('pointercancel', cleanup);
-    };
-    this.addEventListener(
-      this.dom.splitResizer,
-      'pointerdown',
-      handlePointerDown
-    );
-  }
-
-  private setupThemeSelect(): void {
-    if (this.dom.themeSelect) {
-      this.addEventListener(this.dom.themeSelect, 'change', () => {
-        const presetKey = this.dom.themeSelect?.value;
-        if (!presetKey || presetKey === this.themeState.currentThemeKey) {
-          return;
-        }
-        this.vscode.postMessage<OutboundMessage>({
-          type: 'theme-select',
-          payload: {presetKey},
-        });
-      });
-    }
   }
 
   private setupPaneFocus(): void {
@@ -657,8 +551,16 @@ class AppController {
       }
     };
 
-    this.addEventListener(document, 'dragover', handleDragOver);
-    this.addEventListener(document, 'drop', handleDrop);
+    this.addEventListener(
+      document,
+      'dragover',
+      handleDragOver as unknown as EventListener
+    );
+    this.addEventListener(
+      document,
+      'drop',
+      handleDrop as unknown as EventListener
+    );
   }
 
   private handleMessage(message: InboundMessage): void {
@@ -752,10 +654,10 @@ class AppController {
         break;
 
       case 'theme-update':
-        this.applyTheme(message.payload.palette);
+        this.themeController.applyTheme(message.payload.palette);
         this.themeState.currentThemeKey = message.payload.presetKey;
         this.themeState.availablePresets = message.payload.presets;
-        this.renderThemeDropdown();
+        this.themeController.renderThemeDropdown();
         break;
 
       case 'all-sessions-cleared':
@@ -902,20 +804,6 @@ class AppController {
     this.updateViewToggleButton();
   }
 
-  private setSplitRatio(value: number, persistNow = true): void {
-    const clamped = clampSplitRatio(value);
-    if (Math.abs(clamped - this.uiState.splitRatio) < 0.001) {
-      return;
-    }
-    this.uiState.splitRatio = clamped;
-    if (persistNow) {
-      this.persistState();
-    }
-    this.applySplitSizing();
-    this.terminalManager.fitVisibleTerminals();
-    this.notifyResize();
-  }
-
   private updateViewToggleButton(): void {
     if (!this.dom.viewToggleButton) {
       return;
@@ -958,85 +846,8 @@ class AppController {
       this.sessionState.sessionIds.length === 0;
   }
 
-  private applySplitSizing(): void {
-    const splitActive = this.uiState.isSplitModeActive();
-    if (this.dom.paneElements.primary) {
-      this.dom.paneElements.primary.style.flex = splitActive
-        ? `${this.uiState.splitRatio} 1 0%`
-        : '1 1 auto';
-    }
-    if (this.dom.paneElements.secondary) {
-      const secondaryRatio = Math.max(0.01, 1 - this.uiState.splitRatio);
-      this.dom.paneElements.secondary.style.flex = splitActive
-        ? `${secondaryRatio} 1 0%`
-        : '0 0 auto';
-    }
-    if (this.dom.splitResizer) {
-      this.dom.splitResizer.style.display = splitActive ? 'flex' : 'none';
-    }
-  }
-
   private persistState(): void {
     this.vscode.setState(this.sessionState.toViewState(this.uiState));
-  }
-
-  private applyTerminalHeight(value: number, persist = true): void {
-    this.uiState.terminalHeight = value;
-    if (this.dom.terminalShell) {
-      this.dom.terminalShell.style.setProperty(
-        '--terminal-height',
-        `${this.uiState.terminalHeight}px`
-      );
-    }
-    this.terminalManager.fitVisibleTerminals();
-    this.notifyResize();
-    if (persist) {
-      this.persistState();
-    }
-  }
-
-  private applyTheme(palette: ThemePalette): void {
-    const root = document.documentElement;
-    root.style.setProperty('--terminal-bg', palette.background);
-    root.style.setProperty('--terminal-fg', palette.foreground);
-    root.style.setProperty('--terminal-cursor', palette.cursor);
-    root.style.setProperty('--terminal-selection', palette.selection);
-    this.terminalManager.refreshTheme();
-  }
-
-  private renderThemeDropdown(): void {
-    if (!this.dom.themeSelect) {
-      return;
-    }
-    this.dom.themeSelect.innerHTML = '';
-    this.themeState.availablePresets.forEach((preset) => {
-      const option = document.createElement('option');
-      option.value = preset.key;
-      option.textContent = preset.label;
-      this.dom.themeSelect?.appendChild(option);
-    });
-    if (this.themeState.currentThemeKey) {
-      this.dom.themeSelect.value = this.themeState.currentThemeKey;
-    }
-    const active = this.themeState.getActivePreset();
-    if (this.dom.themeActiveLabel) {
-      this.dom.themeActiveLabel.textContent = active ? active.description : '―';
-    }
-    this.updateThemePreview(active ?? null);
-  }
-
-  private updateThemePreview(preset: ThemePresetInfo | null): void {
-    if (!this.dom.themePreviewText || !this.dom.themePreviewSwatch) {
-      return;
-    }
-    if (preset) {
-      this.dom.themePreviewText.textContent = preset.label;
-      this.dom.themePreviewSwatch.style.background = preset.preview.background;
-      this.dom.themePreviewSwatch.style.color = preset.preview.foreground;
-    } else {
-      this.dom.themePreviewText.textContent = 'Preview';
-      this.dom.themePreviewSwatch.style.background = '';
-    }
   }
 
   private syncPaneAssignments(force = false): void {
@@ -1057,7 +868,7 @@ class AppController {
         splitActive ? 'split' : 'single'
       );
     }
-    this.applySplitSizing();
+    this.resizeController.applySplitSizing();
   }
 
   private assignPane(
