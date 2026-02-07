@@ -29,7 +29,7 @@ export const SHARED_CONSTANTS = {
 
   /** Webview buffer management */
   BUFFER_CONSTRAINTS: {
-    MAX_SIZE: 200_000,
+    MAX_SIZE: 2_000_000, // 2M chars - Covers TERMINAL_SCROLLBACK_LINES (3000) with ~1k chars/line + ANSI
     MAX_COUNT: 10,
   },
 
@@ -47,6 +47,6 @@ export const SHARED_CONSTANTS = {
   },
 
   /** Terminal scrollback buffer size (number of lines) */
-  TERMINAL_SCROLLBACK_LINES: 2000,
+  TERMINAL_SCROLLBACK_LINES: 3000,
 } as const;
 
