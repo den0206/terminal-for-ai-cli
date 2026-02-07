@@ -136,20 +136,24 @@ export class SessionStateManager {
   }
 
   private cleanupOldBuffers(): void {
-    if (this._buffers.size <= Constants.MAX_BUFFER_COUNT) {
-      return;
-    }
-
-    const keysToRemove: string[] = [];
+    // Immediately remove orphaned buffers (not in active sessions)
+    // This is more aggressive than waiting for MAX_BUFFER_COUNT to be exceeded
     for (const key of this._buffers.keys()) {
       if (!this._sessionIds.includes(key)) {
-        keysToRemove.push(key);
+        this._buffers.delete(key);
       }
     }
 
-    const excessCount = this._buffers.size - Constants.MAX_BUFFER_COUNT;
-    for (let i = 0; i < Math.min(keysToRemove.length, excessCount); i++) {
-      this._buffers.delete(keysToRemove[i]);
+    // Failsafe: If we still exceed MAX_BUFFER_COUNT (shouldn't happen in practice),
+    // remove the oldest buffers based on insertion order
+    if (this._buffers.size > Constants.MAX_BUFFER_COUNT) {
+      const keysToRemove = Array.from(this._buffers.keys()).slice(
+        0,
+        this._buffers.size - Constants.MAX_BUFFER_COUNT
+      );
+      for (const key of keysToRemove) {
+        this._buffers.delete(key);
+      }
     }
   }
 
