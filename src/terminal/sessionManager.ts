@@ -12,6 +12,7 @@ import {
   validateTerminalDimensions,
   validateWorkingDirectory,
 } from '../utils/validation';
+import {getDefaultCwd} from '../utils/workingDirectory';
 
 type SessionOptions = {
   shell?: string;
@@ -388,8 +389,8 @@ export class SessionManager implements vscode.Disposable {
     options: SessionOptions
   ): IPty {
     // Validate and sanitize working directory
-    const requestedCwd = options.cwd ?? this.getDefaultCwd();
-    const cwd = validateWorkingDirectory(requestedCwd) ?? this.getDefaultCwd();
+    const requestedCwd = options.cwd ?? getDefaultCwd();
+    const cwd = validateWorkingDirectory(requestedCwd) ?? getDefaultCwd();
     if (cwd !== requestedCwd) {
       Logger.warn(
         `Invalid working directory: "${requestedCwd}". Using fallback: "${cwd}"`
@@ -548,52 +549,6 @@ export class SessionManager implements vscode.Disposable {
     }
 
     return warnings;
-  }
-
-  /**
-   * Gets the default working directory for new sessions.
-   *
-   * Priority order:
-   * 1. VS Code workspace folder (if available)
-   * 2. Cursor-specific environment variables (CURSOR_PROJECT_PATH, etc.)
-   * 3. Standard environment variables (PWD, INIT_CWD)
-   * 4. process.cwd()
-   * 5. User's home directory (final fallback)
-   *
-   * @returns The default working directory path
-   * @private
-   */
-  private getDefaultCwd(): string {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.find(
-      (folder) => folder.uri.scheme === 'file'
-    )?.uri.fsPath;
-    if (workspaceFolder) {
-      return workspaceFolder;
-    }
-
-    const envCandidates = [
-      process.env.CURSOR_PROJECT_PATH,
-      process.env.CURSOR_WORKSPACE_DIR,
-      process.env.CURSOR_CWD,
-      process.env.PWD,
-      process.env.INIT_CWD,
-    ];
-    for (const candidate of envCandidates) {
-      if (candidate && candidate.trim().length > 0) {
-        return candidate;
-      }
-    }
-
-    try {
-      const cwd = process.cwd();
-      if (cwd && cwd.trim().length > 0) {
-        return cwd;
-      }
-    } catch {
-      // ignore
-    }
-
-    return os.homedir();
   }
 
   /**

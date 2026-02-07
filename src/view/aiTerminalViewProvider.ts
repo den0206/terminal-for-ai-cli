@@ -19,6 +19,7 @@ import {
   validateShellPath,
   validateStartupCommands,
 } from '../utils/validation';
+import {resolveWorkingDirectory} from '../utils/workingDirectory';
 import {ThemeSnapshot, buildWebviewHtml} from './htmlTemplate';
 
 // Use shared message types
@@ -434,7 +435,7 @@ export class AiTerminalViewProvider
         cols: dimensions?.cols,
         rows: dimensions?.rows,
         startupCommands,
-        cwd: this.resolveWorkingDirectory(),
+        cwd: resolveWorkingDirectory(),
       });
       const label = this.getOrCreateLabel(info.id);
 
@@ -650,63 +651,6 @@ export class AiTerminalViewProvider
       // Mark as ensured even if sessions already exist (e.g., restored from previous state)
       this.initialSessionEnsured = true;
       Logger.debug(`Initial session check: ${sessionCount} session(s) already exist`);
-    }
-  }
-
-  /**
-   * Resolves the working directory for new sessions.
-   *
-   * Priority order:
-   * 1. Active editor's workspace folder
-   * 2. Active editor's file directory
-   * 3. First workspace folder
-   * 4. Cursor-specific environment variables
-   * 5. Standard environment variables (PWD, INIT_CWD)
-   * 6. process.cwd()
-   *
-   * @returns The resolved working directory path, or undefined if resolution fails
-   * @private
-   */
-  private resolveWorkingDirectory(): string | undefined {
-    const activeEditor = vscode.window.activeTextEditor;
-    if (activeEditor) {
-      const workspaceFolder = vscode.workspace.getWorkspaceFolder(
-        activeEditor.document.uri
-      );
-      if (workspaceFolder?.uri.scheme === 'file') {
-        return workspaceFolder.uri.fsPath;
-      }
-
-      if (activeEditor.document.uri.scheme === 'file') {
-        return path.dirname(activeEditor.document.uri.fsPath);
-      }
-    }
-
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (workspaceFolders?.length) {
-      const preferred = workspaceFolders.find(
-        (folder) => folder.uri.scheme === 'file'
-      );
-      return (preferred ?? workspaceFolders[0]).uri.fsPath;
-    }
-
-    const envCandidates = [
-      process.env.CURSOR_PROJECT_PATH,
-      process.env.CURSOR_WORKSPACE_DIR,
-      process.env.CURSOR_CWD,
-      process.env.PWD,
-      process.env.INIT_CWD,
-    ];
-    for (const candidate of envCandidates) {
-      if (candidate && candidate.trim().length > 0) {
-        return candidate;
-      }
-    }
-
-    try {
-      return process.cwd();
-    } catch {
-      return undefined;
     }
   }
 
