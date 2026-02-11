@@ -36,6 +36,9 @@ jobs:
       - name: Build extension
         run: npm run compile
 
+      - name: Prune devDependencies (VSIX を軽量化)
+        run: npm prune --production
+
       - name: Package VSIX
         run: npm run package
 

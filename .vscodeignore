@@ -24,8 +24,8 @@ tsconfig.json
 # Documentation (keep README.md and LICENSE.md)
 CHANGELOG.md
 
-# Package files
-node_modules/**
+# Package files (node_modules は含める - node-pty 等の runtime 依存のため)
+# パッケージ前に npm prune --production で devDependencies を外すと VSIX が軽量になる
 *.vsix
 vsix/**
 
