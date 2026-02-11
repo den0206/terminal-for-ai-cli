@@ -22,7 +22,6 @@ import type {
 } from './lib/types';
 import {
   debounce,
-  throttle,
   getComputedVar,
   isValidViewState,
   type CancellableFunction,
@@ -234,7 +233,6 @@ class AppController {
   private readonly terminalManager: TerminalManager;
   private readonly resizeController: ResizeController;
   private readonly themeController: ThemeController;
-  private readonly throttledResize: CancellableFunction<() => void>;
   private readonly debouncedResize: CancellableFunction<() => void>;
   // Store event listener references for proper cleanup
   private readonly _eventListeners: Array<{
@@ -278,11 +276,6 @@ class AppController {
       (target, event, handler) => this.addEventListener(target, event, handler)
     );
 
-    this.throttledResize = throttle(() => {
-      this.terminalManager.fitVisibleTerminals();
-      this.notifyResize();
-    }, 100);
-
     this.debouncedResize = debounce(() => {
       this.terminalManager.fitVisibleTerminals();
       this.notifyResize();
@@ -304,7 +297,6 @@ class AppController {
    */
   private cleanup(): void {
     // Cancel pending resize operations
-    this.throttledResize.cancel();
     this.debouncedResize.cancel();
 
     // Clean up any active drag operation listeners
@@ -459,8 +451,9 @@ class AppController {
       });
     }
 
+    // リサイズ時は debounce のみ使用。throttle と併用すると fit() が短時間に複数回
+    // 実行され xterm の再計測・再描画が連続してチラつく（特に長い行で顕著）。
     this.addEventListener(window, 'resize', () => {
-      this.throttledResize();
       this.debouncedResize();
     });
 
