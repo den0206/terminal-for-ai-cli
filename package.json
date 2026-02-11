@@ -120,7 +120,7 @@
     "compile": "npm run bundle:webview && tsc -p ./",
     "rebuild:pty": "node scripts/rebuild-pty.mjs",
     "watch": "tsc -w -p ./",
-    "lint": "eslint src --ext .ts",
+    "lint": "eslint src",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
