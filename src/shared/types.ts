@@ -46,6 +46,13 @@ export type ThemePresetInfo = {
   preview: ThemePreview;
 };
 
+/** Webview に渡すテーマのスナップショット（プリセットキー・パレット・一覧） */
+export type ThemeSnapshot = {
+  presetKey: ThemePresetKey;
+  palette: ThemePalette;
+  presets: ThemePresetInfo[];
+};
+
 // ============================================================================
 // Session Types
 // ============================================================================
@@ -67,7 +74,8 @@ export type ThemeUpdatePayload = {
 };
 
 /**
- * Messages sent from Extension to Webview
+ * Messages sent from Extension to Webview.
+ * (Extension が Webview に送るメッセージ。Webview から見ると Inbound)
  */
 export type InboundMessage =
   | {type: 'session-count'; payload: {total: number}}
@@ -92,7 +100,8 @@ export type InboundMessage =
   | {type: 'all-sessions-cleared'};
 
 /**
- * Messages sent from Webview to Extension
+ * Messages sent from Webview to Extension.
+ * (Webview が Extension に送るメッセージ。Webview から見ると Outbound)
  */
 export type OutboundMessage =
   | {type: 'webview-ready'}

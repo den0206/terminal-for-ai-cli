@@ -1,18 +1,9 @@
 import * as vscode from 'vscode';
-import type {
-  ThemePalette,
-  ThemePresetKey,
-  ThemePresetInfo,
-} from '../shared/types';
+import type {ThemePresetInfo, ThemeSnapshot} from '../shared/types';
 
 // Re-export for backward compatibility
 export type ThemeOption = ThemePresetInfo;
-
-export type ThemeSnapshot = {
-  presetKey: ThemePresetKey;
-  palette: ThemePalette;
-  presets: ThemePresetInfo[];
-};
+export type {ThemeSnapshot};
 
 type HtmlTemplateParams = {
   webview: vscode.Webview;

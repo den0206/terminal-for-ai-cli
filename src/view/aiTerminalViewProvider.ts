@@ -4,14 +4,9 @@ import {SHARED_CONSTANTS} from '../shared/constants';
 import type {
   InboundMessage as WebviewInboundMessage,
   OutboundMessage as WebviewOutboundMessage,
-  ThemePresetInfo,
 } from '../shared/types';
 import {SessionManager} from '../terminal/sessionManager';
-import {
-  THEME_PRESETS,
-  ThemePresetKey,
-  isValidPresetKey,
-} from '../theming/themePresets';
+import {isValidPresetKey} from '../theming/themePresets';
 import {Logger} from '../utils/logger';
 import {getNonce} from '../utils/nonce';
 import {
@@ -21,8 +16,9 @@ import {
 } from '../utils/validation';
 import {resolveWorkingDirectory} from '../utils/workingDirectory';
 import {ThemeSnapshot, buildWebviewHtml} from './htmlTemplate';
+import {getThemeSnapshot} from './themeSnapshot';
 
-// Use shared message types
+// Extension 視点: 送信 = WebviewInboundMessage (shared), 受信 = WebviewOutboundMessage (shared)
 type OutboundMessage = WebviewInboundMessage;
 type InboundMessage = WebviewOutboundMessage;
 
@@ -120,13 +116,9 @@ export class AiTerminalViewProvider
         this.postSessionCount();
       }),
       vscode.workspace.onDidChangeConfiguration((event) => {
-        if (
-          event.affectsConfiguration('aiTerminal.webviewBackground') ||
-          event.affectsConfiguration('aiTerminal.webviewForeground')
-        ) {
+        if (event.affectsConfiguration('aiTerminal.themePreset')) {
           this.postThemeUpdate();
         }
-        // Validate configuration changes
         if (event.affectsConfiguration('aiTerminal')) {
           this.validateConfiguration();
         }
@@ -795,40 +787,9 @@ export class AiTerminalViewProvider
    */
   private getThemeValues(): ThemeSnapshot {
     const config = vscode.workspace.getConfiguration('aiTerminal');
-    const rawPresetKey = config.get<string>('themePreset');
-
-    let presetKey: ThemePresetKey = 'modern';
-    if (rawPresetKey && isValidPresetKey(rawPresetKey)) {
-      presetKey = rawPresetKey;
-    } else if (rawPresetKey) {
-      // Log warning when user has configured an invalid theme preset
-      Logger.warn(
-        `Invalid theme preset configured: "${rawPresetKey}". Using default "modern" theme instead. ` +
-        `Valid options: ${Object.keys(THEME_PRESETS).join(', ')}`
-      );
-    }
-
-    const activePreset = THEME_PRESETS[presetKey] ?? THEME_PRESETS.modern;
-    const palette = activePreset.palette;
-    const presets: ThemePresetInfo[] = Object.entries(THEME_PRESETS)
-      .filter(
-        (
-          entry
-        ): entry is [
-          ThemePresetKey,
-          (typeof THEME_PRESETS)[ThemePresetKey]
-        ] => {
-          const [key] = entry;
-          return isValidPresetKey(key);
-        }
-      )
-      .map(([key, value]) => ({
-        key,
-        label: value.label,
-        description: value.description,
-        preview: value.preview,
-      }));
-    return {presetKey, palette, presets};
+    return getThemeSnapshot((key: string) => config.get(key), {
+      logWarning: (msg: string) => Logger.warn(msg),
+    });
   }
 
   /**
