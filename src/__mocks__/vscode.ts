@@ -2,6 +2,7 @@ import {vi} from 'vitest';
 
 // Mock VS Code API for testing
 export const window = {
+  activeTextEditor: undefined as {document: {uri: {scheme: string; fsPath: string}}} | undefined,
   createOutputChannel: vi.fn(() => ({
     appendLine: vi.fn(),
     show: vi.fn(),
@@ -12,13 +13,22 @@ export const window = {
   showInformationMessage: vi.fn(),
 };
 
+type WorkspaceFolder = {uri: {scheme: string; fsPath: string}};
+let _workspaceFolders: WorkspaceFolder[] = [];
+
 export const workspace = {
   getConfiguration: vi.fn(() => ({
     get: vi.fn(),
     update: vi.fn(),
   })),
+  getWorkspaceFolder: vi.fn(),
   onDidChangeConfiguration: vi.fn(),
-  workspaceFolders: [],
+  get workspaceFolders(): WorkspaceFolder[] {
+    return _workspaceFolders;
+  },
+  set workspaceFolders(value: WorkspaceFolder[]) {
+    _workspaceFolders = value;
+  },
   fs: {
     readDirectory: vi.fn(),
     delete: vi.fn(),
