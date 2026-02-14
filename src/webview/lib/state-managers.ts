@@ -17,8 +17,8 @@ export class SessionStateManager {
   private _sessionIds: string[] = [];
   private _sessionMeta: Record<string, SessionMeta> = {};
   private _totalSessions = 0;
-  private readonly _buffers = new Map<string, string>();
-  private readonly _debouncedCleanup: CancellableFunction<() => void>;
+  private readonly buffers = new Map<string, string>();
+  private readonly debouncedCleanup: CancellableFunction<() => void>;
 
   constructor(savedState: ViewState) {
     this._activeSessionId = savedState.activeSessionId;
@@ -32,8 +32,8 @@ export class SessionStateManager {
 
     // Initialize buffers for existing sessions
     this._sessionIds.forEach((id, index) => {
-      if (!this._buffers.has(id)) {
-        this._buffers.set(id, '');
+      if (!this.buffers.has(id)) {
+        this.buffers.set(id, '');
       }
       this._sessionMeta[id] =
         this._sessionMeta[id] ??
@@ -43,7 +43,7 @@ export class SessionStateManager {
     // Debounce buffer cleanup to avoid performance issues during high-frequency updates
     // Cleanup runs 300ms after the last appendToBuffer call
     // This is short enough to be responsive but long enough to batch rapid updates
-    this._debouncedCleanup = debounce(() => {
+    this.debouncedCleanup = debounce(() => {
       this.cleanupOldBuffers();
     }, 300);
   }
@@ -88,23 +88,23 @@ export class SessionStateManager {
       shell,
       label: label ?? `Terminal ${this._sessionIds.length}`,
     };
-    this._buffers.set(id, '');
+    this.buffers.set(id, '');
   }
 
   removeSession(sessionId: string): void {
     this._sessionIds = this._sessionIds.filter((id) => id !== sessionId);
     delete this._sessionMeta[sessionId];
-    this._buffers.delete(sessionId);
+    this.buffers.delete(sessionId);
   }
 
   clearAll(): void {
     // Cancel pending cleanup operations
-    this._debouncedCleanup.cancel();
+    this.debouncedCleanup.cancel();
     this._sessionIds = [];
     this._sessionMeta = {};
     this._activeSessionId = undefined;
     this._totalSessions = 0;
-    this._buffers.clear();
+    this.buffers.clear();
   }
 
   ensureActiveSession(): boolean {
@@ -121,38 +121,38 @@ export class SessionStateManager {
 
   // Buffer management
   appendToBuffer(sessionId: string, chunk: string): void {
-    const current = this._buffers.get(sessionId) ?? '';
+    const current = this.buffers.get(sessionId) ?? '';
     let next = current + chunk;
     if (next.length > Constants.MAX_BUFFER_SIZE) {
       next = next.slice(next.length - Constants.MAX_BUFFER_SIZE);
     }
-    this._buffers.set(sessionId, next);
+    this.buffers.set(sessionId, next);
     // Use debounced cleanup to avoid performance issues during high-frequency updates
-    this._debouncedCleanup();
+    this.debouncedCleanup();
   }
 
   getBuffer(sessionId: string): string | undefined {
-    return this._buffers.get(sessionId);
+    return this.buffers.get(sessionId);
   }
 
   private cleanupOldBuffers(): void {
     // Immediately remove orphaned buffers (not in active sessions)
     // This is more aggressive than waiting for MAX_BUFFER_COUNT to be exceeded
-    for (const key of this._buffers.keys()) {
+    for (const key of this.buffers.keys()) {
       if (!this._sessionIds.includes(key)) {
-        this._buffers.delete(key);
+        this.buffers.delete(key);
       }
     }
 
     // Failsafe: If we still exceed MAX_BUFFER_COUNT (shouldn't happen in practice),
     // remove the oldest buffers based on insertion order
-    if (this._buffers.size > Constants.MAX_BUFFER_COUNT) {
-      const keysToRemove = Array.from(this._buffers.keys()).slice(
+    if (this.buffers.size > Constants.MAX_BUFFER_COUNT) {
+      const keysToRemove = Array.from(this.buffers.keys()).slice(
         0,
-        this._buffers.size - Constants.MAX_BUFFER_COUNT
+        this.buffers.size - Constants.MAX_BUFFER_COUNT
       );
       for (const key of keysToRemove) {
-        this._buffers.delete(key);
+        this.buffers.delete(key);
       }
     }
   }
