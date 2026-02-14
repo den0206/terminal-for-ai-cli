@@ -193,10 +193,7 @@ class ShellSession implements vscode.Disposable {
         }, SHARED_CONSTANTS.PROCESS_TERMINATION.SIGKILL_DELAY_MS);
 
         // Clear timer if process exits normally
-        // Store the disposable so it can be cleaned up properly
-        this.exitListener = {
-          dispose: this.pty.onExit(() => this.clearKillTimer()).dispose,
-        };
+        this.exitListener = this.pty.onExit(() => this.clearKillTimer());
       } catch {
         // Fallback to pty.kill if process group kill fails
         try {
