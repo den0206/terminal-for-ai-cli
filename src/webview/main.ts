@@ -4,6 +4,7 @@ import {Terminal} from '@xterm/xterm';
 // Import shared modules
 import {Constants} from './lib/constants';
 import {DOMElements} from './lib/dom';
+import {DragDropHandler} from './lib/drag-drop-handler';
 import {ResizeController} from './lib/resize-controller';
 import {
   SessionStateManager,
@@ -24,6 +25,7 @@ import {
   debounce,
   getComputedVar,
   isValidViewState,
+  webviewLog,
   type CancellableFunction,
 } from './lib/utils';
 
@@ -188,7 +190,7 @@ class TerminalManager {
         context.fitAddon.dispose();
         context.terminal.dispose();
       } catch (error) {
-        console.error(`Failed to dispose ${pane} pane:`, error);
+        webviewLog.error(`Failed to dispose ${pane} pane:`, error);
       }
     }
   }
@@ -233,6 +235,7 @@ class AppController {
   private readonly terminalManager: TerminalManager;
   private readonly resizeController: ResizeController;
   private readonly themeController: ThemeController;
+  private readonly dragDropHandler: DragDropHandler;
   private readonly debouncedResize: CancellableFunction<() => void>;
   // Store event listener references for proper cleanup
   private readonly _eventListeners: Array<{
@@ -272,6 +275,12 @@ class AppController {
       this.dom,
       this.themeState,
       () => this.terminalManager.refreshTheme(),
+      (msg) => this.vscode.postMessage(msg),
+      (target, event, handler) => this.addEventListener(target, event, handler)
+    );
+
+    this.dragDropHandler = new DragDropHandler(
+      () => this.sessionState.activeSessionId,
       (msg) => this.vscode.postMessage(msg),
       (target, event, handler) => this.addEventListener(target, event, handler)
     );
@@ -461,7 +470,7 @@ class AppController {
     this.resizeController.setupSplitResizer();
     this.themeController.setupThemeSelect();
     this.setupPaneFocus();
-    this.setupImageDragAndDrop();
+    this.dragDropHandler.setup();
   }
 
   private setupPaneFocus(): void {
@@ -476,84 +485,6 @@ class AppController {
         );
       }
     });
-  }
-
-  private setupImageDragAndDrop(): void {
-    const handleDragOver = (event: DragEvent) => {
-      if (!event.shiftKey || !event.dataTransfer) {
-        return;
-      }
-      if (!event.dataTransfer.types.includes('Files')) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      event.dataTransfer.dropEffect = 'copy';
-    };
-
-    const handleDrop = async (event: DragEvent) => {
-      if (!event.shiftKey || !event.dataTransfer?.files.length) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-
-      const files = Array.from(event.dataTransfer.files);
-      const imageFiles = files.filter((file) => file.type.startsWith('image/'));
-      if (imageFiles.length === 0) {
-        return;
-      }
-
-      const sessionId = this.sessionState.activeSessionId;
-      if (!sessionId) {
-        return;
-      }
-
-      for (const file of imageFiles) {
-        try {
-          if (file.size > Constants.MAX_IMAGE_SIZE_BYTES) {
-            const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-            const maxMB = (Constants.MAX_IMAGE_SIZE_BYTES / (1024 * 1024)).toFixed(0);
-            console.warn(
-              `Image file "${file.name}" is too large: ${sizeMB}MB (maximum: ${maxMB}MB). Skipping.`
-            );
-            continue;
-          }
-
-          const arrayBuffer = await file.arrayBuffer();
-          const uint8Array = new Uint8Array(arrayBuffer);
-          const base64 = btoa(
-            uint8Array.reduce(
-              (data, byte) => data + String.fromCharCode(byte),
-              ''
-            )
-          );
-
-          this.vscode.postMessage<OutboundMessage>({
-            type: 'image-drop',
-            payload: {
-              fileName: file.name,
-              mimeType: file.type,
-              data: base64,
-              sessionId,
-            },
-          });
-        } catch (error) {
-          console.error(`Failed to process image file "${file.name}":`, error);
-        }
-      }
-    };
-
-    this.addEventListener(
-      document,
-      'dragover',
-      handleDragOver as unknown as EventListener
-    );
-    this.addEventListener(
-      document,
-      'drop',
-      handleDrop as unknown as EventListener
-    );
   }
 
   private handleMessage(message: InboundMessage): void {

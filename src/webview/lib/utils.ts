@@ -2,6 +2,21 @@ import {Constants} from './constants';
 import type {ViewState} from './types';
 
 // ============================================================================
+// Webview Logger
+// ============================================================================
+
+const LOG_PREFIX = '[TerminalForAI]';
+
+export const webviewLog = {
+  warn(message: string, ...args: unknown[]): void {
+    console.warn(`${LOG_PREFIX} ${message}`, ...args);
+  },
+  error(message: string, ...args: unknown[]): void {
+    console.error(`${LOG_PREFIX} ${message}`, ...args);
+  },
+};
+
+// ============================================================================
 // Utility Types
 // ============================================================================
 
