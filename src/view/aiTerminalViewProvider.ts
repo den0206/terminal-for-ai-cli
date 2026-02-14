@@ -1,4 +1,3 @@
-import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {SHARED_CONSTANTS} from '../shared/constants';
 import type {
@@ -16,6 +15,7 @@ import {
 } from '../utils/validation';
 import {resolveWorkingDirectory} from '../utils/workingDirectory';
 import {ThemeSnapshot, buildWebviewHtml} from './htmlTemplate';
+import {ImageManager} from './imageManager';
 import {getThemeSnapshot} from './themeSnapshot';
 
 // Extension 視点: 送信 = WebviewInboundMessage (shared), 受信 = WebviewOutboundMessage (shared)
@@ -83,7 +83,7 @@ export class AiTerminalViewProvider
   private readonly disposables: vscode.Disposable[] = [];
   private messageDisposable?: vscode.Disposable;
   private readonly sessionLabels = new Map<string, string>();
-  private readonly sessionImages = new Map<string, Set<string>>();
+  private readonly imageManager: ImageManager;
 
   /**
    * Creates a new webview provider instance.
@@ -93,8 +93,9 @@ export class AiTerminalViewProvider
    */
   constructor(
     private readonly context: vscode.ExtensionContext,
-    private readonly sessionManager: SessionManager
+    private readonly sessionManager: SessionManager,
   ) {
+    this.imageManager = new ImageManager(context);
     // Validate configuration on initialization
     this.validateConfiguration();
     this.disposables.push(
@@ -110,7 +111,7 @@ export class AiTerminalViewProvider
           payload: {sessionId: id, code, signal},
         });
         this.sessionLabels.delete(id);
-        this.deleteSessionImages(id).catch((error) => {
+        this.imageManager.deleteSessionImages(id).catch((error) => {
           Logger.error(`Failed to delete images for session ${id}`, error);
         });
         this.postSessionCount();
@@ -122,7 +123,7 @@ export class AiTerminalViewProvider
         if (event.affectsConfiguration('aiTerminal')) {
           this.validateConfiguration();
         }
-      })
+      }),
     );
   }
 
@@ -158,7 +159,7 @@ export class AiTerminalViewProvider
     }
     vscode.Disposable.from(...this.disposables).dispose();
     this.sessionLabels.clear();
-    this.sessionImages.clear();
+    this.imageManager.clearTracking();
     this.messageQueue.length = 0;
     this.webviewView = undefined;
     this.webviewReady = false;
@@ -304,18 +305,20 @@ export class AiTerminalViewProvider
         case 'terminal-input':
           this.sessionManager.write(
             message.payload.sessionId,
-            message.payload.data
+            message.payload.data,
           );
           break;
         case 'terminal-resize':
           this.sessionManager.resize(
             message.payload.sessionId,
             message.payload.cols,
-            message.payload.rows
+            message.payload.rows,
           );
           break;
         case 'dispose-session':
-          await this.deleteSessionImages(message.payload.sessionId);
+          await this.imageManager.deleteSessionImages(
+            message.payload.sessionId,
+          );
           this.sessionLabels.delete(message.payload.sessionId);
           this.removeSessionFromQueue(message.payload.sessionId);
           this.sessionManager.disposeSession(message.payload.sessionId);
@@ -328,12 +331,7 @@ export class AiTerminalViewProvider
           await this.updateThemePreset(message.payload.presetKey);
           break;
         case 'image-drop':
-          await this.handleImageDrop(
-            message.payload.fileName,
-            message.payload.mimeType,
-            message.payload.data,
-            message.payload.sessionId
-          );
+          await this.handleImageDrop(message.payload);
           break;
         default: {
           // TypeScript exhaustive check - this should never happen
@@ -341,7 +339,7 @@ export class AiTerminalViewProvider
           Logger.warn(
             `Unknown message type received: ${
               (_exhaustive as InboundMessage).type
-            }`
+            }`,
           );
           break;
         }
@@ -375,9 +373,11 @@ export class AiTerminalViewProvider
    * @private
    */
   private handleSessionRequest(dimensions?: {cols?: number; rows?: number}) {
-    if (this.sessionManager.getSessionCount() >= SHARED_CONSTANTS.MAX_SESSIONS) {
+    if (
+      this.sessionManager.getSessionCount() >= SHARED_CONSTANTS.MAX_SESSIONS
+    ) {
       vscode.window.showWarningMessage(
-        `Terminal For AI CLI supports up to ${SHARED_CONSTANTS.MAX_SESSIONS} sessions.`
+        `Terminal For AI CLI supports up to ${SHARED_CONSTANTS.MAX_SESSIONS} sessions.`,
       );
       this.postMessage({
         type: 'session-limit-reached',
@@ -396,10 +396,10 @@ export class AiTerminalViewProvider
         shell = configuredShell;
       } else {
         Logger.warn(
-          `Invalid shell path configured: "${configuredShell}". Using default shell instead.`
+          `Invalid shell path configured: "${configuredShell}". Using default shell instead.`,
         );
         vscode.window.showWarningMessage(
-          `Invalid shell path configured: "${configuredShell}". Using default shell instead.`
+          `Invalid shell path configured: "${configuredShell}". Using default shell instead.`,
         );
         shell = getDefaultShell();
       }
@@ -416,7 +416,7 @@ export class AiTerminalViewProvider
       const invalidCount = configuredCommands.length - validCount;
       if (invalidCount > 0) {
         Logger.warn(
-          `Filtered out ${invalidCount} invalid startup command(s). ${validCount} valid command(s) will be executed.`
+          `Filtered out ${invalidCount} invalid startup command(s). ${validCount} valid command(s) will be executed.`,
         );
       }
     }
@@ -440,9 +440,15 @@ export class AiTerminalViewProvider
       let userMessage = 'Failed to create a terminal session.';
       if (error instanceof Error) {
         const errorMessage = error.message.toLowerCase();
-        if (errorMessage.includes('enoent') || errorMessage.includes('not found')) {
+        if (
+          errorMessage.includes('enoent') ||
+          errorMessage.includes('not found')
+        ) {
           userMessage = `Shell not found. Please check your "aiTerminal.defaultShell" setting or ensure your default shell is available.`;
-        } else if (errorMessage.includes('eacces') || errorMessage.includes('permission')) {
+        } else if (
+          errorMessage.includes('eacces') ||
+          errorMessage.includes('permission')
+        ) {
           userMessage = `Permission denied. Please check that the shell is executable.`;
         } else if (errorMessage.includes('spawn')) {
           userMessage = `Failed to start shell process. Please check your shell configuration.`;
@@ -452,7 +458,7 @@ export class AiTerminalViewProvider
       }
 
       vscode.window.showErrorMessage(
-        `Terminal For AI CLI: ${userMessage} Check the Output channel for details.`
+        `Terminal For AI CLI: ${userMessage} Check the Output channel for details.`,
       );
       this.postMessage({
         type: 'session-error',
@@ -512,7 +518,10 @@ export class AiTerminalViewProvider
    */
   private checkMessageQueuePerformance(): void {
     const config = vscode.workspace.getConfiguration('aiTerminal');
-    const monitoringEnabled = config.get<boolean>('enablePerformanceMonitoring', true);
+    const monitoringEnabled = config.get<boolean>(
+      'enablePerformanceMonitoring',
+      true,
+    );
 
     if (!monitoringEnabled) {
       return;
@@ -526,7 +535,7 @@ export class AiTerminalViewProvider
     if (queuePercentage >= 80) {
       Logger.warn(
         `Message queue is ${queueSize}/${MAX_QUEUE_SIZE} (${Math.round(queuePercentage)}% full). ` +
-        `Consider checking webview connection status.`
+          `Consider checking webview connection status.`,
       );
     }
 
@@ -561,7 +570,7 @@ export class AiTerminalViewProvider
     await config.update(
       'themePreset',
       presetKey,
-      vscode.ConfigurationTarget.Global
+      vscode.ConfigurationTarget.Global,
     );
     this.postThemeUpdate();
   }
@@ -642,7 +651,9 @@ export class AiTerminalViewProvider
     } else {
       // Mark as ensured even if sessions already exist (e.g., restored from previous state)
       this.initialSessionEnsured = true;
-      Logger.debug(`Initial session check: ${sessionCount} session(s) already exist`);
+      Logger.debug(
+        `Initial session check: ${sessionCount} session(s) already exist`,
+      );
     }
   }
 
@@ -660,7 +671,7 @@ export class AiTerminalViewProvider
       this.sessionLabels.clear();
       this.postMessage({type: 'all-sessions-cleared'});
       this.postSessionCount();
-      await this.clearAllImages();
+      await this.imageManager.clearAllImages();
       return;
     }
 
@@ -670,68 +681,7 @@ export class AiTerminalViewProvider
     this.sessionLabels.clear();
     this.postMessage({type: 'all-sessions-cleared'});
     this.postSessionCount();
-    await this.clearAllImages();
-  }
-
-  /**
-   * Deletes all images associated with a session.
-   *
-   * @param sessionId - The session ID whose images should be deleted
-   * @remarks Continues deleting other images even if one fails.
-   * @private
-   */
-  private async deleteSessionImages(sessionId: string) {
-    const imagePaths = this.sessionImages.get(sessionId);
-    if (!imagePaths || imagePaths.size === 0) {
-      return;
-    }
-
-    for (const imagePath of imagePaths) {
-      try {
-        const imageUri = vscode.Uri.file(imagePath);
-        await vscode.workspace.fs.delete(imageUri, {useTrash: false});
-      } catch (error) {
-        Logger.warn(`Failed to delete image ${imagePath}`, error);
-        // Continue deleting other images even if one fails
-      }
-    }
-
-    this.sessionImages.delete(sessionId);
-  }
-
-  /**
-   * Clears all saved images from global storage.
-   *
-   * Deletes the entire images directory and clears session image tracking.
-   * Errors are logged but not shown to the user as this is a background operation.
-   *
-   * @private
-   */
-  private async clearAllImages() {
-    try {
-      const storageUri = this.context.globalStorageUri;
-      const imagesDir = vscode.Uri.joinPath(storageUri, 'images');
-
-      try {
-        await vscode.workspace.fs.delete(imagesDir, {
-          recursive: true,
-          useTrash: false,
-        });
-      } catch (error) {
-        // Ignore errors if the directory doesn't exist
-        if (error instanceof vscode.FileSystemError) {
-          // Directory might not exist, which is fine
-          return;
-        }
-        throw error;
-      }
-    } catch (error) {
-      Logger.warn('Failed to clear images', error);
-      // Don't show error to user as this is a background cleanup operation
-    }
-
-    // Clear all session image tracking
-    this.sessionImages.clear();
+    await this.imageManager.clearAllImages();
   }
 
   /**
@@ -740,40 +690,7 @@ export class AiTerminalViewProvider
    * @returns The number of deleted files
    */
   async cleanupOrphanedImages(): Promise<number> {
-    try {
-      const storageUri = this.context.globalStorageUri;
-      const imagesDir = vscode.Uri.joinPath(storageUri, 'images');
-
-      let files: [string, vscode.FileType][];
-      try {
-        files = await vscode.workspace.fs.readDirectory(imagesDir);
-      } catch {
-        // Directory doesn't exist, nothing to clean up
-        return 0;
-      }
-
-      let deletedCount = 0;
-      for (const [fileName, fileType] of files) {
-        if (fileType === vscode.FileType.File) {
-          try {
-            const fileUri = vscode.Uri.joinPath(imagesDir, fileName);
-            await vscode.workspace.fs.delete(fileUri, {useTrash: false});
-            deletedCount++;
-          } catch (error) {
-            Logger.warn(`Failed to delete orphaned image ${fileName}`, error);
-          }
-        }
-      }
-
-      if (deletedCount > 0) {
-        Logger.info(`Cleaned up ${deletedCount} orphaned image(s)`);
-      }
-
-      return deletedCount;
-    } catch (error) {
-      Logger.error('Failed to cleanup orphaned images', error);
-      return 0;
-    }
+    return this.imageManager.cleanupOrphanedImages();
   }
 
   /**
@@ -862,132 +779,39 @@ export class AiTerminalViewProvider
   /**
    * Handles image drop events from the webview.
    *
-   * Validates the image file (MIME type, size, filename), saves it to global storage,
-   * and writes the escaped file path to the terminal session to prevent command injection.
+   * Delegates to ImageManager for validation and storage, then writes
+   * the escaped file path to the terminal session.
    *
-   * @param fileName - The original filename of the dropped image
-   * @param mimeType - The MIME type of the image (must start with 'image/')
-   * @param base64Data - Base64-encoded image data
-   * @param sessionId - The ID of the session to write the image path to
-   * @throws {Error} If the image is invalid, too large (>10MB), or save fails
-   * @remarks File names are sanitized and truncated if necessary. The path is properly
-   *          escaped for shell execution to prevent command injection attacks.
+   * @param payload - The image drop payload from the webview
    * @private
    */
-  private async handleImageDrop(
-    fileName: string,
-    mimeType: string,
-    base64Data: string,
-    sessionId: string
-  ) {
+  private async handleImageDrop(payload: {
+    fileName: string;
+    mimeType: string;
+    data: string;
+    sessionId: string;
+  }) {
     try {
-      // Validate MIME type
-      if (!mimeType || !mimeType.startsWith('image/')) {
-        throw new Error('Invalid file type: Only image files are supported');
-      }
-
-      // Validate base64 data
-      if (
-        !base64Data ||
-        typeof base64Data !== 'string' ||
-        base64Data.trim().length === 0
-      ) {
-        throw new Error('Invalid base64 data provided');
-      }
-
-      // Decode and validate size
-      let buffer: Buffer;
-      try {
-        buffer = Buffer.from(base64Data, 'base64');
-      } catch {
-        throw new Error('Failed to decode base64 data');
-      }
-
-      // Check file size limit
-      if (buffer.length > SHARED_CONSTANTS.MAX_IMAGE_SIZE_BYTES) {
-        const sizeMB = (buffer.length / (1024 * 1024)).toFixed(2);
-        const maxMB = (SHARED_CONSTANTS.MAX_IMAGE_SIZE_BYTES / (1024 * 1024)).toFixed(0);
-        throw new Error(
-          `Image file too large: ${sizeMB}MB (maximum: ${maxMB}MB)`
-        );
-      }
-
-      // Validate filename
-      if (
-        !fileName ||
-        typeof fileName !== 'string' ||
-        fileName.trim().length === 0
-      ) {
-        throw new Error('Invalid filename provided');
-      }
-
-      // Sanitize and validate filename length
-      const sanitizedFileName = fileName
-        .replace(/[^a-zA-Z0-9._-]/g, '_')
-        .trim();
-      if (sanitizedFileName.length === 0) {
-        throw new Error('Filename contains no valid characters');
-      }
-
-      const timestamp = Date.now();
-      let uniqueFileName = `${timestamp}_${sanitizedFileName}`;
-
-      // Ensure total filename length doesn't exceed filesystem limits
-      if (uniqueFileName.length > SHARED_CONSTANTS.MAX_IMAGE_FILENAME_LENGTH) {
-        const extension = path.extname(sanitizedFileName);
-        const nameWithoutExt = path.basename(sanitizedFileName, extension);
-        const maxNameLength =
-          SHARED_CONSTANTS.MAX_IMAGE_FILENAME_LENGTH -
-          timestamp.toString().length -
-          extension.length -
-          2; // -2 for underscores
-        const truncatedName = nameWithoutExt.substring(
-          0,
-          Math.max(1, maxNameLength)
-        );
-        uniqueFileName = `${timestamp}_${truncatedName}${extension}`;
-        Logger.warn(
-          `Filename truncated due to length limit: ${fileName} -> ${uniqueFileName}`
-        );
-      }
-
-      const storageUri = this.context.globalStorageUri;
-      await vscode.workspace.fs.createDirectory(storageUri);
-
-      const imagesDir = vscode.Uri.joinPath(storageUri, 'images');
-      await vscode.workspace.fs.createDirectory(imagesDir);
-
-      const imageUri = vscode.Uri.joinPath(imagesDir, uniqueFileName);
-
-      await vscode.workspace.fs.writeFile(imageUri, buffer);
-
-      // Track which session used this image
-      if (!this.sessionImages.has(sessionId)) {
-        this.sessionImages.set(sessionId, new Set());
-      }
-      const sessionImageSet = this.sessionImages.get(sessionId);
-      if (sessionImageSet) {
-        sessionImageSet.add(imageUri.fsPath);
-      }
-
-      const imagePath = imageUri.fsPath;
-      // Properly escape shell special characters to prevent injection
-      const escapedPath = this.escapeShellPath(imagePath);
-
-      this.sessionManager.write(sessionId, escapedPath);
+      const escapedPath = await this.imageManager.handleImageDrop(
+        payload.fileName,
+        payload.mimeType,
+        payload.data,
+        payload.sessionId,
+      );
+      this.sessionManager.write(payload.sessionId, escapedPath);
     } catch (error) {
       Logger.error('Failed to save image', error);
 
-      // Provide user-friendly error messages
       let userMessage = 'Failed to save image.';
       if (error instanceof Error) {
         const errorMessage = error.message.toLowerCase();
         if (errorMessage.includes('too large')) {
-          userMessage = error.message; // Already user-friendly
+          userMessage = error.message;
         } else if (errorMessage.includes('invalid file type')) {
           userMessage = 'Only image files are supported.';
         } else if (errorMessage.includes('invalid base64')) {
-          userMessage = 'Invalid image data. Please try dropping the image again.';
+          userMessage =
+            'Invalid image data. Please try dropping the image again.';
         } else if (errorMessage.includes('invalid filename')) {
           userMessage = 'Invalid filename. Please use a valid file name.';
         } else {
@@ -997,26 +821,6 @@ export class AiTerminalViewProvider
 
       vscode.window.showErrorMessage(`Terminal For AI CLI: ${userMessage}`);
     }
-  }
-
-  /**
-   * Escapes shell special characters in a path to prevent command injection.
-   *
-   * - Windows: Wraps path in double quotes and escapes internal double quotes
-   * - Unix-like: Wraps path in single quotes (which prevent all interpretation)
-   *
-   * @param filePath - The file path to escape
-   * @returns The escaped file path safe for shell execution
-   * @private
-   */
-  private escapeShellPath(filePath: string): string {
-    if (process.platform === 'win32') {
-      // Windows: wrap in double quotes and escape internal double quotes
-      return `"${filePath.replace(/"/g, '""')}"`;
-    }
-    // Unix: wrap in single quotes (single quotes prevent all interpretation)
-    // Escape any existing single quotes by ending the quote, adding escaped quote, and starting new quote
-    return `'${filePath.replace(/'/g, "'\\''")}'`;
   }
 
   /**
@@ -1070,7 +874,7 @@ export class AiTerminalViewProvider
     if (configuredShell && !validateShellPath(configuredShell)) {
       Logger.warn(
         `Invalid shell path in configuration: "${configuredShell}". ` +
-        `Please update the "aiTerminal.defaultShell" setting with a valid absolute path.`
+          `Please update the "aiTerminal.defaultShell" setting with a valid absolute path.`,
       );
     }
 
@@ -1084,7 +888,7 @@ export class AiTerminalViewProvider
       const invalidCount = configuredCommands.length - validatedCommands.length;
       Logger.warn(
         `Filtered out ${invalidCount} invalid startup command(s) from configuration. ` +
-        `${validatedCommands.length} valid command(s) will be used.`
+          `${validatedCommands.length} valid command(s) will be used.`,
       );
     }
 
@@ -1093,7 +897,7 @@ export class AiTerminalViewProvider
     if (rawPresetKey && !isValidPresetKey(rawPresetKey)) {
       Logger.warn(
         `Invalid theme preset in configuration: "${rawPresetKey}". ` +
-        `Using default "modern" theme. Please update "aiTerminal.themePreset" setting.`
+          `Using default "modern" theme. Please update "aiTerminal.themePreset" setting.`,
       );
     }
 
@@ -1103,7 +907,7 @@ export class AiTerminalViewProvider
     if (logLevel && !validLogLevels.includes(logLevel)) {
       Logger.warn(
         `Invalid log level in configuration: "${logLevel}". ` +
-        `Using default "info". Valid options: ${validLogLevels.join(', ')}`
+          `Using default "info". Valid options: ${validLogLevels.join(', ')}`,
       );
     }
   }
@@ -1147,13 +951,13 @@ export class AiTerminalViewProvider
     const nonce = getNonce();
     const theme = this.getThemeValues();
     const iconUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'icon-bit.png')
+      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'icon-bit.png'),
     );
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'webview.js')
+      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'webview.js'),
     );
     const xtermCssUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'xterm.css')
+      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'xterm.css'),
     );
 
     return buildWebviewHtml({
