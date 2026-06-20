@@ -6,6 +6,8 @@ import {AiTerminalViewProvider} from './view/aiTerminalViewProvider';
 const VIEW_ID = 'terminal-for-ai-cli-view';
 const CONTAINER_COMMAND = 'workbench.view.extension.terminal-for-ai-cli';
 
+let providerRef: AiTerminalViewProvider | undefined;
+
 export function activate(context: vscode.ExtensionContext) {
   // Initialize logger first
   Logger.initialize(context);
@@ -13,6 +15,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   const sessionManager = new SessionManager();
   const provider = new AiTerminalViewProvider(context, sessionManager);
+  providerRef = provider;
 
   // Cleanup orphaned images from previous sessions on startup
   provider.cleanupOrphanedImages().catch((error) => {
@@ -58,4 +61,6 @@ export function activate(context: vscode.ExtensionContext) {
   );
 }
 
-export function deactivate() {}
+export function deactivate(): Thenable<void> | undefined {
+  return providerRef?.clearAllStoredImages();
+}

@@ -179,6 +179,8 @@ export class ImageManager {
 
   /**
    * Cleanup orphaned images from previous sessions that weren't properly cleaned up.
+   * Also removes files that exceed IMAGE_TTL_MS age, even if tracked as active,
+   * as a safeguard against stale in-memory tracking.
    * @returns The number of deleted files
    */
   async cleanupOrphanedImages(): Promise<number> {
@@ -207,9 +209,21 @@ export class ImageManager {
           continue;
         }
         const fileUri = vscode.Uri.joinPath(imagesDir, fileName);
-        if (activePaths.has(fileUri.fsPath)) {
+        const fsPath = fileUri.fsPath;
+        const stale = this.isFileStale(fileName);
+
+        if (!stale && activePaths.has(fsPath)) {
           continue;
         }
+
+        // Stale file tracked as active — remove from in-memory tracking first
+        if (stale && activePaths.has(fsPath)) {
+          for (const paths of this.sessionImages.values()) {
+            paths.delete(fsPath);
+          }
+          Logger.info(`Removing stale tracked image: ${fileName}`);
+        }
+
         try {
           await vscode.workspace.fs.delete(fileUri, {useTrash: false});
           deletedCount++;
@@ -227,6 +241,18 @@ export class ImageManager {
       Logger.error('Failed to cleanup orphaned images', error);
       return 0;
     }
+  }
+
+  /**
+   * Returns true if the file's embedded timestamp is older than IMAGE_TTL_MS.
+   * Filenames are formatted as `${timestamp}_${sanitizedName}`.
+   */
+  private isFileStale(fileName: string): boolean {
+    const timestamp = parseInt(fileName.split('_')[0], 10);
+    if (!Number.isFinite(timestamp)) {
+      return false;
+    }
+    return Date.now() - timestamp > SHARED_CONSTANTS.IMAGE_TTL_MS;
   }
 
   /**
