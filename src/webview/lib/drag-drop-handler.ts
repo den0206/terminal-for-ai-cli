@@ -66,13 +66,14 @@ export class DragDropHandler {
           }
 
           const arrayBuffer = await file.arrayBuffer();
+          // Split into chunks to avoid call stack limits on large files
           const uint8Array = new Uint8Array(arrayBuffer);
-          const base64 = btoa(
-            uint8Array.reduce(
-              (data, byte) => data + String.fromCharCode(byte),
-              ''
-            )
-          );
+          const CHUNK = 8192;
+          let binary = '';
+          for (let i = 0; i < uint8Array.length; i += CHUNK) {
+            binary += String.fromCharCode(...uint8Array.subarray(i, i + CHUNK));
+          }
+          const base64 = btoa(binary);
 
           this.postMessage({
             type: 'image-drop',
