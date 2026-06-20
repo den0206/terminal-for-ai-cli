@@ -23,7 +23,7 @@ export function buildWebviewHtml({
   xtermCssUri,
 }: HtmlTemplateParams) {
   return /* html */ `<!DOCTYPE html>
-    <html lang="ja">
+    <html lang="en">
       <head>
         <meta charset="UTF-8" />
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';" />
