@@ -155,11 +155,21 @@ describe('SessionManager', () => {
     });
 
     it('should limit sessions to SHARED_CONSTANTS.MAX_SESSIONS', () => {
-      // Create maximum sessions
       for (let i = 0; i < SHARED_CONSTANTS.MAX_SESSIONS; i++) {
         sessionManager.createSession();
       }
 
+      expect(sessionManager.getSessionCount()).toBe(SHARED_CONSTANTS.MAX_SESSIONS);
+    });
+
+    it('should throw when session limit is exceeded', () => {
+      for (let i = 0; i < SHARED_CONSTANTS.MAX_SESSIONS; i++) {
+        sessionManager.createSession();
+      }
+
+      expect(() => sessionManager.createSession()).toThrow(
+        `Session limit reached (max: ${SHARED_CONSTANTS.MAX_SESSIONS})`
+      );
       expect(sessionManager.getSessionCount()).toBe(SHARED_CONSTANTS.MAX_SESSIONS);
     });
   });
