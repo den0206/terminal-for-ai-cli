@@ -48,5 +48,11 @@ export const SHARED_CONSTANTS = {
 
   /** Terminal scrollback buffer size (number of lines) */
   TERMINAL_SCROLLBACK_LINES: 3000,
+
+  /** Maximum size of the message queue before oldest messages are dropped */
+  MESSAGE_QUEUE_MAX_SIZE: 100,
+
+  /** Time after which saved images are considered stale and eligible for cleanup (24 hours) */
+  IMAGE_TTL_MS: 24 * 60 * 60 * 1000,
 } as const;
 

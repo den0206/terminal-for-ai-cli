@@ -492,9 +492,7 @@ export class AiTerminalViewProvider
    */
   private postMessage(message: OutboundMessage): void {
     if (!this.webviewView || !this.webviewReady) {
-      // Limit queue size to prevent memory issues
-      const MAX_QUEUE_SIZE = 100;
-      if (this.messageQueue.length >= MAX_QUEUE_SIZE) {
+      if (this.messageQueue.length >= SHARED_CONSTANTS.MESSAGE_QUEUE_MAX_SIZE) {
         Logger.warn('Message queue is full, dropping oldest message');
         this.messageQueue.shift();
       }
@@ -527,14 +525,14 @@ export class AiTerminalViewProvider
       return;
     }
 
-    const MAX_QUEUE_SIZE = 100;
     const queueSize = this.messageQueue.length;
-    const queuePercentage = (queueSize / MAX_QUEUE_SIZE) * 100;
+    const queuePercentage =
+      (queueSize / SHARED_CONSTANTS.MESSAGE_QUEUE_MAX_SIZE) * 100;
 
     // Warn if queue exceeds 80% of limit
     if (queuePercentage >= 80) {
       Logger.warn(
-        `Message queue is ${queueSize}/${MAX_QUEUE_SIZE} (${Math.round(queuePercentage)}% full). ` +
+        `Message queue is ${queueSize}/${SHARED_CONSTANTS.MESSAGE_QUEUE_MAX_SIZE} (${Math.round(queuePercentage)}% full). ` +
           `Consider checking webview connection status.`,
       );
     }
@@ -667,21 +665,13 @@ export class AiTerminalViewProvider
    */
   private async handleClearAllSessions() {
     const sessions = this.sessionManager.getActiveSessions();
-    if (sessions.length === 0) {
-      this.sessionLabels.clear();
-      this.postMessage({type: 'all-sessions-cleared'});
-      this.postSessionCount();
-      await this.imageManager.clearAllImages();
-      return;
-    }
-
     for (const session of sessions) {
       this.sessionManager.disposeSession(session.id);
     }
     this.sessionLabels.clear();
+    await this.imageManager.clearAllImages();
     this.postMessage({type: 'all-sessions-cleared'});
     this.postSessionCount();
-    await this.imageManager.clearAllImages();
   }
 
   /**
@@ -691,6 +681,14 @@ export class AiTerminalViewProvider
    */
   async cleanupOrphanedImages(): Promise<number> {
     return this.imageManager.cleanupOrphanedImages();
+  }
+
+  /**
+   * Deletes all saved images from global storage.
+   * Called on extension deactivation to ensure clean shutdown.
+   */
+  async clearAllStoredImages(): Promise<void> {
+    return this.imageManager.clearAllImages();
   }
 
   /**

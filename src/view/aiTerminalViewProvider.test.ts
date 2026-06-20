@@ -745,13 +745,17 @@ describe('AiTerminalViewProvider', () => {
       await messageHandler({type: 'webview-ready'});
 
       // Clear postMessage mock
-      (webviewView.webview.postMessage as ReturnType<typeof vi.fn>).mockClear();
+      const postMessageMock = webviewView.webview.postMessage as ReturnType<
+        typeof vi.fn
+      >;
+      postMessageMock.mockClear();
 
-      // Dispose all
+      // Dispose all (clearAllImages runs async before postMessage now)
       await messageHandler({type: 'dispose-all-sessions'});
+      await waitForPostMessage(postMessageMock, 1);
 
       // Should have sent all-sessions-cleared message
-      expect(webviewView.webview.postMessage).toHaveBeenCalledWith(
+      expect(postMessageMock).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'all-sessions-cleared',
         })
