@@ -163,6 +163,7 @@ export class Logger {
     this.outputChannel?.dispose();
     this.outputChannel = undefined;
     this.initialized = false;
+    this.currentLogLevel = 'info';
   }
 }
 
