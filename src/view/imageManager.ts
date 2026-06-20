@@ -193,16 +193,28 @@ export class ImageManager {
         return 0;
       }
 
+      // Collect all paths currently in use by active sessions
+      const activePaths = new Set<string>();
+      for (const paths of this.sessionImages.values()) {
+        for (const p of paths) {
+          activePaths.add(p);
+        }
+      }
+
       let deletedCount = 0;
       for (const [fileName, fileType] of files) {
-        if (fileType === vscode.FileType.File) {
-          try {
-            const fileUri = vscode.Uri.joinPath(imagesDir, fileName);
-            await vscode.workspace.fs.delete(fileUri, {useTrash: false});
-            deletedCount++;
-          } catch (error) {
-            Logger.warn(`Failed to delete orphaned image ${fileName}`, error);
-          }
+        if (fileType !== vscode.FileType.File) {
+          continue;
+        }
+        const fileUri = vscode.Uri.joinPath(imagesDir, fileName);
+        if (activePaths.has(fileUri.fsPath)) {
+          continue;
+        }
+        try {
+          await vscode.workspace.fs.delete(fileUri, {useTrash: false});
+          deletedCount++;
+        } catch (error) {
+          Logger.warn(`Failed to delete orphaned image ${fileName}`, error);
         }
       }
 
