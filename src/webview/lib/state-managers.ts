@@ -95,6 +95,7 @@ export class SessionStateManager {
     this._sessionIds = this._sessionIds.filter((id) => id !== sessionId);
     delete this._sessionMeta[sessionId];
     this.buffers.delete(sessionId);
+    this.debouncedCleanup.flush();
   }
 
   clearAll(): void {

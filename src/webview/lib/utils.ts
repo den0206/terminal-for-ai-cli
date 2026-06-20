@@ -22,7 +22,7 @@ export const webviewLog = {
 
 export type CancellableFunction<T extends (...args: never[]) => void> = ((
   ...args: Parameters<T>
-) => void) & {cancel: () => void};
+) => void) & {cancel: () => void; flush: () => void};
 
 // ============================================================================
 // Utility Functions
@@ -33,19 +33,33 @@ export function debounce<T extends (...args: never[]) => void>(
   delay: number
 ): CancellableFunction<T> {
   let handle: number | undefined;
+  let pendingArgs: Parameters<T> | undefined;
   const debounced = (...args: Parameters<T>) => {
+    pendingArgs = args;
     if (handle) {
       clearTimeout(handle);
     }
     handle = window.setTimeout(() => {
-      fn(...args);
+      fn(...(pendingArgs as Parameters<T>));
       handle = undefined;
+      pendingArgs = undefined;
     }, delay);
   };
   debounced.cancel = () => {
     if (handle) {
       clearTimeout(handle);
       handle = undefined;
+      pendingArgs = undefined;
+    }
+  };
+  debounced.flush = () => {
+    if (handle !== undefined) {
+      clearTimeout(handle);
+      handle = undefined;
+      if (pendingArgs !== undefined) {
+        fn(...pendingArgs);
+        pendingArgs = undefined;
+      }
     }
   };
   return debounced;
@@ -57,12 +71,15 @@ export function throttle<T extends (...args: never[]) => void>(
 ): CancellableFunction<T> {
   let lastCall = 0;
   let timeoutHandle: number | undefined;
+  let pendingArgs: Parameters<T> | undefined;
   const throttled = (...args: Parameters<T>) => {
+    pendingArgs = args;
     const now = Date.now();
     const timeSinceLastCall = now - lastCall;
 
     if (timeSinceLastCall >= delay) {
       lastCall = now;
+      pendingArgs = undefined;
       fn(...args);
     } else {
       if (timeoutHandle) {
@@ -70,8 +87,9 @@ export function throttle<T extends (...args: never[]) => void>(
       }
       timeoutHandle = window.setTimeout(() => {
         lastCall = Date.now();
-        fn(...args);
+        fn(...(pendingArgs as Parameters<T>));
         timeoutHandle = undefined;
+        pendingArgs = undefined;
       }, delay - timeSinceLastCall);
     }
   };
@@ -79,6 +97,18 @@ export function throttle<T extends (...args: never[]) => void>(
     if (timeoutHandle) {
       clearTimeout(timeoutHandle);
       timeoutHandle = undefined;
+      pendingArgs = undefined;
+    }
+  };
+  throttled.flush = () => {
+    if (timeoutHandle !== undefined) {
+      clearTimeout(timeoutHandle);
+      timeoutHandle = undefined;
+      if (pendingArgs !== undefined) {
+        lastCall = Date.now();
+        fn(...pendingArgs);
+        pendingArgs = undefined;
+      }
     }
   };
   return throttled;
