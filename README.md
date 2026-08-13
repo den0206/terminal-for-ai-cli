@@ -112,7 +112,7 @@ Terminal For AI CLI implements multiple security measures to protect against com
 
 ### Testing
 - **Automated tests**: 33+ unit tests covering validation logic, random generation, security features, and logging.
-- **Continuous validation**: ESLint enforces code quality and catches potential issues at development time.
+- **Continuous validation**: TypeScript strict mode (`strict`, `noUnusedLocals`, `noUnusedParameters`) enforces code quality at compile time.
 
 ### Logging & Debugging
 - **Centralized logging**: VS Code Output Channel integration for structured logging with timestamps and log levels.
@@ -126,27 +126,30 @@ Terminal For AI CLI implements multiple security measures to protect against com
 - `npm run bundle:webview` – bundles `src/webview/main.ts` (IIFE) to `media/webview.js`.
 - `npm run compile` – runs the bundle script and `tsc -p ./` to emit `dist/extension.js`.
 - `npm run watch` – TypeScript watch mode for iterative work.
-- `npm run lint` – runs ESLint on the source code.
+- `npm run typecheck` – runs `tsc --noEmit` for full type checking (replaces the old ESLint step).
 - `npm test` – runs the test suite with Vitest.
 - `npm run test:watch` – runs tests in watch mode.
 - `npm run test:coverage` – generates test coverage report.
 - Dependencies: `node-pty`, `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, `vitest`, and VS Code `@types`.
 - Outputs: extension host bundle (`dist/extension.js`), Webview bundle (`media/webview.js`, `media/webview.js.map`, `media/xterm.css`).
 
-### Rebuilding node-pty
+### node-pty and cross-platform packaging
 
-The VS Code / Cursor extension host ships its own Electron/Node runtime, so `node-pty` must be rebuilt against that version. If you see errors such as `NODE_MODULE_VERSION 131 ... requires NODE_MODULE_VERSION 136`, follow these steps:
+`node-pty` is a native module, but version 1.1.0 is built against Node-API (`node-addon-api` 7), which is ABI stable. **No rebuild against the editor's Electron version is required** — a binary built with plain `npm install` works across VS Code / Cursor versions. Only the OS and CPU architecture matter.
 
-1. Check the Electron version used by your editor via **Help → About** (macOS: **Code → About**), or by running `code --status`.
-2. Rebuild `node-pty` for that Electron version (example uses Electron 31.4.0):
+For local development `npm install` is enough. For distribution, the `Export VSIX` workflow (`.github/workflows/export-vsix.yml`) builds `node-pty` on a runner matrix and assembles a **single VSIX that runs on every platform**:
 
-   ```bash
-   npm run rebuild:pty -- --electron 31.4.0
-   ```
+| Target | Files placed under `node_modules/node-pty/prebuilds/<target>/` |
+| --- | --- |
+| `darwin-arm64`, `darwin-x64` | `pty.node`, `spawn-helper` |
+| `linux-x64`, `linux-arm64` | `pty.node` |
+| `win32-x64`, `win32-arm64` | `pty.node`, `conpty.node`, `conpty_console_list.node`, `winpty.dll`, `winpty-agent.exe` |
 
-   On Apple Silicon you can add `--arch=x64` when producing an x64 VSIX.
+node-pty's loader (`lib/utils.js`) resolves `prebuilds/${process.platform}-${process.arch}/` at runtime, so no extension code changes are needed. `node_modules/node-pty/build/**` is excluded via `.vscodeignore` because the loader checks it *before* `prebuilds/`, and shipping it would pin the VSIX to the machine that built it.
 
-3. Run the command before packaging (e.g., prior to `npm run package`) so that the rebuilt `node_modules/node-pty/build/Release/pty.node` is included in the VSIX.
+Run `node scripts/verify-prebuilds.mjs` before packaging to confirm every target is present and `spawn-helper` kept its executable bit. `npm run package` copies the current platform's `build/Release` into `prebuilds/` when that slot is empty, so a local/CI VSIX still runs on the machine that built it.
+
+Alpine/musl (`linux-x64-musl`) is not covered; add a matrix entry if you need it.
 
 ### Extension Icons
 
@@ -168,7 +171,7 @@ The extension uses two icon files:
 The project uses GitHub Actions for continuous integration:
 
 - **CI Workflow** (`.github/workflows/ci.yml`): Runs on push to `feature/**`, `fix/**`, `main`, and `develop` branches
-  - Lint check with ESLint
+  - TypeScript type check (`tsc --noEmit`)
   - TypeScript compilation
   - Test execution with Vitest
   - Test coverage report generation

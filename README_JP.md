@@ -111,7 +111,7 @@ Terminal For AI CLI は、一般的な脆弱性から保護するための複数
 
 ### テスト
 - **自動テスト**: 検証ロジック、ランダム生成、セキュリティ機能、ロギングをカバーする 33 以上のユニットテストを実装。
-- **継続的な検証**: ESLint がコード品質を強制し、開発時に潜在的な問題を検出します。
+- **継続的な検証**: TypeScript の strict モード（`strict`、`noUnusedLocals`、`noUnusedParameters`）によりコンパイル時にコード品質を強制します。
 
 ### ロギング・デバッグ
 - **一元化されたロギング**: タイムスタンプとログレベルを含む構造化ログのための VS Code Output チャンネル統合。
@@ -125,27 +125,30 @@ Terminal For AI CLI は、一般的な脆弱性から保護するための複数
 - `npm run bundle:webview`：`src/webview/main.ts` を IIFE 形式で `media/webview.js` に出力。
 - `npm run compile`：上記 + `tsc -p ./` により `dist/extension.js` を出力。
 - `npm run watch`：TypeScript のウォッチモード。
-- `npm run lint`：ESLint でソースコードを検証。
+- `npm run typecheck`：`tsc --noEmit` で全体の型チェックを実行（以前の ESLint 工程の代替）。
 - `npm test`：Vitest でテストスイートを実行。
 - `npm run test:watch`：テストをウォッチモードで実行。
 - `npm run test:coverage`：テストカバレッジレポートを生成。
 - 主要依存: `node-pty`, `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, `vitest`, VS Code API。
 - 生成物: `dist/extension.js`, `media/webview.js`, `media/webview.js.map`, `media/xterm.css`。
 
-### node-pty の再ビルド
+### node-pty と全プラットフォーム対応 VSIX
 
-VS Code / Cursor の拡張ホストでは Electron 固有の Node.js が使われるため、`node-pty` をその Electron 版に合わせて再ビルドする必要があります。`NODE_MODULE_VERSION` の不一致（例: 131 vs 136）で拡張の有効化に失敗した場合は、次の手順で解消できます。
+`node-pty` はネイティブモジュールですが、1.1.0 は Node-API（`node-addon-api` 7）ビルドで ABI が安定しています。そのため **エディタの Electron バージョンに合わせた再ビルドは不要** で、`npm install` で作ったバイナリがそのまま VS Code / Cursor のどのバージョンでも動きます。差異は OS と CPU アーキテクチャだけです。
 
-1. VS Code の「ヘルプ > バージョン情報」（macOS は「Code > バージョン情報」）や `code --status` で Electron のバージョンを確認する。
-2. リポジトリ直下で以下を実行する（例: Electron 31.4.0 の場合）。
+ローカル開発は `npm install` のみで足ります。配布用には `Export VSIX` ワークフロー（`.github/workflows/export-vsix.yml`）が各 OS/arch のランナーで `node-pty` をビルドし、**全プラットフォームで動く単一の VSIX** を組み立てます。
 
-   ```bash
-   npm run rebuild:pty -- --electron 31.4.0
-   ```
+| ターゲット | `node_modules/node-pty/prebuilds/<target>/` に配置するファイル |
+| --- | --- |
+| `darwin-arm64`, `darwin-x64` | `pty.node`, `spawn-helper` |
+| `linux-x64`, `linux-arm64` | `pty.node` |
+| `win32-x64`, `win32-arm64` | `pty.node`, `conpty.node`, `conpty_console_list.node`, `winpty.dll`, `winpty-agent.exe` |
 
-   Apple Silicon で x64 版 VSIX を作る場合は `--arch=x64` を追加できます。
+node-pty のローダー（`lib/utils.js`）が実行時に `prebuilds/${process.platform}-${process.arch}/` を解決するため、拡張側のコード変更は不要です。ローダーは `prebuilds/` より先に `build/Release` を探すので、`node_modules/node-pty/build/**` は `.vscodeignore` で除外しています（同梱するとビルドしたマシンでしか動かない VSIX になります）。
 
-3. VSIX の作成や CI ビルドの前にも同コマンドを実行し、生成された `node_modules/node-pty/build/Release/pty.node` を配布物に含める。
+パッケージ前に `node scripts/verify-prebuilds.mjs` を実行すると、全ターゲットが揃っているか、`spawn-helper` の実行ビットが残っているかを確認できます。`npm run package` は、そのスロットが空のときだけ今の OS の `build/Release` を `prebuilds/` にコピーするので、ローカル / CI の VSIX でもビルドしたマシン上では動きます。
+
+Alpine / musl（`linux-x64-musl`）は対象外です。必要ならマトリクスに追加してください。
 
 ### 拡張機能アイコン
 
@@ -167,7 +170,7 @@ VS Code / Cursor の拡張ホストでは Electron 固有の Node.js が使わ�
 プロジェクトは継続的インテグレーションに GitHub Actions を使用しています：
 
 - **CI ワークフロー** (`.github/workflows/ci.yml`): `feature/**`、`fix/**`、`main`、`develop` ブランチへのプッシュ時に実行
-  - ESLint による lint チェック
+  - TypeScript 型チェック（`tsc --noEmit`）
   - TypeScript コンパイル
   - Vitest によるテスト実行
   - テストカバレッジレポート生成
