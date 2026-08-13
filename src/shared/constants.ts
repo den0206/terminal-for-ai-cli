@@ -27,11 +27,8 @@ export const SHARED_CONSTANTS = {
     DEFAULT_ROWS: 24,
   },
 
-  /** Webview buffer management */
-  BUFFER_CONSTRAINTS: {
-    MAX_SIZE: 2_000_000, // 2M chars - Covers TERMINAL_SCROLLBACK_LINES (3000) with ~1k chars/line + ANSI
-    MAX_COUNT: 10,
-  },
+  /** Webview per-session buffer size in chars (covers 3000 scrollback lines at ~1k chars/line + ANSI) */
+  MAX_BUFFER_SIZE: 2_000_000,
 
   /** Split view constraints */
   SPLIT_VIEW: {
