@@ -15,7 +15,6 @@ src/**
 # Build tools and scripts
 scripts/**
 vitest.config.mts
-eslint.config.mjs
 tsconfig.json
 
 # Source maps (not needed in production)
@@ -25,9 +24,19 @@ tsconfig.json
 CHANGELOG.md
 
 # Package files (node_modules は含める - node-pty 等の runtime 依存のため)
-# パッケージ前に npm prune --production で devDependencies を外すと VSIX が軽量になる
+# パッケージ前に npm prune --omit=dev で devDependencies を外すと VSIX が軽量になる
 *.vsix
 vsix/**
+
+# node-pty のネイティブビルド成果物・ソース
+# build/Release はビルドしたマシンの arch のバイナリしか無く、
+# かつ loadNativeModule が prebuilds より先に探すため必ず除外する
+node_modules/node-pty/build/**
+node_modules/node-pty/deps/**
+node_modules/node-pty/src/**
+node_modules/node-pty/node-addon-api/**
+node_modules/node-pty/scripts/**
+node_modules/node-pty/binding.gyp
 
 # IDE and OS files
 .DS_Store
