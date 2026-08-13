@@ -9,8 +9,7 @@ const CONTAINER_COMMAND = 'workbench.view.extension.terminal-for-ai-cli';
 let providerRef: AiTerminalViewProvider | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
-  // Initialize logger first
-  Logger.initialize(context);
+  context.subscriptions.push(Logger);
   Logger.info('Terminal For AI CLI extension activated');
 
   const sessionManager = new SessionManager();
