@@ -1,8 +1,6 @@
 import * as vscode from 'vscode';
-import type {ThemePresetInfo, ThemeSnapshot} from '../shared/types';
+import type {ThemeSnapshot} from '../shared/types';
 
-// Re-export for backward compatibility
-export type ThemeOption = ThemePresetInfo;
 export type {ThemeSnapshot};
 
 type HtmlTemplateParams = {

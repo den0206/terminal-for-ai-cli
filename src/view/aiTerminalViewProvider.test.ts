@@ -31,15 +31,7 @@ vi.mock('node-pty', () => ({
 
 // Mock Logger to avoid Output Channel creation
 vi.mock('../utils/logger', () => ({
-  Logger: {
-    initialize: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    show: vi.fn(),
-    dispose: vi.fn(),
-  },
+  Logger: {info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn()},
 }));
 
 // Mock vscode workspace module
@@ -58,12 +50,6 @@ vi.mock('vscode', async () => {
           }
           if (key === 'themePreset') {
             return 'modern';
-          }
-          if (key === 'logLevel') {
-            return 'info';
-          }
-          if (key === 'enablePerformanceMonitoring') {
-            return true;
           }
           return undefined;
         }),
@@ -952,33 +938,6 @@ describe('AiTerminalViewProvider', () => {
         });
       });
     });
-
-    describe('configuration validation', () => {
-      it('should validate shell path on initialization', () => {
-        // Should not throw during construction
-        expect(() => {
-          const testProvider = new AiTerminalViewProvider(
-            context,
-            sessionManager
-          );
-          testProvider.dispose();
-        }).not.toThrow();
-      });
-
-      it('should log warnings for invalid configuration', () => {
-        // Create provider which validates config
-        const testProvider = new AiTerminalViewProvider(
-          context,
-          sessionManager
-        );
-
-        // Logger.warn should have been called if there are config issues
-        // (In real scenario, this depends on actual config values)
-        expect(Logger.warn).toBeDefined();
-
-        testProvider.dispose();
-      });
-    });
   });
 
   describe('Theme Management', () => {
@@ -1419,25 +1378,7 @@ describe('AiTerminalViewProvider', () => {
     });
   });
 
-  describe('Performance', () => {
-    it('should queue messages when webview is not ready', () => {
-      const webviewView = createMockWebviewView();
-      provider.resolveWebviewView(webviewView);
-
-      // Don't send webview-ready, so webview is not ready
-      // Manually trigger session data (should be queued)
-      const sessions = sessionManager.getActiveSessions();
-      if (sessions.length > 0) {
-        sessionManager['onDataEmitter'].fire({
-          id: sessions[0].id,
-          data: 'test data',
-        });
-      }
-
-      // Message should be queued (verified by no crash)
-      expect(true).toBe(true);
-    });
-
+  describe('message queue', () => {
     it('should flush queued messages when webview becomes ready', async () => {
       const webviewView = createMockWebviewView();
       provider.resolveWebviewView(webviewView);
