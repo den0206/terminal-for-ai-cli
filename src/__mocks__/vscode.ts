@@ -5,6 +5,11 @@ export const window = {
   activeTextEditor: undefined as {document: {uri: {scheme: string; fsPath: string}}} | undefined,
   createOutputChannel: vi.fn(() => ({
     appendLine: vi.fn(),
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
     show: vi.fn(),
     dispose: vi.fn(),
   })),
