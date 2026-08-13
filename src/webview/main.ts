@@ -2,7 +2,7 @@ import {FitAddon} from '@xterm/addon-fit';
 import {Terminal} from '@xterm/xterm';
 
 // Import shared modules
-import {Constants} from './lib/constants';
+import {SHARED_CONSTANTS} from '../shared/constants';
 import {DOMElements} from './lib/dom';
 import {DragDropHandler} from './lib/drag-drop-handler';
 import {ResizeController} from './lib/resize-controller';
@@ -12,6 +12,7 @@ import {
   ThemeStateManager,
 } from './lib/state-managers';
 import {ThemeController} from './lib/theme-controller';
+import {PANES} from './lib/types';
 import type {
   VSCodeApi,
   InboundMessage,
@@ -54,7 +55,7 @@ class TerminalManager {
       allowTransparency: true,
       convertEol: true,
       cursorBlink: true,
-      scrollback: Constants.TERMINAL_SCROLLBACK_LINES,
+      scrollback: SHARED_CONSTANTS.TERMINAL_SCROLLBACK_LINES,
       fontFamily: getComputedVar(
         '--vscode-editor-font-family',
         'var(--monaco-monospace-font)',
@@ -121,7 +122,7 @@ class TerminalManager {
   }
 
   fitVisibleTerminals(): void {
-    (['primary', 'secondary'] as const).forEach((pane) => {
+    PANES.forEach((pane) => {
       const context = this.paneContexts[pane];
       const isVisible =
         pane === 'primary'
@@ -157,7 +158,7 @@ class TerminalManager {
         'rgba(255,255,255,0.15)'
       ),
     };
-    (['primary', 'secondary'] as const).forEach((pane) => {
+    PANES.forEach((pane) => {
       this.paneContexts[pane].terminal.options.theme = {...theme};
     });
   }
@@ -200,7 +201,7 @@ class TerminalManager {
    * Should be called on page unload or extension deactivation
    */
   disposeAll(): void {
-    (['primary', 'secondary'] as const).forEach((pane) => {
+    PANES.forEach((pane) => {
       this.disposePane(pane);
     });
   }
@@ -214,7 +215,7 @@ class TerminalManager {
   }
 
   deliverDataToPanes(sessionId: string, chunk: string): void {
-    (['primary', 'secondary'] as const).forEach((pane) => {
+    PANES.forEach((pane) => {
       if (this.uiState.paneSessions[pane] === sessionId) {
         this.paneContexts[pane].terminal.write(chunk);
       }
@@ -474,7 +475,7 @@ class AppController {
   }
 
   private setupPaneFocus(): void {
-    (['primary', 'secondary'] as const).forEach((pane) => {
+    PANES.forEach((pane) => {
       const root = this.dom.paneRoots[pane];
       if (root) {
         this.addEventListener(root, 'pointerdown', () =>
@@ -517,7 +518,12 @@ class AppController {
           message.payload.label
         );
         this.persistState();
-        this.activateSession(message.payload.id, message.payload.shell);
+        this.switchActiveSession(
+          message.payload.id,
+          `Connected to ${this.sessionState.getSessionLabel(
+            message.payload.id
+          )} (${message.payload.shell})`
+        );
         break;
 
       case 'session-data':
@@ -600,8 +606,8 @@ class AppController {
     if (this.uiState.pendingSessionRequest) {
       return;
     }
-    if (this.sessionState.sessionIds.length >= Constants.MAX_SESSIONS) {
-      this.setStatus(`Maximum of ${Constants.MAX_SESSIONS} sessions reached.`);
+    if (this.sessionState.sessionIds.length >= SHARED_CONSTANTS.MAX_SESSIONS) {
+      this.setStatus(`Maximum of ${SHARED_CONSTANTS.MAX_SESSIONS} sessions reached.`);
       this.updateAddButtonState(false);
       return;
     }
@@ -613,21 +619,6 @@ class AppController {
       type: 'request-new-session',
       payload: this.terminalManager.getPaneDimensions('primary'),
     });
-  }
-
-  private activateSession(sessionId: string, shell?: string): void {
-    this.sessionState.activeSessionId = sessionId;
-    this.persistState();
-    this.syncPaneAssignments();
-    this.focusActivePane();
-    this.terminalManager.fitVisibleTerminals();
-    this.notifyResize();
-    this.setStatus(
-      `Connected to ${this.sessionState.getSessionLabel(sessionId)} (${
-        shell ?? this.sessionState.sessionMeta[sessionId]?.shell ?? 'Shell'
-      })`
-    );
-    this.updateSessionControls();
   }
 
   private switchActiveSession(sessionId: string, message: string): void {
@@ -674,7 +665,7 @@ class AppController {
       return;
     }
     const atLimit =
-      this.sessionState.sessionIds.length >= Constants.MAX_SESSIONS;
+      this.sessionState.sessionIds.length >= SHARED_CONSTANTS.MAX_SESSIONS;
     this.dom.addSessionButton.disabled = isBusy || atLimit;
   }
 
@@ -863,7 +854,7 @@ class AppController {
   }
 
   private updatePaneActiveStates(): void {
-    (['primary', 'secondary'] as const).forEach((pane) => {
+    PANES.forEach((pane) => {
       const paneElement = this.dom.paneElements[pane];
       if (!paneElement) {
         return;

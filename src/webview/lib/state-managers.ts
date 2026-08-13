@@ -1,11 +1,11 @@
+import {SHARED_CONSTANTS} from '../../shared/constants';
 import type {SessionMeta, ThemePresetInfo} from '../../shared/types';
-import {Constants} from './constants';
-import type {Pane, ViewMode, ViewState} from './types';
+import {PANES, type Pane, type ViewMode, type ViewState} from './types';
 import {
   clampSplitRatio,
   debounce,
   validateTerminalHeight,
-  type CancellableFunction,
+  type DebouncedFunction,
 } from './utils';
 
 // ============================================================================
@@ -13,68 +13,37 @@ import {
 // ============================================================================
 
 export class SessionStateManager {
-  private _activeSessionId: string | undefined;
-  private _sessionIds: string[] = [];
-  private _sessionMeta: Record<string, SessionMeta> = {};
-  private _totalSessions = 0;
+  activeSessionId: string | undefined;
+  sessionIds: string[];
+  sessionMeta: Record<string, SessionMeta>;
+  totalSessions: number;
   private readonly buffers = new Map<string, string>();
-  private readonly debouncedCleanup: CancellableFunction<() => void>;
+  /** Runs 300ms after the last appendToBuffer call so bursts are batched */
+  private readonly debouncedCleanup: DebouncedFunction<() => void>;
 
   constructor(savedState: ViewState) {
-    this._activeSessionId = savedState.activeSessionId;
-    this._totalSessions = savedState.totalSessions ?? 0;
-    this._sessionIds = Array.isArray(savedState.sessionIds)
-      ? savedState.sessionIds.filter(
-          (id): id is string => typeof id === 'string'
-        )
+    this.activeSessionId = savedState.activeSessionId;
+    this.totalSessions = savedState.totalSessions ?? 0;
+    this.sessionIds = Array.isArray(savedState.sessionIds)
+      ? savedState.sessionIds.filter((id): id is string => typeof id === 'string')
       : [];
-    this._sessionMeta = savedState.sessionMeta ?? {};
+    this.sessionMeta = savedState.sessionMeta ?? {};
 
     // Initialize buffers for existing sessions
-    this._sessionIds.forEach((id, index) => {
-      if (!this.buffers.has(id)) {
-        this.buffers.set(id, '');
-      }
-      this._sessionMeta[id] =
-        this._sessionMeta[id] ??
-        ({shell: 'Shell', label: `Terminal ${index + 1}`} as SessionMeta);
+    this.sessionIds.forEach((id, index) => {
+      this.buffers.set(id, '');
+      this.sessionMeta[id] = this.sessionMeta[id] ?? {
+        shell: 'Shell',
+        label: `Terminal ${index + 1}`,
+      };
     });
 
-    // Debounce buffer cleanup to avoid performance issues during high-frequency updates
-    // Cleanup runs 300ms after the last appendToBuffer call
-    // This is short enough to be responsive but long enough to batch rapid updates
-    this.debouncedCleanup = debounce(() => {
-      this.cleanupOldBuffers();
-    }, 300);
-  }
-
-  get activeSessionId(): string | undefined {
-    return this._activeSessionId;
-  }
-
-  set activeSessionId(value: string | undefined) {
-    this._activeSessionId = value;
-  }
-
-  get sessionIds(): string[] {
-    return this._sessionIds;
-  }
-
-  get totalSessions(): number {
-    return this._totalSessions;
-  }
-
-  set totalSessions(value: number) {
-    this._totalSessions = value;
-  }
-
-  get sessionMeta(): Record<string, SessionMeta> {
-    return this._sessionMeta;
+    this.debouncedCleanup = debounce(() => this.dropOrphanedBuffers(), 300);
   }
 
   getSessionLabel(sessionId: string, fallbackIndex?: number): string {
     return (
-      this._sessionMeta[sessionId]?.label ??
+      this.sessionMeta[sessionId]?.label ??
       (typeof fallbackIndex === 'number'
         ? `Terminal ${fallbackIndex + 1}`
         : sessionId)
@@ -82,53 +51,48 @@ export class SessionStateManager {
   }
 
   addSession(id: string, shell: string, label?: string): void {
-    this._sessionIds = this._sessionIds.filter((sid) => sid !== id);
-    this._sessionIds.push(id);
-    this._sessionMeta[id] = {
+    this.sessionIds = this.sessionIds.filter((sid) => sid !== id);
+    this.sessionIds.push(id);
+    this.sessionMeta[id] = {
       shell,
-      label: label ?? `Terminal ${this._sessionIds.length}`,
+      label: label ?? `Terminal ${this.sessionIds.length}`,
     };
     this.buffers.set(id, '');
   }
 
   removeSession(sessionId: string): void {
-    this._sessionIds = this._sessionIds.filter((id) => id !== sessionId);
-    delete this._sessionMeta[sessionId];
+    this.sessionIds = this.sessionIds.filter((id) => id !== sessionId);
+    delete this.sessionMeta[sessionId];
     this.buffers.delete(sessionId);
     this.debouncedCleanup.flush();
   }
 
   clearAll(): void {
-    // Cancel pending cleanup operations
     this.debouncedCleanup.cancel();
-    this._sessionIds = [];
-    this._sessionMeta = {};
-    this._activeSessionId = undefined;
-    this._totalSessions = 0;
+    this.sessionIds = [];
+    this.sessionMeta = {};
+    this.activeSessionId = undefined;
+    this.totalSessions = 0;
     this.buffers.clear();
   }
 
   ensureActiveSession(): boolean {
-    if (
-      this._activeSessionId &&
-      this._sessionIds.includes(this._activeSessionId)
-    ) {
+    if (this.activeSessionId && this.sessionIds.includes(this.activeSessionId)) {
       return false;
     }
-    const fallbackId = this._sessionIds[this._sessionIds.length - 1];
-    this._activeSessionId = fallbackId;
+    this.activeSessionId = this.sessionIds[this.sessionIds.length - 1];
     return true;
   }
 
   // Buffer management
   appendToBuffer(sessionId: string, chunk: string): void {
-    const current = this.buffers.get(sessionId) ?? '';
-    let next = current + chunk;
-    if (next.length > Constants.MAX_BUFFER_SIZE) {
-      next = next.slice(next.length - Constants.MAX_BUFFER_SIZE);
-    }
-    this.buffers.set(sessionId, next);
-    // Use debounced cleanup to avoid performance issues during high-frequency updates
+    const next = (this.buffers.get(sessionId) ?? '') + chunk;
+    this.buffers.set(
+      sessionId,
+      next.length > SHARED_CONSTANTS.MAX_BUFFER_SIZE
+        ? next.slice(next.length - SHARED_CONSTANTS.MAX_BUFFER_SIZE)
+        : next
+    );
     this.debouncedCleanup();
   }
 
@@ -136,23 +100,9 @@ export class SessionStateManager {
     return this.buffers.get(sessionId);
   }
 
-  private cleanupOldBuffers(): void {
-    // Immediately remove orphaned buffers (not in active sessions)
-    // This is more aggressive than waiting for MAX_BUFFER_COUNT to be exceeded
+  private dropOrphanedBuffers(): void {
     for (const key of this.buffers.keys()) {
-      if (!this._sessionIds.includes(key)) {
-        this.buffers.delete(key);
-      }
-    }
-
-    // Failsafe: If we still exceed MAX_BUFFER_COUNT (shouldn't happen in practice),
-    // remove the oldest buffers based on insertion order
-    if (this.buffers.size > Constants.MAX_BUFFER_COUNT) {
-      const keysToRemove = Array.from(this.buffers.keys()).slice(
-        0,
-        this.buffers.size - Constants.MAX_BUFFER_COUNT
-      );
-      for (const key of keysToRemove) {
+      if (!this.sessionIds.includes(key)) {
         this.buffers.delete(key);
       }
     }
@@ -161,18 +111,18 @@ export class SessionStateManager {
   toViewState(uiState: UIStateManager): ViewState {
     // Only persist metadata for currently active sessions to prevent unbounded growth
     const activeMeta: Record<string, SessionMeta> = {};
-    for (const id of this._sessionIds) {
-      if (this._sessionMeta[id]) {
-        activeMeta[id] = this._sessionMeta[id];
+    for (const id of this.sessionIds) {
+      if (this.sessionMeta[id]) {
+        activeMeta[id] = this.sessionMeta[id];
       }
     }
 
     return {
-      activeSessionId: this._activeSessionId,
-      totalSessions: this._totalSessions,
-      sessionIds: this._sessionIds,
+      activeSessionId: this.activeSessionId,
+      totalSessions: this.totalSessions,
+      sessionIds: this.sessionIds,
       terminalHeight: uiState.terminalHeight,
-      sessionMeta: activeMeta, // Only active sessions, not historical data
+      sessionMeta: activeMeta,
       viewMode: uiState.viewMode,
       splitRatio: uiState.splitRatio,
     };
@@ -184,11 +134,11 @@ export class SessionStateManager {
 // ============================================================================
 
 export class UIStateManager {
-  private _pendingSessionRequest = false;
-  private _clearingAll = false;
-  private _confirmingClearAll = false;
+  pendingSessionRequest = false;
+  clearingAll = false;
+  confirmingClearAll = false;
+  viewMode: ViewMode;
   private _terminalHeight: number;
-  private _viewMode: ViewMode;
   private _splitRatio: number;
   readonly paneSessions: Record<Pane, string | undefined> = {
     primary: undefined,
@@ -197,34 +147,12 @@ export class UIStateManager {
 
   constructor(savedState: ViewState) {
     this._terminalHeight = validateTerminalHeight(savedState.terminalHeight);
-    this._viewMode = savedState.viewMode === 'split' ? 'split' : 'single';
+    this.viewMode = savedState.viewMode === 'split' ? 'split' : 'single';
     this._splitRatio = clampSplitRatio(
-      typeof savedState.splitRatio === 'number' ? savedState.splitRatio : 0.5
+      typeof savedState.splitRatio === 'number'
+        ? savedState.splitRatio
+        : SHARED_CONSTANTS.SPLIT_VIEW.DEFAULT_RATIO
     );
-  }
-
-  get pendingSessionRequest(): boolean {
-    return this._pendingSessionRequest;
-  }
-
-  set pendingSessionRequest(value: boolean) {
-    this._pendingSessionRequest = value;
-  }
-
-  get clearingAll(): boolean {
-    return this._clearingAll;
-  }
-
-  set clearingAll(value: boolean) {
-    this._clearingAll = value;
-  }
-
-  get confirmingClearAll(): boolean {
-    return this._confirmingClearAll;
-  }
-
-  set confirmingClearAll(value: boolean) {
-    this._confirmingClearAll = value;
   }
 
   get terminalHeight(): number {
@@ -233,14 +161,6 @@ export class UIStateManager {
 
   set terminalHeight(value: number) {
     this._terminalHeight = validateTerminalHeight(value);
-  }
-
-  get viewMode(): ViewMode {
-    return this._viewMode;
-  }
-
-  set viewMode(value: ViewMode) {
-    this._viewMode = value;
   }
 
   get splitRatio(): number {
@@ -253,7 +173,7 @@ export class UIStateManager {
 
   isSplitModeActive(): boolean {
     return (
-      this._viewMode === 'split' &&
+      this.viewMode === 'split' &&
       Boolean(this.paneSessions.primary && this.paneSessions.secondary)
     );
   }
@@ -262,15 +182,13 @@ export class UIStateManager {
     if (!sessionId) {
       return undefined;
     }
-    return (['primary', 'secondary'] as const).find(
-      (pane) => this.paneSessions[pane] === sessionId
-    );
+    return PANES.find((pane) => this.paneSessions[pane] === sessionId);
   }
 
   resetClearAllState(): void {
-    this._clearingAll = false;
-    this._pendingSessionRequest = false;
-    this._confirmingClearAll = false;
+    this.clearingAll = false;
+    this.pendingSessionRequest = false;
+    this.confirmingClearAll = false;
   }
 }
 
@@ -279,28 +197,12 @@ export class UIStateManager {
 // ============================================================================
 
 export class ThemeStateManager {
-  private _currentThemeKey: string | undefined;
-  private _availablePresets: ThemePresetInfo[] = [];
-
-  get currentThemeKey(): string | undefined {
-    return this._currentThemeKey;
-  }
-
-  set currentThemeKey(value: string | undefined) {
-    this._currentThemeKey = value;
-  }
-
-  get availablePresets(): ThemePresetInfo[] {
-    return this._availablePresets;
-  }
-
-  set availablePresets(value: ThemePresetInfo[]) {
-    this._availablePresets = value;
-  }
+  currentThemeKey: string | undefined;
+  availablePresets: ThemePresetInfo[] = [];
 
   getActivePreset(): ThemePresetInfo | undefined {
-    return this._availablePresets.find(
-      (preset) => preset.key === this._currentThemeKey
+    return this.availablePresets.find(
+      (preset) => preset.key === this.currentThemeKey
     );
   }
 }

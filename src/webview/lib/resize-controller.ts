@@ -25,114 +25,79 @@ export class ResizeController {
   ) {}
 
   setupResizer(): void {
-    if (!this.dom.resizer) {
-      return;
-    }
-    const handlePointerDown = (event: PointerEvent) => {
-      event.preventDefault();
-      const pointerId = event.pointerId;
-      const startY = event.clientY;
+    this.onDrag(this.dom.resizer, () => {
       const startHeight = this.uiState.terminalHeight;
-
-      const throttledMove = throttle((delta: number) => {
-        this.applyTerminalHeight(startHeight + delta, false);
-      }, 16);
-
-      const onMove = (moveEvent: PointerEvent) => {
-        if (moveEvent.pointerId !== pointerId) {
-          return;
-        }
-        const delta = moveEvent.clientY - startY;
-        throttledMove(delta);
-      };
-
-      const cleanupFn = () => {
-        window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', onUp);
-        window.removeEventListener('pointercancel', onUp);
-        throttledMove.cancel();
-        this._activeDragCleanups.delete(cleanupFn);
-      };
-
-      const onUp = (moveEvent?: PointerEvent) => {
-        if (moveEvent && moveEvent.pointerId !== pointerId) {
-          return;
-        }
-        cleanupFn();
-        if (moveEvent) {
-          this.onPersistState();
-        }
-      };
-
-      this._activeDragCleanups.add(cleanupFn);
-
-      window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', onUp);
-      window.addEventListener('pointercancel', onUp);
-    };
-    this.addEventListener(
-      this.dom.resizer,
-      'pointerdown',
-      handlePointerDown as EventListener
-    );
+      return (deltaY) => this.applyTerminalHeight(startHeight + deltaY, false);
+    });
   }
 
   setupSplitResizer(): void {
-    if (!this.dom.splitResizer) {
+    this.onDrag(this.dom.splitResizer, () => {
+      if (!this.uiState.isSplitModeActive()) {
+        return undefined;
+      }
+      const stackHeight = this.dom.terminalStack?.getBoundingClientRect().height;
+      if (!stackHeight || stackHeight <= 0) {
+        return undefined;
+      }
+      const startRatio = this.uiState.splitRatio;
+      return (deltaY) =>
+        this.setSplitRatio(startRatio + deltaY / stackHeight, false);
+    });
+  }
+
+  /**
+   * Wires a vertical pointer drag on `handle`.
+   *
+   * `begin` runs on pointerdown and returns the per-drag move handler
+   * (receiving the Y delta from the drag origin), or undefined to skip the drag.
+   * Moves are throttled to one frame; state is persisted on pointerup.
+   */
+  private onDrag(
+    handle: Element | null,
+    begin: () => ((deltaY: number) => void) | undefined
+  ): void {
+    if (!handle) {
       return;
     }
     const handlePointerDown = (event: PointerEvent) => {
-      if (!this.uiState.isSplitModeActive()) {
-        return;
-      }
-      const stackRect = this.dom.terminalStack?.getBoundingClientRect();
-      if (!stackRect || stackRect.height <= 0) {
+      const onDelta = begin();
+      if (!onDelta) {
         return;
       }
       event.preventDefault();
-      const pointerId = event.pointerId;
-      const startY = event.clientY;
-      const startRatio = this.uiState.splitRatio;
-
-      const throttledMove = throttle((deltaRatio: number) => {
-        this.setSplitRatio(startRatio + deltaRatio, false);
-      }, 16);
+      const {pointerId, clientY: startY} = event;
+      const throttledMove = throttle(onDelta, 16);
 
       const onMove = (moveEvent: PointerEvent) => {
-        if (moveEvent.pointerId !== pointerId) {
-          return;
+        if (moveEvent.pointerId === pointerId) {
+          throttledMove(moveEvent.clientY - startY);
         }
-        const delta = moveEvent.clientY - startY;
-        const deltaRatio = delta / stackRect.height;
-        throttledMove(deltaRatio);
       };
 
-      const cleanupFn = () => {
+      const cleanup = () => {
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', onUp);
         window.removeEventListener('pointercancel', onUp);
         throttledMove.cancel();
-        this._activeDragCleanups.delete(cleanupFn);
+        this._activeDragCleanups.delete(cleanup);
       };
 
-      const onUp = (moveEvent?: PointerEvent) => {
-        if (moveEvent && moveEvent.pointerId !== pointerId) {
+      const onUp = (upEvent: PointerEvent) => {
+        if (upEvent.pointerId !== pointerId) {
           return;
         }
-        cleanupFn();
-        if (moveEvent) {
-          this.onPersistState();
-        }
+        cleanup();
+        this.onPersistState();
       };
 
-      this._activeDragCleanups.add(cleanupFn);
-
+      this._activeDragCleanups.add(cleanup);
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
       window.addEventListener('pointercancel', onUp);
     };
     this.addEventListener(
-      this.dom.splitResizer,
+      handle,
       'pointerdown',
       handlePointerDown as EventListener
     );
@@ -140,12 +105,10 @@ export class ResizeController {
 
   applyTerminalHeight(value: number, persist = true): void {
     this.uiState.terminalHeight = value;
-    if (this.dom.terminalShell) {
-      this.dom.terminalShell.style.setProperty(
-        '--terminal-height',
-        `${this.uiState.terminalHeight}px`
-      );
-    }
+    this.dom.terminalShell?.style.setProperty(
+      '--terminal-height',
+      `${this.uiState.terminalHeight}px`
+    );
     this.fitVisibleTerminals();
     this.onNotifyResize();
     if (persist) {

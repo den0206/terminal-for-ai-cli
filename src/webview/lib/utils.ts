@@ -1,4 +1,4 @@
-import {Constants} from './constants';
+import {SHARED_CONSTANTS} from '../../shared/constants';
 import type {ViewState} from './types';
 
 // ============================================================================
@@ -22,7 +22,10 @@ export const webviewLog = {
 
 export type CancellableFunction<T extends (...args: never[]) => void> = ((
   ...args: Parameters<T>
-) => void) & {cancel: () => void; flush: () => void};
+) => void) & {cancel: () => void};
+
+export type DebouncedFunction<T extends (...args: never[]) => void> =
+  CancellableFunction<T> & {flush: () => void};
 
 // ============================================================================
 // Utility Functions
@@ -31,7 +34,7 @@ export type CancellableFunction<T extends (...args: never[]) => void> = ((
 export function debounce<T extends (...args: never[]) => void>(
   fn: T,
   delay: number
-): CancellableFunction<T> {
+): DebouncedFunction<T> {
   let handle: number | undefined;
   let pendingArgs: Parameters<T> | undefined;
   const debounced = (...args: Parameters<T>) => {
@@ -100,17 +103,6 @@ export function throttle<T extends (...args: never[]) => void>(
       pendingArgs = undefined;
     }
   };
-  throttled.flush = () => {
-    if (timeoutHandle !== undefined) {
-      clearTimeout(timeoutHandle);
-      timeoutHandle = undefined;
-      if (pendingArgs !== undefined) {
-        lastCall = Date.now();
-        fn(...pendingArgs);
-        pendingArgs = undefined;
-      }
-    }
-  };
   return throttled;
 }
 
@@ -134,23 +126,20 @@ export function getComputedVar(
 }
 
 export function validateTerminalHeight(value: unknown): number {
+  const {MIN_HEIGHT, MAX_HEIGHT, DEFAULT_HEIGHT} =
+    SHARED_CONSTANTS.TERMINAL_CONSTRAINTS;
   if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return Constants.DEFAULT_TERMINAL_HEIGHT;
+    return DEFAULT_HEIGHT;
   }
-  return Math.min(
-    Constants.MAX_TERMINAL_HEIGHT,
-    Math.max(Constants.MIN_TERMINAL_HEIGHT, value)
-  );
+  return Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, value));
 }
 
 export function clampSplitRatio(value: number): number {
+  const {MIN_RATIO, MAX_RATIO, DEFAULT_RATIO} = SHARED_CONSTANTS.SPLIT_VIEW;
   if (!Number.isFinite(value)) {
-    return 0.5;
+    return DEFAULT_RATIO;
   }
-  return Math.min(
-    Constants.MAX_SPLIT_RATIO,
-    Math.max(Constants.MIN_SPLIT_RATIO, value)
-  );
+  return Math.min(MAX_RATIO, Math.max(MIN_RATIO, value));
 }
 
 export function isValidViewState(state: unknown): state is ViewState {
