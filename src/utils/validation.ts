@@ -4,34 +4,6 @@ import {SHARED_CONSTANTS} from '../shared/constants';
 import {Logger} from './logger';
 
 /**
- * Logger interface for dependency injection in tests
- */
-interface ILogger {
-  warn(message: string, ...details: unknown[]): void;
-}
-
-/**
- * Get logger instance - can be replaced in tests
- */
-let loggerInstance: ILogger = Logger;
-
-/**
- * Set custom logger instance (for testing)
- * @internal
- */
-export function setLogger(logger: ILogger): void {
-  loggerInstance = logger;
-}
-
-/**
- * Reset logger to default
- * @internal
- */
-export function resetLogger(): void {
-  loggerInstance = Logger;
-}
-
-/**
  * Validates that a shell path is safe to execute
  * @param shellPath The path to validate
  * @returns true if the shell path is valid and safe, false otherwise
@@ -96,27 +68,12 @@ export function getDefaultShell(): string {
     return shell;
   }
 
-  // Fallback to common shells by platform
-  if (platform === 'darwin') {
-    // macOS: try zsh first (default since Catalina), then bash
-    const candidates = ['/bin/zsh', '/bin/bash', '/bin/sh'];
-    for (const candidate of candidates) {
-      if (validateShellPath(candidate)) {
-        return candidate;
-      }
-    }
-  } else {
-    // Linux and others: try bash, then sh
-    const candidates = ['/bin/bash', '/bin/sh'];
-    for (const candidate of candidates) {
-      if (validateShellPath(candidate)) {
-        return candidate;
-      }
-    }
-  }
-
-  // Final fallback
-  return '/bin/sh';
+  // Fallback to common shells by platform (zsh is the macOS default since Catalina)
+  const candidates =
+    platform === 'darwin'
+      ? ['/bin/zsh', '/bin/bash', '/bin/sh']
+      : ['/bin/bash', '/bin/sh'];
+  return candidates.find(validateShellPath) ?? '/bin/sh';
 }
 
 /**
@@ -148,7 +105,7 @@ export function validateStartupCommands(commands: unknown): string[] {
 
       for (const pattern of dangerousPatterns) {
         if (pattern.test(cmd)) {
-          loggerInstance.warn(
+          Logger.warn(
             `Potentially dangerous startup command detected: ${cmd.substring(
               0,
               50
@@ -195,60 +152,6 @@ export function validateWorkingDirectory(
 }
 
 /**
- * Validates a numeric configuration value within a specified range
- * @param value The value to validate
- * @param min Minimum allowed value (inclusive)
- * @param max Maximum allowed value (inclusive)
- * @param defaultValue Default value to return if validation fails
- * @returns Validated value within range, or default value
- */
-export function validateNumericRange(
-  value: unknown,
-  min: number,
-  max: number,
-  defaultValue: number
-): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return defaultValue;
-  }
-  return Math.min(max, Math.max(min, value));
-}
-
-/**
- * Validates terminal height configuration
- * @param value The terminal height value to validate
- * @returns Validated terminal height (220-1000 pixels)
- */
-export function validateTerminalHeight(value: unknown): number {
-  return validateNumericRange(
-    value,
-    SHARED_CONSTANTS.TERMINAL_CONSTRAINTS.MIN_HEIGHT,
-    SHARED_CONSTANTS.TERMINAL_CONSTRAINTS.MAX_HEIGHT,
-    SHARED_CONSTANTS.TERMINAL_CONSTRAINTS.DEFAULT_HEIGHT
-  );
-}
-
-/**
- * Validates split ratio configuration
- * @param value The split ratio value to validate (0.0-1.0)
- * @param minRatio Minimum allowed ratio (default: 0.2)
- * @param maxRatio Maximum allowed ratio (default: 0.8)
- * @returns Validated split ratio
- */
-export function validateSplitRatio(
-  value: unknown,
-  minRatio = SHARED_CONSTANTS.SPLIT_VIEW.MIN_RATIO,
-  maxRatio = SHARED_CONSTANTS.SPLIT_VIEW.MAX_RATIO
-): number {
-  return validateNumericRange(
-    value,
-    minRatio,
-    maxRatio,
-    SHARED_CONSTANTS.SPLIT_VIEW.DEFAULT_RATIO
-  );
-}
-
-/**
  * Validates terminal dimensions (cols and rows)
  * @param cols Number of columns
  * @param rows Number of rows
@@ -258,18 +161,16 @@ export function validateTerminalDimensions(
   cols?: number,
   rows?: number
 ): {cols: number; rows: number} {
+  const {MIN_COLS, MIN_ROWS, DEFAULT_COLS, DEFAULT_ROWS} =
+    SHARED_CONSTANTS.TERMINAL_CONSTRAINTS;
   return {
     cols:
-      typeof cols === 'number' &&
-      Number.isFinite(cols) &&
-      cols >= SHARED_CONSTANTS.TERMINAL_CONSTRAINTS.MIN_COLS
+      typeof cols === 'number' && Number.isFinite(cols) && cols >= MIN_COLS
         ? cols
-        : SHARED_CONSTANTS.TERMINAL_CONSTRAINTS.DEFAULT_COLS,
+        : DEFAULT_COLS,
     rows:
-      typeof rows === 'number' &&
-      Number.isFinite(rows) &&
-      rows >= SHARED_CONSTANTS.TERMINAL_CONSTRAINTS.MIN_ROWS
+      typeof rows === 'number' && Number.isFinite(rows) && rows >= MIN_ROWS
         ? rows
-        : SHARED_CONSTANTS.TERMINAL_CONSTRAINTS.DEFAULT_ROWS,
+        : DEFAULT_ROWS,
   };
 }
