@@ -11,7 +11,8 @@
     "url": "https://github.com/den0206/terminal-for-ai-cli"
   },
   "engines": {
-    "vscode": "^1.100.0"
+    "vscode": "^1.100.0",
+    "node": ">=20"
   },
   "categories": [
     "Other"
