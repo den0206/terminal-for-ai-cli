@@ -81,13 +81,7 @@ export type InboundMessage =
   | {type: 'session-count'; payload: {total: number}}
   | {
       type: 'session-created';
-      payload: {
-        id: string;
-        shell: string;
-        pid?: number;
-        label?: string;
-        restored?: boolean;
-      };
+      payload: {id: string; shell: string; label?: string};
     }
   | {type: 'session-data'; payload: {sessionId: string; data: string}}
   | {
