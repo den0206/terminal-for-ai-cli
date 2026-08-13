@@ -27,7 +27,9 @@ export interface VSCodeApi<State = unknown> {
 // ============================================================================
 
 export type ViewMode = 'single' | 'split';
-export type Pane = 'primary' | 'secondary';
+
+export const PANES = ['primary', 'secondary'] as const;
+export type Pane = (typeof PANES)[number];
 
 export type ViewState = {
   activeSessionId?: string;

@@ -1,4 +1,4 @@
-import {Constants} from './constants';
+import {SHARED_CONSTANTS} from '../../shared/constants';
 import type {OutboundMessage} from './types';
 import {webviewLog} from './utils';
 
@@ -53,10 +53,10 @@ export class DragDropHandler {
 
       for (const file of imageFiles) {
         try {
-          if (file.size > Constants.MAX_IMAGE_SIZE_BYTES) {
+          if (file.size > SHARED_CONSTANTS.MAX_IMAGE_SIZE_BYTES) {
             const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
             const maxMB = (
-              Constants.MAX_IMAGE_SIZE_BYTES /
+              SHARED_CONSTANTS.MAX_IMAGE_SIZE_BYTES /
               (1024 * 1024)
             ).toFixed(0);
             webviewLog.warn(
