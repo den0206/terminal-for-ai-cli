@@ -16,9 +16,6 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onView:terminal-for-ai-cli-view"
-  ],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -95,22 +92,6 @@
             "シルバーの筐体風ダークグレー配色"
           ],
           "description": "Webview 内のターミナルテーマ。Terminal For AI CLI ビュー内でも選択できます。"
-        },
-        "aiTerminal.logLevel": {
-          "type": "string",
-          "enum": [
-            "error",
-            "warn",
-            "info",
-            "debug"
-          ],
-          "default": "info",
-          "description": "ログ出力レベル。'error'（エラーのみ）、'warn'（警告以上）、'info'（情報以上）、'debug'（すべて）から選択できます。"
-        },
-        "aiTerminal.enablePerformanceMonitoring": {
-          "type": "boolean",
-          "default": true,
-          "description": "パフォーマンス監視を有効にします。メッセージキューサイズやセッション数の警告を表示します。"
         }
       }
     }
@@ -123,24 +104,21 @@
     "lint": "eslint src",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
-    "package": "node scripts/package-vsix.mjs"
+    "package": "node -e \"require('node:fs').mkdirSync('vsix',{recursive:true})\" && npx --yes @vscode/vsce package --out vsix/terminal-for-ai-cli.vsix"
   },
   "devDependencies": {
     "@types/node": "^25.2.3",
     "@types/vscode": "^1.100.0",
     "@typescript-eslint/eslint-plugin": "^8.55.0",
     "@typescript-eslint/parser": "^8.55.0",
-    "@vitest/ui": "^4.0.18",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "esbuild": "^0.27.3",
     "eslint": "^9.39.2",
     "globals": "^17.3.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.18",
-    "vsce": "^2.15.0"
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "node-pty": "^1.1.0"

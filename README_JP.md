@@ -192,7 +192,7 @@ VS Code / Cursor の拡張ホストでは Electron 固有の Node.js が使わ�
 | テーマ定義 | `src/theming/themePresets.ts` | プリセット配色・プレビュー・バリデーションを提供。 |
 | セッション管理 | `src/terminal/sessionManager.ts` | `node-pty` でシェルを起動し、Webview との入出力・クリーンアップを調整。 |
 | セキュリティ・検証 | `src/utils/validation.ts` | シェルパス、起動コマンド、作業ディレクトリの検証。 |
-| ロギング | `src/utils/logger.ts` | VS Code Output チャンネルを使用した一元化されたロギングシステム。 |
+| ロギング | `src/utils/logger.ts` | VS Code の `LogOutputChannel`（レベルとタイムスタンプはエディタ側が管理）。 |
 | ユーティリティ | `src/utils/nonce.ts` | CSP 用の暗号学的に安全な nonce を生成。 |
 
 ### Webview アーキテクチャ (`src/webview/main.ts`)
@@ -201,7 +201,6 @@ Webview UI は保守性とテスト容易性を向上させるため、クラス
 
 | クラス | 役割 |
 | --- | --- |
-| `Constants` | 設定値の一元管理（MAX_SESSIONS、BUFFER_SIZE など）。 |
 | `DOMElements` | すべての DOM 要素参照を一箇所で管理。 |
 | `SessionStateManager` | セッション状態の管理（activeSession、sessionIds、buffers）。 |
 | `UIStateManager` | UI 状態の管理（pendingRequest、viewMode、splitRatio、paneSessions）。 |

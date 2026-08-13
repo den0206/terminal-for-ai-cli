@@ -193,7 +193,7 @@ All checks must pass before merging pull requests.
 | Theming | `src/theming/themePresets.ts` | Defines palette presets, previews, and validation helpers. |
 | Session management | `src/terminal/sessionManager.ts` | Spawns shells via `node-pty`, streams output to the Webview, and coordinates cleanup. |
 | Security & validation | `src/utils/validation.ts` | Validates shell paths, startup commands, and working directories. |
-| Logging | `src/utils/logger.ts` | Centralized logging system using VS Code Output Channel. |
+| Logging | `src/utils/logger.ts` | VS Code `LogOutputChannel` (levels and timestamps handled by the editor). |
 | Utilities | `src/utils/nonce.ts` | Generates cryptographically secure nonces for CSP. |
 
 ### Webview Architecture (`src/webview/main.ts`)
@@ -202,7 +202,6 @@ The Webview UI is built with a class-based architecture for better maintainabili
 
 | Class | Responsibility |
 | --- | --- |
-| `Constants` | Centralized configuration values (MAX_SESSIONS, BUFFER_SIZE, etc.). |
 | `DOMElements` | Manages all DOM element references in one place. |
 | `SessionStateManager` | Handles session state (activeSession, sessionIds, buffers). |
 | `UIStateManager` | Manages UI state (pendingRequest, viewMode, splitRatio, paneSessions). |
