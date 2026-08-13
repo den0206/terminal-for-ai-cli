@@ -45,47 +45,6 @@ vi.mock('node-pty', () => ({
   spawn: vi.fn(() => mockPty),
 }));
 
-// Mock VS Code API
-vi.mock('vscode', () => {
-  class EventEmitter<T> {
-    private listeners: Array<(e: T) => unknown> = [];
-
-    event = (listener: (e: T) => unknown) => {
-      this.listeners.push(listener);
-      return {
-        dispose: () => {
-          const index = this.listeners.indexOf(listener);
-          if (index > -1) {
-            this.listeners.splice(index, 1);
-          }
-        },
-      };
-    };
-
-    fire(data: T) {
-      this.listeners.forEach((listener) => listener(data));
-    }
-
-    dispose() {
-      this.listeners = [];
-    }
-  }
-
-  return {
-    workspace: {
-      workspaceFolders: [
-        {
-          uri: {
-            scheme: 'file',
-            fsPath: '/test/workspace',
-          },
-        },
-      ],
-    },
-    EventEmitter,
-  };
-});
-
 describe('SessionManager', () => {
   let sessionManager: SessionManager;
   let currentMockPty: typeof mockPty;

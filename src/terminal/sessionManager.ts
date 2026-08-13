@@ -27,7 +27,6 @@ type SessionOptions = {
 
 type SessionInfo = {
   id: string;
-  pid?: number;
   shell: string;
   createdAt: number;
 };
@@ -143,15 +142,6 @@ class ShellSession implements vscode.Disposable {
 }
 
 /**
- * Performance metrics for monitoring session manager health
- */
-export type PerformanceMetrics = {
-  sessionCount: number;
-  maxSessions: number;
-  sessionCountPercentage: number;
-};
-
-/**
  * Manages multiple shell sessions using node-pty.
  * Handles session creation, lifecycle, input/output, and cleanup.
  */
@@ -171,7 +161,7 @@ export class SessionManager implements vscode.Disposable {
       );
     }
 
-    const id = this.generateSessionId();
+    const id = randomUUID();
     let shell = options.shell?.trim() || getDefaultShell();
 
     // Validate shell path for security
@@ -195,12 +185,7 @@ export class SessionManager implements vscode.Disposable {
 
     const session = new ShellSession(id, ptyProcess);
     this.sessions.set(id, session);
-    const info: SessionInfo = {
-      id,
-      pid: ptyProcess.pid ?? undefined,
-      shell,
-      createdAt: Date.now(),
-    };
+    const info: SessionInfo = {id, shell, createdAt: Date.now()};
     this.sessionInfos.set(id, info);
 
     ptyProcess.onData((data) => {
@@ -325,48 +310,5 @@ export class SessionManager implements vscode.Disposable {
 
   getActiveSessions(): SessionInfo[] {
     return Array.from(this.sessionInfos.values());
-  }
-
-  getPerformanceMetrics(): PerformanceMetrics {
-    const sessionCount = this.sessions.size;
-    const maxSessions = SHARED_CONSTANTS.MAX_SESSIONS;
-    const sessionCountPercentage =
-      maxSessions > 0 ? (sessionCount / maxSessions) * 100 : 0;
-
-    return {
-      sessionCount,
-      maxSessions,
-      sessionCountPercentage,
-    };
-  }
-
-  checkPerformanceWarnings(): string[] {
-    const config = vscode.workspace.getConfiguration('aiTerminal');
-    const monitoringEnabled = config.get<boolean>(
-      'enablePerformanceMonitoring',
-      true
-    );
-
-    if (!monitoringEnabled) {
-      return [];
-    }
-
-    const warnings: string[] = [];
-    const metrics = this.getPerformanceMetrics();
-
-    // Warn if session count exceeds 80% of limit
-    if (metrics.sessionCountPercentage >= 80) {
-      warnings.push(
-        `Session count is ${metrics.sessionCount}/${
-          metrics.maxSessions
-        } (${Math.round(metrics.sessionCountPercentage)}% of limit)`
-      );
-    }
-
-    return warnings;
-  }
-
-  private generateSessionId(): string {
-    return randomUUID();
   }
 }
