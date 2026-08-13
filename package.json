@@ -99,26 +99,21 @@
   "scripts": {
     "bundle:webview": "esbuild src/webview/main.ts --bundle --format=iife --outfile=media/webview.js --platform=browser --sourcemap",
     "compile": "npm run bundle:webview && tsc -p ./",
-    "rebuild:pty": "node scripts/rebuild-pty.mjs",
     "watch": "tsc -w -p ./",
-    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "package": "node -e \"require('node:fs').mkdirSync('vsix',{recursive:true})\" && npx --yes @vscode/vsce package --out vsix/terminal-for-ai-cli.vsix"
+    "package": "node scripts/stage-host-prebuild.mjs && node -e \"require('node:fs').mkdirSync('vsix',{recursive:true})\" && npx --yes @vscode/vsce package --out vsix/terminal-for-ai-cli.vsix"
   },
   "devDependencies": {
-    "@types/node": "^25.2.3",
-    "@types/vscode": "^1.100.0",
-    "@typescript-eslint/eslint-plugin": "^8.55.0",
-    "@typescript-eslint/parser": "^8.55.0",
+    "@types/node": "^26.2.0",
+    "@types/vscode": "^1.125.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
-    "esbuild": "^0.27.3",
-    "eslint": "^9.39.2",
-    "globals": "^17.3.0",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.18"
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   },
   "dependencies": {
     "node-pty": "^1.1.0"

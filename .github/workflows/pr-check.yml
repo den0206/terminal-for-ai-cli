@@ -26,8 +26,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run lint
-        run: npm run lint
+      - name: Run type check
+        run: npm run typecheck
 
       - name: Run tests
         run: npm test
@@ -90,7 +90,7 @@ jobs:
             - \`webview.js\`: ${formatBytes(webviewSize)}
 
             ### ✅ Status
-            - ESLint: Passed
+            - TypeScript Type Check: Passed
             - TypeScript Compilation: Passed
             - Tests: Passed
             - Build: Successful

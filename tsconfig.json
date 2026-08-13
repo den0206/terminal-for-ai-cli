@@ -6,11 +6,14 @@
     "outDir": "dist",
     "rootDir": "src",
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "sourceMap": true,
     "moduleResolution": "Node16",
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "types": ["node"]
   },
   "include": ["src"],
   "exclude": ["src/webview/**", "src/**/*.test.ts", "src/__mocks__/**", "node_modules", ".vscode-test"]
