@@ -40,6 +40,7 @@ export class AiTerminalViewProvider
   private messageDisposable?: vscode.Disposable;
   private readonly sessionLabels = new Map<string, string>();
   private readonly imageManager: ImageManager;
+  private usageTimer?: ReturnType<typeof setInterval>;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -79,6 +80,8 @@ export class AiTerminalViewProvider
       this.messageDisposable.dispose();
       this.messageDisposable = undefined;
     }
+    clearInterval(this.usageTimer);
+    this.usageTimer = undefined;
     vscode.Disposable.from(...this.disposables).dispose();
     this.sessionLabels.clear();
     this.imageManager.clearTracking();
@@ -136,6 +139,7 @@ export class AiTerminalViewProvider
           this.webviewReady = true;
           this.postSessionCount();
           this.postThemeUpdate();
+          this.startUsagePolling();
           this.postExistingSessions();
           this.ensureInitialSession();
           break;
@@ -295,6 +299,52 @@ export class AiTerminalViewProvider
         },
       });
     }
+  }
+
+  /** Refreshes the usage readout periodically while the view is visible. */
+  private startUsagePolling() {
+    clearInterval(this.usageTimer);
+    void this.postUsage();
+    this.usageTimer = setInterval(() => {
+      if (this.webviewView?.visible) {
+        void this.postUsage();
+      }
+    }, SHARED_CONSTANTS.USAGE_POLL_INTERVAL_MS);
+  }
+
+  /**
+   * Posts "<saved images> / <extension host RSS>".
+   * ponytail: RSS covers the whole extension host process (shared with other
+   * extensions); per-extension memory would need a separate process to measure.
+   */
+  private async postUsage() {
+    let imageBytes = 0;
+    try {
+      const imagesDir = vscode.Uri.joinPath(
+        this.context.globalStorageUri,
+        'images',
+      );
+      const entries = await vscode.workspace.fs.readDirectory(imagesDir);
+      for (const [name, type] of entries) {
+        if (type !== vscode.FileType.File) {
+          continue;
+        }
+        const stat = await vscode.workspace.fs.stat(
+          vscode.Uri.joinPath(imagesDir, name),
+        );
+        imageBytes += stat.size;
+      }
+    } catch {
+      // Images directory does not exist yet
+    }
+
+    const mb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+    this.postMessage({
+      type: 'usage-update',
+      payload: {
+        text: `💾 ${mb(imageBytes)} · 🧠 ${mb(process.memoryUsage().rss)}`,
+      },
+    });
   }
 
   private postSessionCount() {

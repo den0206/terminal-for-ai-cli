@@ -25,6 +25,7 @@ Terminal for AI CLI is a VS Code / Cursor extension that anchors a multi-session
 - **Robust logging**: Centralized logging system using VS Code Output Channel for better debugging and troubleshooting.
 - **Resource management**: Automatic cleanup of session buffers, message queue limits, and orphaned images to prevent memory leaks and storage bloat.
 - **Image cleanup**: Automatic cleanup of orphaned images on extension startup, plus manual cleanup command available from the command palette.
+- **Usage readout**: `💾 <saved images> · 🧠 <RSS>` in the toolbar, refreshed every 30s while the view is visible.
 - Pure TypeScript codebase (`src/extension.ts`, `src/webview/main.ts`, `src/terminal/sessionManager.ts`) with esbuild + `tsc` outputs committed to `media/` and `dist/`.
 
 ---
@@ -46,6 +47,7 @@ Terminal for AI CLI is a VS Code / Cursor extension that anchors a multi-session
 4. **Operate the UI**
    - **Dropdown**: select any existing session.
    - **`+` / 🗑**: add or close the active session.
+   - **Usage readout** (between the dropdown and `+`): total size of saved drag-and-drop images, and the RSS of the extension host process. The RSS covers the whole host — every extension in it, plus the Node runtime — not this extension alone; the Webview and the spawned shells are separate processes and are not counted.
    - **Clear all sessions**: open the confirmation panel below the Theme section to terminate every shell.
    - **Theme selector**: pick any preset; the palette updates instantly.
    - **Resize handle**: drag to change the terminal height (value is saved).

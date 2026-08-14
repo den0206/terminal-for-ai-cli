@@ -14,6 +14,7 @@ const byPane = <T extends Element>(attribute: string) => ({
  */
 export class DOMElements {
   readonly status = $<HTMLSpanElement>('[data-session-status]');
+  readonly usage = $<HTMLSpanElement>('[data-usage]');
   readonly addSessionButton = $<HTMLButtonElement>('[data-session-add]');
   readonly viewToggleButton = $<HTMLButtonElement>('[data-view-toggle]');
   readonly viewToggleIcon = $<HTMLSpanElement>('[data-view-toggle-icon]');

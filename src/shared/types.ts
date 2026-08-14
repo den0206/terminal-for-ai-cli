@@ -91,6 +91,7 @@ export type InboundMessage =
   | {type: 'session-error'; payload: {message: string}}
   | {type: 'session-limit-reached'; payload: {max: number}}
   | {type: 'theme-update'; payload: ThemeUpdatePayload}
+  | {type: 'usage-update'; payload: {text: string}}
   | {type: 'all-sessions-cleared'};
 
 /**

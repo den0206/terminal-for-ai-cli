@@ -51,5 +51,8 @@ export const SHARED_CONSTANTS = {
 
   /** Time after which saved images are considered stale and eligible for cleanup (24 hours) */
   IMAGE_TTL_MS: 24 * 60 * 60 * 1000,
+
+  /** Interval for refreshing the usage readout in the Webview toolbar */
+  USAGE_POLL_INTERVAL_MS: 30_000,
 } as const;
 
