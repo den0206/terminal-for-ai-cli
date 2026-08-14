@@ -1,229 +1,369 @@
-# Terminal for AI CLI
+<p align="center">
+  <img src="media/icon.png" alt="Terminal for AI CLI icon" width="128" height="128">
+</p>
 
-[![CI](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/ci.yml)
-[![PR Check](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/pr-check.yml/badge.svg)](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/pr-check.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<h1 align="center">Terminal for AI CLI</h1>
 
-Terminal for AI CLI は Cursor / VS Code のセカンダリサイドバーに常駐するマルチセッション対応ターミナル拡張です。`xterm.js` をベースにした Webview と、`node-pty` を利用する軽量な `SessionManager` により、IDE 内で複数シェルを高速に切り替えられます。
+<p align="center">
+  <strong>サイドバーに本物のターミナルを。AI CLI の隣で。</strong><br>
+  マルチセッション・分割ビュー・画像のドラッグ&ドロップを、エディタを離れずに。
+</p>
 
-> 🇺🇸 英語版はこちら: [`README.md`](README.md)。内容は両ファイルで同期されています。
+<p align="center">
+  <a href="https://github.com/den0206/terminal-for-ai-cli/releases/latest"><img alt="Download VSIX" src="https://img.shields.io/badge/Download-.vsix-2f7bff?style=for-the-badge&labelColor=111111"></a>
+</p>
 
----
+<p align="center">
+  <a href="https://github.com/den0206/terminal-for-ai-cli/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/den0206/terminal-for-ai-cli/ci.yml?branch=main&style=flat-square&label=CI&labelColor=111111&color=2f7bff"></a>
+  <a href="https://github.com/den0206/terminal-for-ai-cli/actions/workflows/pr-check.yml"><img alt="PR Check" src="https://img.shields.io/github/actions/workflow/status/den0206/terminal-for-ai-cli/pr-check.yml?branch=main&style=flat-square&label=PR%20Check&labelColor=111111&color=2f7bff"></a>
+  <img alt="VS Code 1.125+" src="https://img.shields.io/badge/VS%20Code%20%2F%20Cursor-1.125%2B-2f7bff?style=flat-square&labelColor=111111">
+  <img alt="Cross platform" src="https://img.shields.io/badge/Platform-macOS%20%2F%20Linux%20%2F%20Windows-2f7bff?style=flat-square&labelColor=111111">
+  <a href="https://opensource.org/licenses/MIT"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-2f7bff?style=flat-square&labelColor=111111"></a>
+</p>
 
-## 特徴
+<p align="center">
+  <a href="README.md">English</a> · 日本語
+</p>
 
-- Webview 内で複数のシェルを同時に管理し、ドロップダウンから瞬時に切り替え可能。
-- セッションごとのスクロールバックを保持し、Webview を再読み込みしても出力を復元。
-- `Terminal 1` など連番ラベルは空いた番号を再利用するため、順序が崩れません。
-- Modern / Basic / Homebrew などのテーマプリセットを即時適用、VS Code の配色と連動。
-- ドラッグで端の高さを変更し、値は永続化。
-- 「Clear all sessions」セクションで、確認ダイアログを挟んで全セッションを安全に終了。
-- 既定シェル・起動時コマンド・テーマプリセットを VS Code 設定からカスタマイズ可能。
-- **セキュリティ強化**: シェルパスとコマンドの入力検証、暗号学的に安全なランダム生成、画像ファイルサイズ制限（10MB）を実装。
-- **型安全**: Discriminated Unions によるメッセージ処理で、`any` 型を完全排除。
-- **テスト済み**: Vitest による包括的なテストスイート（33以上のテストでユーティリティ、検証、ロギングをカバー）。
-- **堅牢なロギング**: VS Code Output チャンネルを使用した一元化されたロギングシステムで、デバッグとトラブルシューティングが容易。
-- **リソース管理**: メモリリークとストレージ圧迫を防ぐため、セッションバッファ、メッセージキュー、孤児画像の自動クリーンアップ機能を実装。
-- **画像クリーンアップ**: 拡張機能起動時に孤児画像を自動削除。コマンドパレットから手動クリーンアップも可能。
-- **使用状況表示**: ツールバーに `💾 保存画像 · 🧠 RSS` を表示。ビューが可視の間、30 秒ごとに更新。
-- 主要コードは TypeScript (`src/extension.ts`, `src/webview/main.ts`, `src/terminal/sessionManager.ts`) で統一し、`dist/` と `media/` にビルド成果物を出力。
-
----
-
-## 使用方法
-
-1. **依存関係をインストール**
-   ```bash
-   npm install
-   ```
-2. **ビルド / バンドル**
-   ```bash
-   npm run compile
-   ```
-3. **Extension Development Host で起動**
-   - VS Code / Cursor で `F5` を押し、Extension Development Host を立ち上げます。
-   - Activity Bar から「Terminal For AI CLI」ビューを開くと、自動的に最初のセッションが生成されます。
-4. **UI 操作**
-   - **ドロップダウン**: 任意のセッションを選択。
-   - **`+` / 🗑**: 新規セッション作成 / アクティブセッション終了。
-   - **使用状況表示**（ドロップダウンと `+` の間）: 保存済みドロップ画像の合計サイズと、拡張ホストプロセスの RSS。RSS は他の拡張機能や Node ランタイムを含むホスト全体の値で、この拡張単体ではありません。Webview と起動したシェルは別プロセスのため含まれません。
-   - **Clear all sessions**: Theme セクション下の確認 UI から、全シェルをまとめて終了。
-   - **テーマセレクタ**: プリセットのテーマを即時適用。
-   - **リサイズハンドル**: ドラッグでターミナル高さを変更（設定は保存）。
+<p align="center">
+  <!-- BEGIN:release -->
+  <!-- END:release -->
+</p>
 
 ---
+
+**Terminal for AI CLI** は、VS Code / Cursor のサイドバーに `xterm.js` のフルターミナルを常駐させる拡張機能です。
+バックエンドは実 PTY プロセス（`node-pty`）。AI CLI を片側で走らせながら、もう片側で作業を続けるワークフローのために作られています。
+
+> 「AI エージェントはサイドバーで走り続け、エディタは自分のもののまま。」
+
+エディタ下部のターミナルパネルはコードの縦幅を奪います。このビューは代わりに Activity Bar に置かれます。
+最大 2 つのシェルを、上下分割で、常に見える位置に、独立した高さとテーマで。
+
+## 目次
+
+- [できること](#できること)
+- [クイックスタート](#クイックスタート)
+- [使い方](#使い方)
+- [機能一覧](#機能一覧)
+- [設定項目](#設定項目)
+- [コマンド](#コマンド)
+- [ストレージとメモリ](#ストレージとメモリ)
+- [セキュリティ](#セキュリティ)
+- [制限事項](#制限事項)
+- [トラブルシューティング](#トラブルシューティング)
+- [開発](#開発) / [リリース手順](#リリース手順)
+- [リンク](#リンク)
+
+## できること
+
+- **サイドバーに 2 つのシェル** — ツールバーのドロップダウンから追加・切り替え・終了。
+- **分割ビュー** — 2 セッションを同時表示。間の仕切りはドラッグでリサイズ可能。
+- **リロードしてもスクロールバックが残る** — セッションごとに出力をバッファし、Webview 再読み込み時に再生。
+- **安定した名前** — `Terminal 1`, `Terminal 2`, … 空いた番号は再利用。
+- **画像をドラッグで投入** — `Shift` を押しながらドロップすると、保存された画像のエスケープ済みパスがシェルに入力されます。
+- **使用状況表示** — 保存画像のサイズと拡張ホストのメモリをツールバーに常時表示。
+- **テーマプリセット** — 9 種類の配色（Modern, Basic, Homebrew, …）を即時適用。
+- **高さの調整** — 下端のハンドルをドラッグ。値は保存されます。
+- **Clear all sessions** — インラインの確認を挟んで全シェルを終了。
+
+テレメトリなし、ネットワークアクセスなし、アカウント不要。すべて拡張ホスト内でローカルに動作します。
+
+## クイックスタート
+
+### 動作要件
+
+| 項目 | 内容 |
+|------|------|
+| エディタ | **VS Code / Cursor 1.125 以降** |
+| プラットフォーム | macOS / Linux / Windows（Apple Silicon, x64, arm64） |
+| Node.js | 20 以降（ソースからビルドする場合のみ） |
+| 依存 | `node-pty`（ネイティブ。VSIX にはビルド済みバイナリを同梱） |
+
+### インストール
+
+Marketplace 未公開です。[**Releases**](https://github.com/den0206/terminal-for-ai-cli/releases/latest) から
+`terminal-for-ai-cli-X.Y.Z.vsix` をダウンロードしてインストールしてください：
+
+```bash
+code --install-extension terminal-for-ai-cli-X.Y.Z.vsix
+```
+
+エディタからでも可能です：拡張機能ビュー → `…` メニュー →「VSIX からのインストール…」。
+
+リリース版の VSIX には **全プラットフォーム** の `node-pty` prebuild が同梱されています。
+ローカルビルド（`npm install && npm run package`）も可能ですが、その VSIX はビルドしたマシンでしか動きません。
+詳細は [node-pty と全プラットフォーム対応パッケージ](#node-pty-と全プラットフォーム対応パッケージ) を参照。
+
+### 初回起動
+
+Activity Bar から **Terminal For AI** を開きます。ログインシェル（または `aiTerminal.defaultShell`）で
+最初のセッションがワークスペースルート（フォルダ未オープン時はホームディレクトリ）に自動生成されます。
+
+## 使い方
+
+### ツールバー
+
+```
+[ Terminal 1 ▾ ]  💾 0.0MB · 🧠 312MB  [ + ]  [ ▢ ]  [ 🗑 ]
+```
+
+| コントロール | 動作 |
+|--------------|------|
+| ドロップダウン | アクティブセッションの切り替え |
+| 使用状況表示 | 保存画像 / 拡張ホストの RSS → [ストレージとメモリ](#ストレージとメモリ) |
+| `+` | 新規セッション（上限 2 セッションで無効化） |
+| `▢` / `▦` | 分割ビューの切り替え（2 セッション必要） |
+| `🗑` | アクティブセッションを終了 |
+
+ヘッダー右側にはステータス（「Registered sessions: 2」やエラーなど）が表示されます。
+
+### 分割ビュー
+
+2 つ目のセッションを作成してから `▢` を押します。両ペインが同時に描画され、間の仕切りはドラッグでリサイズできます
+（比率は 20〜80% に制限され、保存されます）。フォーカス中のペインは枠線で示され、クリックでアクティブになります。
+
+### 画像のドロップ
+
+画像をドラッグする際は **`Shift` を押したまま** ドロップします。押さない場合はエディタ側のドロップ処理が優先されるため、これは意図的な仕様です。
+ファイルは拡張機能のグローバルストレージに保存され、**エスケープ済みの絶対パスがシェルに書き込まれます**。
+画像パスを読む AI CLI にそのまま渡せます。
+
+対象は `image/*` かつ 10MB 以下。画像以外は無視されます。
+
+### 高さとテーマ
+
+ターミナル下のハンドルをドラッグしてリサイズ（220〜1000px、保存されます）。
+テーマのドロップダウンはプリセットを即時適用し、`aiTerminal.themePreset` に書き戻すため再起動後も維持されます。
+
+### すべて閉じる
+
+一番下の「Clear all sessions」は確認を挟んだ後、全シェルを終了し（`SIGTERM` → 2 秒後に `SIGKILL`）、
+保存済み画像もすべて削除します。
+
+## 機能一覧
+
+| 機能 | 説明 |
+|------|------|
+| マルチセッション | 最大 2 つの PTY セッション。ドロップダウンで切り替え |
+| 分割ビュー | 2 セッション同時表示。分割比はドラッグ可能で永続化 |
+| セッション名 | `Terminal N` 形式。空き番号を再利用 |
+| スクロールバック | xterm 側 3000 行 + セッションごと 2MB のバッファ（Webview 再読み込み時に再生） |
+| 画像ドラッグ&ドロップ | `Shift` + ドロップ → グローバルストレージに保存し、エスケープ済みパスをシェルに入力 |
+| 画像クリーンアップ | セッション終了時・拡張の deactivate 時・起動時（孤児と 24 時間 TTL）に削除 |
+| 使用状況表示 | 保存画像の合計と拡張ホストの RSS。可視時に 30 秒ごと更新 |
+| テーマプリセット | `modern`, `basic`, `clearDark`, `clearLight`, `grass`, `homebrew`, `manPage`, `ocean`, `pro` |
+| 高さ調整 | ドラッグハンドル、220〜1000px、Webview state に永続化 |
+| 起動コマンド | セッション作成直後に順番送信 |
+| 作業ディレクトリ | ワークスペースルート（無ければホーム）。使用前に検証 |
+| プロセス後始末 | プロセスツリー全体を終了。`SIGTERM` → 2 秒後に `SIGKILL` |
+| ロギング | VS Code の `LogOutputChannel`（Output パネルの "Terminal For AI CLI"） |
+
+## 設定項目
+
+| 項目 | キー | 説明 |
+|------|------|------|
+| 既定シェル | `aiTerminal.defaultShell` | シェルの絶対パス。空ならログインシェル。不正なパスは警告のうえ既定にフォールバック。 |
+| 起動コマンド | `aiTerminal.startupCommands` | セッション作成直後に順に送信するコマンド配列。不正な要素は除外されます。 |
+| テーマプリセット | `aiTerminal.themePreset` | 9 プリセットのいずれか。Webview のドロップダウンも同じ設定を書き換えます。 |
 
 ## コマンド
 
 | コマンド | 説明 |
-| --- | --- |
+|----------|------|
 | `Terminal For AI CLI: フォーカス` | ターミナルビューにフォーカスして表示します。 |
 | `Terminal For AI CLI: 新しいセッション` | 新しいターミナルセッションを作成します。 |
-| `Terminal For AI CLI: 画像をクリーンアップ` | グローバルストレージに保存された画像を手動で削除します。削除前に確認ダイアログを表示します。 |
+| `Terminal For AI CLI: 画像をクリーンアップ` | グローバルストレージの保存画像を削除します（確認あり）。 |
 
----
+## ストレージとメモリ
 
-## 設定項目 (VS Code Settings)
+ツールバーの表示は `💾 <保存画像> · 🧠 <RSS>` で、ビューが可視の間 30 秒ごとに更新されます。
 
-| 項目 | キー | 説明 |
-| --- | --- | --- |
-| 既定シェル | `aiTerminal.defaultShell` | 起動時に使用するシェルのパス。空の場合はユーザーのデフォルトシェル。 |
-| 起動コマンド | `aiTerminal.startupCommands` | セッション作成直後に順に送信するコマンド配列。 |
-| テーマプリセット | `aiTerminal.themePreset` | `modern` / `basic` / `clearDark` / `clearLight` / `grass` / `homebrew` / `manPage` / `ocean` / `pro` のいずれか。Webview からも同じプリセットを選択できます。 |
+**💾 保存画像** — `<globalStorage>/terminal-for-ai-cli/images/` 以下のファイルの合計サイズ。
+ドロップした画像の実体です。削除タイミングは次のとおり：
 
----
+| タイミング | 削除対象 |
+|------------|----------|
+| セッションを閉じた / シェルが終了した | そのセッションにドロップされた画像 |
+| 「Clear all sessions」 | すべての画像 |
+| 拡張の deactivate（ウィンドウを閉じた） | すべての画像 |
+| 拡張の起動時 | クラッシュで残った孤児ファイルと、24 時間より古いファイル |
 
-## 既知の課題 / 制限
+通常利用ではほぼ 0 のままです。増え続ける場合はクリーンアップが効いていないサインで、
+追跡はメモリ上のため、エディタを強制終了すると次回起動時の掃除までファイルが残ります。
 
-| 項目 | 説明 |
-| --- | --- |
-| Windows での PTY | Windows では `node-pty`（ConPTY / winpty）を利用しており概ね安定していますが、全画面アプリや特殊なカーソル制御では OS のターミナルと挙動が異なる場合があります。 |
-| リサイズ伝搬 | `node-pty` で即時にリサイズを通知しますが、Webview レイアウトの再計算により遅延が発生するケースがあります。 |
-| セッション復元 | Webview の再読み込みでは出力を復元できる一方、IDE 自体を再起動すると OS 側のプロセスは終了します。永続化ロジックを強化予定です。 |
-| テーマカスタム | 現状はプリセットのみ。ユーザー定義の配色を受け付ける API は今後実装予定。 |
+**🧠 RSS** — **拡張ホストプロセス** の `process.memoryUsage().rss`。このプロセスは共有で、
+Node ランタイム・インストール済みの他の全拡張機能・`node-pty` などのネイティブモジュールを含みます。
+この拡張単体の値ではありません。
 
----
-
-## ロードマップ
-
-1. **Windows 向け Pseudo Console / winpty 連携** による安定した描画。
-2. **永続的なセッション復元**（IDE 再起動後も再生成できるようにする）。
-3. **テーマ JSON のユーザー提供** を `settings.json` でサポート。
-4. **コマンド履歴 / スニペット連携** によるワンクリック送信。
-
----
+含まれないもの：Webview（別のレンダラープロセス。xterm のスクロールバックはこちら）と、
+起動したシェル本体（拡張ホストの子プロセス）。リークを察知するための傾向値として使ってください。
 
 ## セキュリティ
 
-Terminal For AI CLI は、一般的な脆弱性から保護するための複数のセキュリティ対策を実装しています：
+- **シェルパス検証** — プロセス起動前に、絶対パス・存在・実行可能を確認。
+- **起動コマンドのサニタイズ** — 危険なパターンを警告しつつフィルタリング・検証。
+- **作業ディレクトリ検証** — 使用前に存在を確認。
+- **画像の検証** — MIME タイプ、10MB のサイズ上限、Base64 の整合性、パストラバーサル対策のファイル名サニタイズ。
+- **シェルエスケープ** — ドロップ画像のパスはプラットフォーム別にクォートしてからシェルに書き込み。
+- **厳格な CSP** — nonce ベースのスクリプト実行。nonce とセッション ID は `Math.random()` ではなく Node の `crypto` で生成。
+- **`any` 型ゼロ** — Webview 境界をまたぐメッセージはすべて Discriminated Union + exhaustive check。
+- **ネットワークアクセスなし** — 拡張機能は一切通信しません。
 
-### 入力検証
-- **シェルパスの検証**: プロセス起動前に、シェルパスが絶対パスであり、存在し、実行可能であることを確認します。
-- **起動コマンドのサニタイズ**: 起動コマンドをフィルタリングおよび検証し、危険なパターンに対して警告を表示します。
-- **作業ディレクトリの検証**: 使用前に作業ディレクトリが有効で存在することを確認します。
-- **画像ファイルの検証**: 画像ファイルサイズ（10MB 制限）、Base64 データの整合性、パストラバーサル攻撃を防ぐためのファイル名サニタイズを実装。
+## 制限事項
 
-### 暗号化セキュリティ
-- **安全なランダム生成**: セッション ID と CSP nonce の生成に、`Math.random()` ではなく Node.js の `crypto` モジュールを使用します。
-- **コンテンツセキュリティポリシー**: XSS 攻撃を防ぐため、nonce ベースのスクリプト実行による厳格な CSP を実装しています。
+| 項目 | 説明 |
+|------|------|
+| セッション上限 2 | サイドバーの実用性を保つための設計判断（`MAX_SESSIONS`）。 |
+| 再起動をまたぐ復元は不可 | Webview リロードならバッファを再生できますが、IDE 再起動では OS プロセスが終了します。 |
+| Windows の PTY 挙動 | ConPTY / winpty は概ね安定していますが、全画面 TUI やカーソル制御が重いアプリでは OS のターミナルと差が出ます。 |
+| リサイズの遅延 | リサイズは即時通知されますが、Webview のレイアウト再計算でわずかに遅れることがあります。 |
+| プリセットのみ | ユーザー定義の配色は未対応。 |
+| Alpine / musl 非対応 | `linux-x64-musl` はパッケージングのマトリクスに含まれていません。 |
 
-### 型安全性
-- **`any` 型ゼロ**: すべてのメッセージハンドラーで、型安全なメッセージルーティングのために厳格な TypeScript Discriminated Unions を使用します。
-- **厳格なコンパイル**: 包括的な型チェックで TypeScript strict モードを有効化しています。
+## トラブルシューティング
 
-### テスト
-- **自動テスト**: 検証ロジック、ランダム生成、セキュリティ機能、ロギングをカバーする 33 以上のユニットテストを実装。
-- **継続的な検証**: TypeScript の strict モード（`strict`、`noUnusedLocals`、`noUnusedParameters`）によりコンパイル時にコード品質を強制します。
+### 「Failed to create session」/ シェルが起動しない
 
-### ロギング・デバッグ
-- **一元化されたロギング**: タイムスタンプとログレベルを含む構造化ログのための VS Code Output チャンネル統合。
-- **エラートラッキング**: トラブルシューティングのための詳細なログを含む包括的なエラーハンドリング。
-- **リソース監視**: メモリ問題を防ぐため、セッションバッファとメッセージキューの自動クリーンアップ。
+`aiTerminal.defaultShell` を確認してください。**実行可能ファイルの絶対パス** である必要があり、
+`zsh` のような名前だけの指定は拒否され、警告のうえログインシェルにフォールバックします。
+詳細は Output パネルの「Terminal For AI CLI」に出ます。
 
----
+### 画像をドロップしても何も起きない
 
-## 開発メモ
+**`Shift`** を押しながらドラッグしてください。加えて、`image/*` かつ 10MB 以下であること、
+アクティブなセッションが存在することを確認してください（ドロップはアクティブセッションに送られます）。
 
-- `npm run bundle:webview`：`src/webview/main.ts` を IIFE 形式で `media/webview.js` に出力。
-- `npm run compile`：上記 + `tsc -p ./` により `dist/extension.js` を出力。
-- `npm run watch`：TypeScript のウォッチモード。
-- `npm run typecheck`：`tsc --noEmit` で全体の型チェックを実行（以前の ESLint 工程の代替）。
-- `npm test`：Vitest でテストスイートを実行。
-- `npm run test:watch`：テストをウォッチモードで実行。
-- `npm run test:coverage`：テストカバレッジレポートを生成。
-- 主要依存: `node-pty`, `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, `vitest`, VS Code API。
-- 生成物: `dist/extension.js`, `media/webview.js`, `media/webview.js.map`, `media/xterm.css`。
+### 分割ビューのボタンが効かない
 
-### node-pty と全プラットフォーム対応 VSIX
+分割ビューには **2 つ** のセッションが必要です。ステータスに
+「Add a second session to enable split view.」と表示されます。
 
-`node-pty` はネイティブモジュールですが、1.1.0 は Node-API（`node-addon-api` 7）ビルドで ABI が安定しています。そのため **エディタの Electron バージョンに合わせた再ビルドは不要** で、`npm install` で作ったバイナリがそのまま VS Code / Cursor のどのバージョンでも動きます。差異は OS と CPU アーキテクチャだけです。
+### 保存画像のサイズが増え続ける
 
-ローカル開発は `npm install` のみで足ります。配布用には `Export VSIX` ワークフロー（`.github/workflows/export-vsix.yml`）が各 OS/arch のランナーで `node-pty` をビルドし、**全プラットフォームで動く単一の VSIX** を組み立てます。
+エディタの強制終了などで、メモリ上の追跡から外れた孤児ファイルが残っている可能性が高いです。
+`Terminal For AI CLI: 画像をクリーンアップ` を実行するか、再起動してください（起動時に孤児と 24 時間超のファイルを削除します）。
+
+### RSS が大きく見える
+
+拡張ホスト全体の値で、他の全拡張機能と共有です。[ストレージとメモリ](#ストレージとメモリ) を参照。
+絶対値ではなく傾向を見てください。
+
+### 他のマシンで VSIX が読み込めない
+
+ローカルビルドの VSIX にはビルドしたプラットフォーム用の `node-pty` しか含まれません。
+全プラットフォーム対応が必要な場合は `Export VSIX` ワークフローの artifact を使ってください。
+
+## 開発
+
+```bash
+npm install
+npm run compile        # bundle:webview + tsc -> dist/ と media/
+npm run watch          # TypeScript ウォッチモード
+npm run typecheck      # tsc --noEmit（以前の ESLint 工程の代替）
+npm test               # Vitest
+npm run test:coverage  # カバレッジレポート
+npm run package        # vsix/ に VSIX を出力
+```
+
+VS Code / Cursor で `F5` を押すと Extension Development Host が起動します。
+
+生成物: `dist/extension.js`（拡張ホスト）、`media/webview.js` + `media/webview.js.map` +
+`media/xterm.css`（Webview）。
+主要依存: `node-pty`, `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, `vitest`。
+
+### アーキテクチャ
+
+| 領域 | ファイル | 役割 |
+|------|----------|------|
+| エントリーポイント | `src/extension.ts` | コマンドと Webview プロバイダーの登録。 |
+| ビュープロバイダー | `src/view/aiTerminalViewProvider.ts` | メッセージ処理、セッション管理、テーマ・使用状況の送信。 |
+| Webview テンプレート | `src/view/htmlTemplate.ts` | Webview の HTML / CSS 骨格を生成。 |
+| 画像ストレージ | `src/view/imageManager.ts` | ドロップ画像の保存、セッション単位の追跡、孤児の削除。 |
+| テーマ定義 | `src/theming/themePresets.ts` | プリセット配色・プレビュー・検証。 |
+| セッション管理 | `src/terminal/sessionManager.ts` | `node-pty` でシェルを起動し、入出力を中継、プロセスツリーを終了。 |
+| 検証 | `src/utils/validation.ts` | シェルパス、起動コマンド、作業ディレクトリの検証。 |
+| ロギング | `src/utils/logger.ts` | VS Code の `LogOutputChannel`。 |
+| nonce | `src/utils/nonce.ts` | CSP 用の暗号学的に安全な nonce。 |
+
+Webview（`src/webview/main.ts`）はクラスベース構成です。`DOMElements`（要素参照）、
+`SessionStateManager` / `UIStateManager` / `ThemeStateManager`（状態）、`TerminalManager`（xterm インスタンス）、
+`AppController`（イベント統括）。双方向のメッセージ型は `src/shared/types.ts` に定義されています。
+
+### node-pty と全プラットフォーム対応パッケージ
+
+`node-pty` はネイティブモジュールですが、1.1.0 は Node-API（`node-addon-api` 7）ビルドで ABI が安定しています。
+そのため **エディタの Electron バージョンに合わせた再ビルドは不要** で、`npm install` で作ったバイナリが
+VS Code / Cursor のどのバージョンでも動きます。差異は OS と CPU アーキテクチャだけです。
+
+`Export VSIX` ワークフロー（`.github/workflows/export-vsix.yml`）はランナーマトリクスでビルドし、
+**全プラットフォームで動く単一の VSIX** を組み立てます：
 
 | ターゲット | `node_modules/node-pty/prebuilds/<target>/` に配置するファイル |
-| --- | --- |
+|------------|----------------------------------------------------------------|
 | `darwin-arm64`, `darwin-x64` | `pty.node`, `spawn-helper` |
 | `linux-x64`, `linux-arm64` | `pty.node` |
 | `win32-x64`, `win32-arm64` | `pty.node`, `conpty.node`, `conpty_console_list.node`, `winpty.dll`, `winpty-agent.exe` |
 
-node-pty のローダー（`lib/utils.js`）が実行時に `prebuilds/${process.platform}-${process.arch}/` を解決するため、拡張側のコード変更は不要です。ローダーは `prebuilds/` より先に `build/Release` を探すので、`node_modules/node-pty/build/**` は `.vscodeignore` で除外しています（同梱するとビルドしたマシンでしか動かない VSIX になります）。
+ローダー（`lib/utils.js`）が実行時に `prebuilds/${process.platform}-${process.arch}/` を解決するため、
+拡張側のコード変更は不要です。ローダーは `prebuilds/` より先に `build/Release` を探すため、
+`node_modules/node-pty/build/**` は `.vscodeignore` で除外しています（同梱するとビルドしたマシンでしか動かない VSIX になります）。
 
-パッケージ前に `node scripts/verify-prebuilds.mjs` を実行すると、全ターゲットが揃っているか、`spawn-helper` の実行ビットが残っているかを確認できます。`npm run package` は、そのスロットが空のときだけ今の OS の `build/Release` を `prebuilds/` にコピーするので、ローカル / CI の VSIX でもビルドしたマシン上では動きます。
+パッケージ前に `node scripts/verify-prebuilds.mjs` を実行すると、全ターゲットが揃っているか、
+`spawn-helper` の実行ビットが残っているかを確認できます。`npm run package` は、そのスロットが空のときだけ
+現在の OS の `build/Release` を `prebuilds/` にコピーします。
 
-Alpine / musl（`linux-x64-musl`）は対象外です。必要ならマトリクスに追加してください。
+### リリース手順
 
-### 拡張機能アイコン
+`release/Ver_X.Y.Z` ブランチを push します。`Export VSIX` ワークフローが以下を行います：
 
-拡張機能では2つのアイコンファイルを使用しています：
+1. 各 OS/arch で `node-pty` をビルドし、全プラットフォーム対応の VSIX を 1 つ作成
+2. `package.json` の version を `X.Y.Z` に設定（バージョンの正はブランチ名）
+3. `Ver_X.Y.Z` タグで GitHub Release を公開し、`terminal-for-ai-cli-X.Y.Z.vsix` を添付
+4. version の変更と更新後の `<!-- BEGIN:release -->` ブロックをブランチにコミット
 
-- **拡張機能アイコン** (`package.json` → `icon`): `media/icon.png` (128x128 PNG 推奨、透過対応)
-  - VS Code マーケットプレイスと拡張機能ビューに表示されます
-  - 正方形の PNG 画像で、透過（アルファチャンネル）に対応しています
+**公開済みリリースは不変です。** `Ver_X.Y.Z` が既に存在する場合、`X.Y.Z` は保ったまま再ビルド番号を付けます
+（`Ver_X.Y.Z+1`、次は `+2`）。`+N` はタグと資産名にだけ現れ、`package.json` には VS Code が要求する
+数値3成分の `X.Y.Z` が入ります。
 
-- **アクティビティバーアイコン** (`package.json` → `contributes.viewsContainers.activitybar[].icon`): `media/icon-bit.png`
-  - VS Code のアクティビティバーに表示されます
-  - PNG または SVG 形式に対応しています
-  - Webview UI でも使用されます (`src/view/aiTerminalViewProvider.ts`)
+リリースノートは次の優先順で決まります：
 
-**注意**: 最適な表示のため、両方のアイコンに透過 PNG（アルファチャンネル）を使用することを推奨します。拡張機能アイコンは VS Code マーケットプレイスでの最適な表示のために 128x128 ピクセルを推奨します。
+| 優先 | 参照元 |
+|------|--------|
+| 1 | 手書きの `docs/release-notes/X.Y.Z.md`（同じ版の `+N` 再ビルドで共有） |
+| 2 | 前版の `Ver_*` タグ以降のコミットから自動生成（`feat:` と `fix:` のみ） |
+| 3 | `gh release create --generate-notes` へフォールバック |
+
+リリース前に骨子を生成し、人間向けの文言に整えてください：
+
+```bash
+scripts/gen-release-notes.sh 0.0.3            # -> docs/release-notes/0.0.3.md
+scripts/gen-release-notes.sh 0.0.3 --stdout   # 表示のみ
+```
+
+`release/**` の他のブランチへの push や手動実行では、Release は作らず VSIX を artifact として出力するだけです。
+
+### アイコン
+
+- **拡張機能アイコン**（`package.json` → `icon`）: `media/icon.png`、128×128 の透過 PNG。
+- **アクティビティバーアイコン**（`contributes.viewsContainers.activitybar[].icon`）: `media/icon-bit.png`。Webview ヘッダーでも使用。
 
 ### CI/CD
 
-プロジェクトは継続的インテグレーションに GitHub Actions を使用しています：
+| ワークフロー | トリガー | 内容 |
+|--------------|----------|------|
+| `ci.yml` | `feature/**`, `fix/**`, `main`, `develop` への push | 型チェック、コンパイル、Vitest、カバレッジ（Node 20.x） |
+| `pr-check.yml` | すべての PR | フル検証、カバレッジコメント、バンドルサイズ、`npm audit`、TruffleHog |
+| `export-vsix.yml` | `release/**` への push、手動実行 | 全プラットフォームの `node-pty` ビルド + VSIX artifact。`release/Ver_X.Y.Z` なら GitHub Release も公開 → [リリース手順](#リリース手順) |
 
-- **CI ワークフロー** (`.github/workflows/ci.yml`): `feature/**`、`fix/**`、`main`、`develop` ブランチへのプッシュ時に実行
-  - TypeScript 型チェック（`tsc --noEmit`）
-  - TypeScript コンパイル
-  - Vitest によるテスト実行
-  - テストカバレッジレポート生成
-  - 複数バージョンの Node.js でテスト (18.x, 20.x)
+マージ前にすべてのチェックに合格する必要があります。
 
-- **PR チェックワークフロー** (`.github/workflows/pr-check.yml`): すべてのプルリクエストで実行
-  - フル検証スイート（lint、型チェック、テスト）
-  - PR コメントとしてカバレッジレポートを投稿
-  - バンドルサイズチェックと警告
-  - npm audit によるセキュリティ監査
-  - TruffleHog によるシークレットスキャン
+## リンク
 
-プルリクエストをマージする前に、すべてのチェックに合格する必要があります。
-
-### アーキテクチャ概要
-
-| 領域 | ファイル | 役割 |
-| --- | --- | --- |
-| エントリーポイント | `src/extension.ts` | コマンド登録と Webview プロバイダーの登録。 |
-| ビュープロバイダー | `src/view/aiTerminalViewProvider.ts` | メッセージ処理、セッション管理、テーマ情報の送信。 |
-| Webview テンプレート | `src/view/htmlTemplate.ts` | Webview の HTML / CSS 骨格を生成。 |
-| テーマ定義 | `src/theming/themePresets.ts` | プリセット配色・プレビュー・バリデーションを提供。 |
-| セッション管理 | `src/terminal/sessionManager.ts` | `node-pty` でシェルを起動し、Webview との入出力・クリーンアップを調整。 |
-| セキュリティ・検証 | `src/utils/validation.ts` | シェルパス、起動コマンド、作業ディレクトリの検証。 |
-| ロギング | `src/utils/logger.ts` | VS Code の `LogOutputChannel`（レベルとタイムスタンプはエディタ側が管理）。 |
-| ユーティリティ | `src/utils/nonce.ts` | CSP 用の暗号学的に安全な nonce を生成。 |
-
-### Webview アーキテクチャ (`src/webview/main.ts`)
-
-Webview UI は保守性とテスト容易性を向上させるため、クラスベースのアーキテクチャで構築されています：
-
-| クラス | 役割 |
-| --- | --- |
-| `DOMElements` | すべての DOM 要素参照を一箇所で管理。 |
-| `SessionStateManager` | セッション状態の管理（activeSession、sessionIds、buffers）。 |
-| `UIStateManager` | UI 状態の管理（pendingRequest、viewMode、splitRatio、paneSessions）。 |
-| `ThemeStateManager` | テーマ状態の管理（currentThemeKey、availablePresets）。 |
-| `TerminalManager` | xterm.js ターミナルインスタンスと DOM 操作の管理。 |
-| `AppController` | イベント処理と状態調整を統括するメインコントローラー。 |
-
-このアーキテクチャの利点：
-- **カプセル化**: すべてのグローバル変数がクラスのプライベートフィールドにカプセル化。
-- **単一責任**: 各クラスが明確で集中した責任を持つ。
-- **テスト容易性**: 独立した状態管理によりユニットテストが容易。
-- **保守性**: 状態変更の追跡とデバッグが容易。
-
----
-
-## ローカライズ
-
-- 英語版: [`README.md`](README.md)
-- 日本語版: `README_JP.md`（本ファイル）
-
-両言語で同じ内容を共有しているため、好みの言語で参照してください。
+| | |
+|---|---|
+| ダウンロード | [Releases](https://github.com/den0206/terminal-for-ai-cli/releases/latest) |
+| English README | [README.md](README.md) |
+| 変更履歴 | [CHANGELOG.md](CHANGELOG.md) |
+| バグ報告・要望 | [Issues](https://github.com/den0206/terminal-for-ai-cli/issues) |
+| ライセンス | [MIT](LICENSE.md) |

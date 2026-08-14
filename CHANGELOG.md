@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **リリース自動化**: `release/Ver_X.Y.Z` ブランチの push で、全プラットフォーム対応 VSIX のビルド → `package.json` の version 反映 → `Ver_X.Y.Z` タグの GitHub Release 公開（VSIX 添付）まで `Export VSIX` ワークフローが実行。既存タグと衝突する場合は `+N` で採番し、公開済みリリースは不変
+- **リリースノート生成**: `scripts/gen-release-notes.sh` が前版タグ以降の `feat:` / `fix:` コミットから骨子を生成。手書きの `docs/release-notes/X.Y.Z.md` があればそちらを優先
+- **README のリリース情報自動更新**: 公開後、`scripts/update-readme-release-info.mjs` が README.md / README_JP.md の `release` ブロックを更新してコミット
 - **使用状況インジケータ**: Webview ツールバー（セッション選択と `+` の間）に、保存済み画像の合計サイズと拡張ホストの RSS を表示。ビューが可視の間、30 秒ごとに更新
 - **包括的なJSDocコメント**: 主要クラス（`AiTerminalViewProvider`、`ShellSession`、`extension.ts`）に詳細なドキュメンテーションを追加
 - **広範なテストスイート**: `aiTerminalViewProvider.test.ts`に48個の新規テストケースを追加（合計116テスト、成功率93.1%）
@@ -36,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- README.md / README_JP.md をユーザー向け構成に刷新（目次、機能一覧、ストレージとメモリ、制限事項、トラブルシューティング、開発の各セクション）
 - プロジェクト品質スコア: **88点 → 93点**に向上
 - テストカバレッジ: 68テスト → 116テスト（+48テスト）
 - ドキュメンテーションスコア: 12/20 → 18/20に向上
