@@ -69,6 +69,13 @@ export function buildWebviewHtml({
             border-radius: 4px;
             padding: 0.2rem 0.4rem;
           }
+          .controls .usage {
+            flex: 0 0 auto;
+            font-size: 0.7rem;
+            opacity: 0.75;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+          }
           .icon-button {
             width: 28px;
             height: 28px;
@@ -280,6 +287,12 @@ export function buildWebviewHtml({
         </header>
         <div class="controls" aria-label="Session controls">
           <select data-session-select></select>
+          <span
+            class="usage"
+            data-usage
+            title="保存画像の合計サイズ / 拡張ホストプロセス全体のメモリ (RSS)"
+            >―</span
+          >
           <button class="icon-button" data-session-add title="New session">+</button>
           <button
             class="icon-button"

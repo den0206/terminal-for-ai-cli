@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **使用状況インジケータ**: Webview ツールバー（セッション選択と `+` の間）に、保存済み画像の合計サイズと拡張ホストの RSS を表示。ビューが可視の間、30 秒ごとに更新
 - **包括的なJSDocコメント**: 主要クラス（`AiTerminalViewProvider`、`ShellSession`、`extension.ts`）に詳細なドキュメンテーションを追加
 - **広範なテストスイート**: `aiTerminalViewProvider.test.ts`に48個の新規テストケースを追加（合計116テスト、成功率93.1%）
 - **拡張CI/CDワークフロー**:

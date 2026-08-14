@@ -583,6 +583,10 @@ class AppController {
         this.updateSessionControls();
         break;
 
+      case 'usage-update':
+        this.dom.usage.textContent = message.payload.text;
+        break;
+
       case 'theme-update':
         this.themeController.applyTheme(message.payload.palette);
         this.themeState.currentThemeKey = message.payload.presetKey;
