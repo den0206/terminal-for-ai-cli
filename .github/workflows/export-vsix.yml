@@ -68,8 +68,14 @@ jobs:
     name: Package universal VSIX
     runs-on: ubuntu-latest
     needs: prebuild
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          # リリースノートは前版(祖先 Ver_* タグ)との差分から生成するため、
+          # 全履歴とタグが要る(既定の fetch-depth:1 では生成できない)。
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -77,6 +83,48 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      # ci.yml は release/** では走らないため、公開前のゲートはここだけ。
+      # devDependencies を prune する前に実行する。
+      - name: Verify tests
+        run: npm run typecheck && npm test
+
+      # release/Ver_X.Y.Z ブランチのときだけリリース版として扱う。
+      # 公開済みリリースは不変にするため、同じ Ver_X.Y.Z が既にあれば X.Y.Z は保ったまま
+      # +N を付けて採番する(例: Ver_0.0.3 があれば Ver_0.0.3+1)。
+      # package.json の version は数値3成分のみが正当なので marketing(X.Y.Z)だけを入れる。
+      - name: Resolve version from branch
+        id: meta
+        if: startsWith(github.ref_name, 'release/Ver_')
+        run: |
+          REQUESTED="${GITHUB_REF_NAME##*/Ver_}"
+          if ! printf '%s' "$REQUESTED" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::branch '$GITHUB_REF_NAME' が release/Ver_X.Y.Z 形式ではありません"
+            exit 1
+          fi
+
+          EXISTING="$(git ls-remote --tags origin | sed -n 's#.*refs/tags/\(Ver_[0-9][0-9A-Za-z.+-]*\)$#\1#p' | sort -u)"
+          if printf '%s\n' "$EXISTING" | grep -Fxq "Ver_$REQUESTED"; then
+            N=1
+            while printf '%s\n' "$EXISTING" | grep -Fxq "Ver_$REQUESTED+$N"; do
+              N=$((N + 1))
+            done
+            VERSION="$REQUESTED+$N"
+            echo "::notice::Ver_$REQUESTED は既に存在するため Ver_$VERSION に採番しました"
+          else
+            VERSION="$REQUESTED"
+          fi
+
+          {
+            echo "version=$VERSION"                                   # 0.0.3+1(タグ・資産名)
+            echo "marketing=$REQUESTED"                               # 0.0.3(package.json)
+            echo "tag=Ver_$VERSION"
+            echo "asset=terminal-for-ai-cli-$VERSION.vsix"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Apply version
+        if: steps.meta.outputs.marketing
+        run: npm version "${{ steps.meta.outputs.marketing }}" --no-git-tag-version --allow-same-version
 
       - name: Build extension
         run: npm run compile
@@ -115,3 +163,59 @@ jobs:
           path: vsix/*.vsix
           if-no-files-found: error
           retention-days: 30
+
+      # リリースノートの決め方(優先順):
+      #   1. 手書き docs/release-notes/X.Y.Z.md があればそれを使う(+N 再ビルドも同じ X.Y.Z を共有)
+      #   2. 無ければ前版(祖先 Ver_* タグ)との差分から自動生成(feat/fix を分類)
+      #   3. 生成にも失敗したら gh の --generate-notes にフォールバック
+      - name: Create GitHub Release
+        if: steps.meta.outputs.tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          MARKETING: ${{ steps.meta.outputs.marketing }}
+          ASSET: ${{ steps.meta.outputs.asset }}
+        run: |
+          cp vsix/terminal-for-ai-cli.vsix "$ASSET"
+
+          NOTES_FILE="docs/release-notes/${MARKETING}.md"
+          if [ -f "$NOTES_FILE" ]; then
+            echo "::notice::リリースノート $NOTES_FILE を使用します"
+            NOTES_ARGS=(--notes-file "$NOTES_FILE")
+          else
+            GEN="$RUNNER_TEMP/relnotes-${MARKETING}.md"
+            if bash scripts/gen-release-notes.sh "$MARKETING" --stdout > "$GEN"; then
+              echo "::notice::$NOTES_FILE が無いため前版との差分から自動生成しました"
+              NOTES_ARGS=(--notes-file "$GEN")
+            else
+              echo "::warning::自動生成に失敗したため gh の --generate-notes にフォールバックします"
+              NOTES_ARGS=(--generate-notes)
+            fi
+          fi
+
+          # 採番済み($TAG は空き)なので上書きはしない。公開済みリリースは不変。
+          gh release create "$TAG" "$ASSET" \
+            --target "$GITHUB_SHA" \
+            --title "Terminal for AI CLI ${VERSION}" \
+            "${NOTES_ARGS[@]}"
+
+      # README の <!-- BEGIN:release --> ブロックを最新リリースに更新して push する。
+      # コミットメッセージの [skip ci] が、この push による再実行ループを防ぐ。
+      - name: Update README release info
+        if: steps.meta.outputs.tag
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+          RELEASE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.meta.outputs.tag }}
+        run: node scripts/update-readme-release-info.mjs
+
+      - name: Commit version and README
+        if: steps.meta.outputs.tag
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json package-lock.json README.md README_JP.md
+          git diff --cached --quiet && exit 0
+          git commit -m 'docs: リリース情報を更新 [skip ci]'
+          git pull --rebase --autostash
+          git push
