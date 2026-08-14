@@ -1,230 +1,378 @@
-# Terminal for AI CLI
+<p align="center">
+  <img src="media/icon.png" alt="Terminal for AI CLI icon" width="128" height="128">
+</p>
 
-[![CI](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/ci.yml)
-[![PR Check](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/pr-check.yml/badge.svg)](https://github.com/den0206/terminal-for-ai-cli/actions/workflows/pr-check.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<h1 align="center">Terminal for AI CLI</h1>
 
-Terminal for AI CLI is a VS Code / Cursor extension that anchors a multi-session terminal inside the secondary sidebar. It is powered by `xterm.js`, streams process data via a lightweight `SessionManager` backed by `node-pty`, and keeps UI state in the Webview so you can switch shells without leaving the editor.
+<p align="center">
+  <strong>A real terminal in the sidebar, next to your AI CLI.</strong><br>
+  Multi-session, split view, and drag-and-drop images — without leaving the editor.
+</p>
 
-> 🇯🇵 Looking for the Japanese documentation? Check [`README_JP.md`](README_JP.md). This file and the Japanese version are intentionally kept in sync.
+<p align="center">
+  <a href="https://github.com/den0206/terminal-for-ai-cli/releases/latest"><img alt="Download VSIX" src="https://img.shields.io/badge/Download-.vsix-2f7bff?style=for-the-badge&labelColor=111111"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/den0206/terminal-for-ai-cli/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/den0206/terminal-for-ai-cli/ci.yml?branch=main&style=flat-square&label=CI&labelColor=111111&color=2f7bff"></a>
+  <a href="https://github.com/den0206/terminal-for-ai-cli/actions/workflows/pr-check.yml"><img alt="PR Check" src="https://img.shields.io/github/actions/workflow/status/den0206/terminal-for-ai-cli/pr-check.yml?branch=main&style=flat-square&label=PR%20Check&labelColor=111111&color=2f7bff"></a>
+  <img alt="VS Code 1.125+" src="https://img.shields.io/badge/VS%20Code%20%2F%20Cursor-1.125%2B-2f7bff?style=flat-square&labelColor=111111">
+  <img alt="Cross platform" src="https://img.shields.io/badge/Platform-macOS%20%2F%20Linux%20%2F%20Windows-2f7bff?style=flat-square&labelColor=111111">
+  <a href="https://opensource.org/licenses/MIT"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-2f7bff?style=flat-square&labelColor=111111"></a>
+</p>
+
+<p align="center">
+  English · <a href="README_JP.md">日本語</a>
+</p>
+
+<p align="center">
+  <!-- BEGIN:release -->
+  <!-- END:release -->
+</p>
 
 ---
 
-## Features
+**Terminal for AI CLI** puts a full `xterm.js` terminal into the VS Code / Cursor sidebar, backed by
+real PTY processes (`node-pty`). It is built for the workflow where an AI CLI runs in one pane and
+you keep working in another.
 
-- Multiple shells in one Webview: add, remove, and switch sessions from the dropdown.
-- In-memory scrollback persistence per session (restored when the Webview reloads).
-- Automatic naming (`Terminal 1`, `Terminal 2`, …) that reuses freed numbers.
-- Theme presets (Modern, Basic, Homebrew, etc.) with live preview and VS Code color integration.
-- Adjustable terminal height with a drag handle; the setting is persisted across reloads.
-- "Clear all sessions" section with an inline confirmation flow to terminate every running shell safely.
-- Configurable default shell, startup commands, and theme preset via VS Code settings.
-- **Security hardened**: Input validation for shell paths and commands, cryptographically secure random generation, image file size limits (10MB).
-- **Type-safe**: Strict TypeScript with discriminated unions for message handling (zero `any` types).
-- **Tested**: Comprehensive test suite with Vitest (33+ tests covering utilities, validation, and logging).
-- **Robust logging**: Centralized logging system using VS Code Output Channel for better debugging and troubleshooting.
-- **Resource management**: Automatic cleanup of session buffers, message queue limits, and orphaned images to prevent memory leaks and storage bloat.
-- **Image cleanup**: Automatic cleanup of orphaned images on extension startup, plus manual cleanup command available from the command palette.
-- **Usage readout**: `💾 <saved images> · 🧠 <RSS>` in the toolbar, refreshed every 30s while the view is visible.
-- Pure TypeScript codebase (`src/extension.ts`, `src/webview/main.ts`, `src/terminal/sessionManager.ts`) with esbuild + `tsc` outputs committed to `media/` and `dist/`.
+> "The AI agent keeps running in the sidebar while the editor stays yours."
 
----
+The main editor terminal panel steals vertical space from your code. This view lives in the
+Activity Bar instead: up to two shells, side-by-side or stacked, always visible, with their own
+height and theme.
+
+## Contents
+
+- [What It Does](#what-it-does)
+- [Quick Start](#quick-start)
+- [Usage](#usage)
+- [Feature Overview](#feature-overview)
+- [Settings](#settings)
+- [Commands](#commands)
+- [Storage and Memory](#storage-and-memory)
+- [Security](#security)
+- [Limitations](#limitations)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development) / [Releasing](#releasing)
+- [Links](#links)
+
+## What It Does
+
+- **Two shells in the sidebar** — add, switch, and close sessions from the toolbar dropdown.
+- **Split view** — show both sessions at once, with a draggable divider between them.
+- **Scrollback survives reloads** — output is buffered per session and replayed when the Webview reloads.
+- **Stable names** — `Terminal 1`, `Terminal 2`, … and freed numbers get reused.
+- **Drag an image in** — hold `Shift` and drop; the file is saved and its shell-escaped path is typed into the shell for you.
+- **Usage readout** — saved-image size and extension host memory, right in the toolbar.
+- **Theme presets** — nine palettes (Modern, Basic, Homebrew, …), applied instantly.
+- **Adjustable height** — drag the bottom handle; the value is persisted.
+- **Clear all sessions** — an inline confirmation step, then every shell is terminated.
+
+No telemetry, no network access, no account. Everything runs locally in the extension host.
+
+## Quick Start
+
+### Requirements
+
+| Item | Value |
+|------|-------|
+| Editor | **VS Code / Cursor 1.125 or later** |
+| Platform | macOS / Linux / Windows (Apple Silicon, x64, arm64) |
+| Node.js | 20+ (only for building from source) |
+| Dependencies | `node-pty` (native, prebuilt binaries shipped in the VSIX) |
+
+### Install
+
+Not on the Marketplace. Download `terminal-for-ai-cli-X.Y.Z.vsix` from
+[**Releases**](https://github.com/den0206/terminal-for-ai-cli/releases/latest) and install it:
+
+```bash
+code --install-extension terminal-for-ai-cli-X.Y.Z.vsix
+```
+
+Or from the editor: Extensions view → `…` menu → "Install from VSIX…".
+
+Released VSIX files carry `node-pty` prebuilds for **every** platform. Building locally
+(`npm install && npm run package`) works too, but the result only runs on the machine that built it —
+see [node-pty and cross-platform packaging](#node-pty-and-cross-platform-packaging).
+
+### First Launch
+
+Open **Terminal For AI** from the Activity Bar. The first session is created automatically using
+your login shell (or `aiTerminal.defaultShell`) in the workspace root (home directory if no folder is open).
 
 ## Usage
 
-1. **Install dependencies**
-   ```bash
-   npm install
-   ```
-2. **Compile / bundle**
-   ```bash
-   npm run compile
-   ```
-3. **Launch in Extension Development Host**
-   - Press `F5` inside VS Code or Cursor.
-   - In the Extension Development Host, open the “Terminal For AI CLI” view (Activity Bar).
-   - A first terminal session is created automatically; additional sessions can be added with `+`.
-4. **Operate the UI**
-   - **Dropdown**: select any existing session.
-   - **`+` / 🗑**: add or close the active session.
-   - **Usage readout** (between the dropdown and `+`): total size of saved drag-and-drop images, and the RSS of the extension host process. The RSS covers the whole host — every extension in it, plus the Node runtime — not this extension alone; the Webview and the spawned shells are separate processes and are not counted.
-   - **Clear all sessions**: open the confirmation panel below the Theme section to terminate every shell.
-   - **Theme selector**: pick any preset; the palette updates instantly.
-   - **Resize handle**: drag to change the terminal height (value is saved).
+### The toolbar
 
----
+```
+[ Terminal 1 ▾ ]  💾 0.0MB · 🧠 312MB  [ + ]  [ ▢ ]  [ 🗑 ]
+```
+
+| Control | Action |
+|---------|--------|
+| Dropdown | Switch the active session |
+| Usage readout | Saved images / extension host RSS — see [Storage and Memory](#storage-and-memory) |
+| `+` | New session (disabled at the 2-session limit) |
+| `▢` / `▦` | Toggle split view (needs two sessions) |
+| `🗑` | Close the active session |
+
+The header on the right shows status messages ("Registered sessions: 2", errors, and so on).
+
+### Split view
+
+Create a second session, then press `▢`. Both panes render at once and the divider between them can
+be dragged (the ratio is clamped to 20–80% and persisted). The focused pane is outlined; clicking a
+pane makes it active.
+
+### Dropping an image
+
+**Hold `Shift`** while dragging an image onto the view, then drop it. Without `Shift` the editor's own
+drop handling wins, so this is deliberate. The file is written to the extension's global storage and
+the **escaped absolute path is written into the shell**, ready for an AI CLI that reads image paths.
+
+Files up to 10MB and `image/*` types only. Non-image files are ignored.
+
+### Height and theme
+
+Drag the handle under the terminal to resize (220–1000px, persisted). The theme dropdown applies a
+preset immediately and writes it back to `aiTerminal.themePreset`, so it survives restarts.
+
+### Closing everything
+
+"Clear all sessions" at the bottom asks for confirmation, then terminates every shell (`SIGTERM`,
+escalating to `SIGKILL` after 2s) and deletes every saved image.
+
+## Feature Overview
+
+| Feature | Description |
+|---------|-------------|
+| Multi-session | Up to 2 concurrent PTY sessions, switchable from the dropdown |
+| Split view | Both sessions visible at once with a draggable, persisted split ratio |
+| Session naming | `Terminal N` with reuse of freed numbers |
+| Scrollback | 3000 lines in xterm, plus a 2MB per-session buffer replayed on Webview reload |
+| Image drag & drop | `Shift` + drop → saved to global storage, escaped path typed into the shell |
+| Image cleanup | Deleted on session exit, on deactivation, and on startup (orphans, 24h TTL) |
+| Usage readout | Saved-image total and extension host RSS, refreshed every 30s while visible |
+| Theme presets | `modern`, `basic`, `clearDark`, `clearLight`, `grass`, `homebrew`, `manPage`, `ocean`, `pro` |
+| Height control | Drag handle, 220–1000px, persisted in Webview state |
+| Startup commands | Commands sent in order right after a session starts |
+| Working directory | Workspace root, falling back to the home directory; validated before use |
+| Process cleanup | Whole process tree is killed on close; `SIGTERM` → `SIGKILL` after 2s |
+| Logging | VS Code `LogOutputChannel` ("Terminal For AI CLI" in the Output panel) |
+
+## Settings
+
+| Setting | Key | Description |
+|---------|-----|-------------|
+| Default shell | `aiTerminal.defaultShell` | Absolute path to the shell executable. Empty falls back to your login shell. Invalid paths are rejected with a warning and the default is used. |
+| Startup commands | `aiTerminal.startupCommands` | Array of commands sent (in order) right after a session starts. Invalid entries are filtered out. |
+| Theme preset | `aiTerminal.themePreset` | One of the nine presets. The Webview dropdown writes to the same setting. |
 
 ## Commands
 
 | Command | Description |
-| --- | --- |
+|---------|-------------|
 | `Terminal For AI CLI: フォーカス` | Focus and reveal the terminal view. |
 | `Terminal For AI CLI: 新しいセッション` | Create a new terminal session. |
-| `Terminal For AI CLI: 画像をクリーンアップ` | Manually delete all saved images from global storage. Shows confirmation dialog before deletion. |
+| `Terminal For AI CLI: 画像をクリーンアップ` | Delete saved images from global storage (with confirmation). |
 
----
+## Storage and Memory
 
-## Configuration (VS Code settings)
+The toolbar readout is `💾 <saved images> · 🧠 <RSS>`, refreshed every 30 seconds while the view is
+visible.
 
-| Setting | Key | Description |
-| --- | --- | --- |
-| Default shell | `aiTerminal.defaultShell` | Absolute path to the shell executable. Empty string falls back to the user’s login shell. |
-| Startup commands | `aiTerminal.startupCommands` | Array of commands sent (in order) right after a session starts. |
-| Theme preset | `aiTerminal.themePreset` | One of `modern`, `basic`, `clearDark`, `clearLight`, `grass`, `homebrew`, `manPage`, `ocean`, `pro`. The same presets are available in the Webview. |
+**💾 Saved images** — the total size of files under
+`<globalStorage>/terminal-for-ai-cli/images/`. These are the images you dropped in. They are removed:
 
----
+| When | What is deleted |
+|------|-----------------|
+| A session is closed, or its shell exits | Every image dropped into that session |
+| "Clear all sessions" | All images |
+| The extension deactivates (window closed) | All images |
+| Extension startup | Orphans left by a crash, plus anything older than 24h |
 
-## Known Issues / Limitations
+So this number stays near zero in normal use. A number that keeps growing means cleanup is not
+running — tracking lives in memory, so a hard kill of the editor leaves files behind until the next
+startup sweep.
 
-| Item | Description |
-| --- | --- |
-| Windows PTY quirks | Windows relies on `node-pty` (ConPTY/winpty). Most scenarios are stable, but some full-screen or cursor-sensitive apps can still behave differently from the OS terminal. |
-| Resize propagation | `node-pty` propagates resize events immediately, but Electron Webview/layout changes can still introduce a tiny delay on slower machines. |
-| Session restoration | Webview reloads restore buffered output, but a full IDE restart still kills OS processes. A persistent session registry is on the roadmap. |
-| Theme customization | Only built-in presets are supported today; user-defined palettes are a future task. |
+**🧠 RSS** — `process.memoryUsage().rss` of the **extension host process**. That process is shared:
+it includes the Node runtime, every other extension you have installed, and native modules such as
+`node-pty`. It is *not* this extension alone.
 
----
-
-## Roadmap
-
-1. **Windows pseudo console integration** (ConPTY/winpty) for reliable rendering.
-2. **Persistent session recovery** even after restarting VS Code.
-3. **Custom theme JSON** support in `settings.json`.
-4. **Command palette / snippet presets** to inject frequently used commands.
-
----
+Not counted: the Webview (a separate renderer process — the xterm scrollback lives there) and the
+shells themselves (child processes of the extension host). Treat the number as a trend line for
+spotting leaks, not as an attribution.
 
 ## Security
 
-Terminal For AI CLI implements multiple security measures to protect against common vulnerabilities:
+- **Shell path validation** — must be absolute, existing, and executable before anything is spawned.
+- **Startup command sanitization** — commands are filtered and validated, with warnings for dangerous patterns.
+- **Working directory validation** — checked for existence before use.
+- **Image validation** — MIME type, 10MB size limit, base64 integrity, and filename sanitization against path traversal.
+- **Shell escaping** — dropped image paths are quoted per platform before being written to the shell.
+- **Strict CSP** — nonce-based script execution in the Webview; nonces and session IDs come from Node's `crypto`, never `Math.random()`.
+- **Zero `any` types** — every message crossing the Webview boundary goes through a discriminated union with an exhaustive check.
+- **No network access** — the extension never makes a request.
 
-### Input Validation
-- **Shell path validation**: Verifies that shell paths are absolute, exist, and are executable before spawning processes.
-- **Startup command sanitization**: Filters and validates startup commands, with warnings for potentially dangerous patterns.
-- **Working directory validation**: Ensures working directories are valid and exist before use.
-- **Image file validation**: Validates image file size (10MB limit), base64 data integrity, and filename sanitization to prevent path traversal attacks.
+## Limitations
 
-### Cryptographic Security
-- **Secure random generation**: Uses Node.js `crypto` module for generating session IDs and CSP nonces instead of `Math.random()`.
-- **Content Security Policy**: Implements strict CSP with nonce-based script execution to prevent XSS attacks.
+| Item | Description |
+|------|-------------|
+| 2 sessions max | By design (`MAX_SESSIONS`), to keep the sidebar usable. |
+| No session restore across restarts | A Webview reload replays the buffer, but restarting the IDE kills the OS processes. |
+| Windows PTY quirks | ConPTY/winpty is stable for most work, but full-screen or cursor-heavy TUIs can differ from the OS terminal. |
+| Resize latency | Resize is propagated immediately, though Webview layout recalculation can add a small delay. |
+| Presets only | User-defined palettes are not supported yet. |
+| No Alpine/musl build | `linux-x64-musl` is not in the packaging matrix. |
 
-### Type Safety
-- **Zero `any` types**: All message handlers use strict TypeScript discriminated unions for type-safe message routing.
-- **Strict compilation**: TypeScript strict mode enabled with comprehensive type checking.
+## Troubleshooting
 
-### Testing
-- **Automated tests**: 33+ unit tests covering validation logic, random generation, security features, and logging.
-- **Continuous validation**: TypeScript strict mode (`strict`, `noUnusedLocals`, `noUnusedParameters`) enforces code quality at compile time.
+### "Failed to create session" / the shell never starts
 
-### Logging & Debugging
-- **Centralized logging**: VS Code Output Channel integration for structured logging with timestamps and log levels.
-- **Error tracking**: Comprehensive error handling with detailed logging for troubleshooting.
-- **Resource monitoring**: Automatic cleanup of session buffers and message queues to prevent memory issues.
+Check `aiTerminal.defaultShell`. It must be an **absolute path to an executable** — a bare `zsh`
+is rejected and the extension falls back to your login shell with a warning. Details are in the
+Output panel → "Terminal For AI CLI".
 
----
+### Dropping an image does nothing
 
-## Development Notes
+Hold **`Shift`** while dragging. Also confirm it is an `image/*` file under 10MB and that a session
+is active — drops are routed to the active session.
 
-- `npm run bundle:webview` – bundles `src/webview/main.ts` (IIFE) to `media/webview.js`.
-- `npm run compile` – runs the bundle script and `tsc -p ./` to emit `dist/extension.js`.
-- `npm run watch` – TypeScript watch mode for iterative work.
-- `npm run typecheck` – runs `tsc --noEmit` for full type checking (replaces the old ESLint step).
-- `npm test` – runs the test suite with Vitest.
-- `npm run test:watch` – runs tests in watch mode.
-- `npm run test:coverage` – generates test coverage report.
-- Dependencies: `node-pty`, `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, `vitest`, and VS Code `@types`.
-- Outputs: extension host bundle (`dist/extension.js`), Webview bundle (`media/webview.js`, `media/webview.js.map`, `media/xterm.css`).
+### The split toggle does nothing
+
+Split view needs **two** sessions. The status line says "Add a second session to enable split view."
+
+### The saved-image size keeps growing
+
+The editor was probably force-quit, leaving orphans that in-memory tracking no longer knows about.
+Run `Terminal For AI CLI: 画像をクリーンアップ`, or restart — startup deletes orphans and anything
+older than 24 hours.
+
+### RSS looks high
+
+It is the whole extension host, shared with every other extension. See
+[Storage and Memory](#storage-and-memory). Watch the trend, not the absolute value.
+
+### The VSIX fails to load on another machine
+
+A locally built VSIX only contains the `node-pty` binary for the platform that built it. Use the
+`Export VSIX` workflow artifact for a cross-platform build.
+
+## Development
+
+```bash
+npm install
+npm run compile        # bundle:webview + tsc -> dist/ and media/
+npm run watch          # TypeScript watch mode
+npm run typecheck      # tsc --noEmit (replaces the old ESLint step)
+npm test               # Vitest
+npm run test:coverage  # coverage report
+npm run package        # VSIX into vsix/
+```
+
+Press `F5` in VS Code / Cursor to launch an Extension Development Host.
+
+Outputs: `dist/extension.js` (extension host), `media/webview.js` + `media/webview.js.map` +
+`media/xterm.css` (Webview).
+Dependencies: `node-pty`, `@xterm/xterm`, `@xterm/addon-fit`, `esbuild`, `typescript`, `vitest`.
+
+### Architecture
+
+| Area | File(s) | Responsibility |
+|------|---------|----------------|
+| Extension entry | `src/extension.ts` | Registers commands and the Webview view provider. |
+| View provider | `src/view/aiTerminalViewProvider.ts` | Routes messages, manages sessions, posts theme and usage data. |
+| Webview template | `src/view/htmlTemplate.ts` | Generates the HTML/CSS shell for the Webview UI. |
+| Image storage | `src/view/imageManager.ts` | Saves dropped images, tracks them per session, cleans up orphans. |
+| Theming | `src/theming/themePresets.ts` | Palette presets, previews, and validation. |
+| Session management | `src/terminal/sessionManager.ts` | Spawns shells via `node-pty`, streams output, kills process trees. |
+| Validation | `src/utils/validation.ts` | Shell paths, startup commands, working directories. |
+| Logging | `src/utils/logger.ts` | VS Code `LogOutputChannel`. |
+| Nonce | `src/utils/nonce.ts` | Cryptographically secure nonces for CSP. |
+
+The Webview (`src/webview/main.ts`) is class-based: `DOMElements` (element references),
+`SessionStateManager` / `UIStateManager` / `ThemeStateManager` (state), `TerminalManager`
+(xterm instances), and `AppController` (event orchestration). Messages in both directions are typed
+in `src/shared/types.ts`.
 
 ### node-pty and cross-platform packaging
 
-`node-pty` is a native module, but version 1.1.0 is built against Node-API (`node-addon-api` 7), which is ABI stable. **No rebuild against the editor's Electron version is required** — a binary built with plain `npm install` works across VS Code / Cursor versions. Only the OS and CPU architecture matter.
+`node-pty` is a native module, but 1.1.0 is built against Node-API (`node-addon-api` 7), which is ABI
+stable. **No rebuild against the editor's Electron version is required** — a binary from a plain
+`npm install` works across VS Code / Cursor versions. Only OS and CPU architecture matter.
 
-For local development `npm install` is enough. For distribution, the `Export VSIX` workflow (`.github/workflows/export-vsix.yml`) builds `node-pty` on a runner matrix and assembles a **single VSIX that runs on every platform**:
+The `Export VSIX` workflow (`.github/workflows/export-vsix.yml`) builds on a runner matrix and
+assembles a **single VSIX that runs on every platform**:
 
 | Target | Files placed under `node_modules/node-pty/prebuilds/<target>/` |
-| --- | --- |
+|--------|----------------------------------------------------------------|
 | `darwin-arm64`, `darwin-x64` | `pty.node`, `spawn-helper` |
 | `linux-x64`, `linux-arm64` | `pty.node` |
 | `win32-x64`, `win32-arm64` | `pty.node`, `conpty.node`, `conpty_console_list.node`, `winpty.dll`, `winpty-agent.exe` |
 
-node-pty's loader (`lib/utils.js`) resolves `prebuilds/${process.platform}-${process.arch}/` at runtime, so no extension code changes are needed. `node_modules/node-pty/build/**` is excluded via `.vscodeignore` because the loader checks it *before* `prebuilds/`, and shipping it would pin the VSIX to the machine that built it.
+The loader (`lib/utils.js`) resolves `prebuilds/${process.platform}-${process.arch}/` at runtime, so
+no extension code changes are needed. `node_modules/node-pty/build/**` is excluded via `.vscodeignore`
+because the loader checks it *before* `prebuilds/`, and shipping it would pin the VSIX to the build
+machine.
 
-Run `node scripts/verify-prebuilds.mjs` before packaging to confirm every target is present and `spawn-helper` kept its executable bit. `npm run package` copies the current platform's `build/Release` into `prebuilds/` when that slot is empty, so a local/CI VSIX still runs on the machine that built it.
+Run `node scripts/verify-prebuilds.mjs` before packaging to confirm every target is present and that
+`spawn-helper` kept its executable bit. `npm run package` copies the current platform's
+`build/Release` into `prebuilds/` when that slot is empty.
 
-Alpine/musl (`linux-x64-musl`) is not covered; add a matrix entry if you need it.
+### Releasing
 
-### Extension Icons
+Push a `release/Ver_X.Y.Z` branch. The `Export VSIX` workflow then:
 
-The extension uses two icon files:
+1. Builds `node-pty` on every OS/arch and packages one cross-platform VSIX.
+2. Writes `X.Y.Z` into `package.json` (the branch name is the source of truth for the version).
+3. Publishes a GitHub Release tagged `Ver_X.Y.Z` with `terminal-for-ai-cli-X.Y.Z.vsix` attached.
+4. Commits the version bump and the refreshed `<!-- BEGIN:release -->` block back to the branch.
 
-- **Extension icon** (`package.json` → `icon`): `media/icon.png` (128x128 PNG recommended, supports transparency)
-  - Displayed in VS Code marketplace and extension view
-  - Should be a square PNG image with optional transparency
+**Published releases are immutable.** If `Ver_X.Y.Z` already exists, `X.Y.Z` is kept and a rebuild
+number is appended — `Ver_X.Y.Z+1`, then `+2`. The `+N` form only appears in the tag and the asset
+name; `package.json` keeps the plain `X.Y.Z` that VS Code requires.
 
-- **Activity bar icon** (`package.json` → `contributes.viewsContainers.activitybar[].icon`): `media/icon-bit.png`
-  - Displayed in the VS Code activity bar
-  - Can be PNG or SVG format
-  - Also used in the Webview UI (`src/view/aiTerminalViewProvider.ts`)
+Release notes are resolved in this order:
 
-**Note**: For best results, use PNG format with transparency (alpha channel) for both icons. The extension icon should be 128x128 pixels for optimal display in the VS Code marketplace.
+| Priority | Source |
+|----------|--------|
+| 1 | Hand-written `docs/release-notes/X.Y.Z.md` (shared by all `+N` rebuilds of that version) |
+| 2 | Generated from the commits since the previous `Ver_*` tag — `feat:` and `fix:` only |
+| 3 | `gh release create --generate-notes` as a fallback |
+
+Draft the notes yourself before releasing, then edit the result by hand:
+
+```bash
+scripts/gen-release-notes.sh 0.0.3            # -> docs/release-notes/0.0.3.md
+scripts/gen-release-notes.sh 0.0.3 --stdout   # preview only
+```
+
+Pushing to any other `release/**` branch, or running the workflow manually, builds the VSIX as a
+workflow artifact without creating a release.
+
+### Icons
+
+- **Extension icon** (`package.json` → `icon`): `media/icon.png`, 128×128 PNG with transparency.
+- **Activity bar icon** (`contributes.viewsContainers.activitybar[].icon`): `media/icon-bit.png`, also used in the Webview header.
 
 ### CI/CD
 
-The project uses GitHub Actions for continuous integration:
+| Workflow | Trigger | Checks |
+|----------|---------|--------|
+| `ci.yml` | push to `feature/**`, `fix/**`, `main`, `develop` | Type check, compile, Vitest, coverage (Node 20.x) |
+| `pr-check.yml` | all pull requests | Full validation, coverage comment, bundle size, `npm audit`, TruffleHog secret scan |
+| `export-vsix.yml` | push to `release/**`, manual | Cross-platform `node-pty` build + VSIX artifact; on `release/Ver_X.Y.Z` it also publishes the GitHub Release — see [Releasing](#releasing) |
 
-- **CI Workflow** (`.github/workflows/ci.yml`): Runs on push to `feature/**`, `fix/**`, `main`, and `develop` branches
-  - TypeScript type check (`tsc --noEmit`)
-  - TypeScript compilation
-  - Test execution with Vitest
-  - Test coverage report generation
-  - Multi-version Node.js testing (18.x, 20.x)
+All checks must pass before merging.
 
-- **PR Check Workflow** (`.github/workflows/pr-check.yml`): Runs on all pull requests
-  - Full validation suite (lint, type-check, tests)
-  - Coverage report as PR comment
-  - Bundle size check with warnings
-  - Security audit with npm audit
-  - Secret scanning with TruffleHog
+## Links
 
-All checks must pass before merging pull requests.
-
-### Architecture Overview
-
-| Area | File(s) | Responsibility |
-| --- | --- | --- |
-| Extension entry | `src/extension.ts` | Registers commands and the Webview view provider. |
-| View provider | `src/view/aiTerminalViewProvider.ts` | Routes messages, manages sessions, and feeds theme data to the Webview. |
-| Webview template | `src/view/htmlTemplate.ts` | Generates the HTML/CSS shell for the Webview UI. |
-| Theming | `src/theming/themePresets.ts` | Defines palette presets, previews, and validation helpers. |
-| Session management | `src/terminal/sessionManager.ts` | Spawns shells via `node-pty`, streams output to the Webview, and coordinates cleanup. |
-| Security & validation | `src/utils/validation.ts` | Validates shell paths, startup commands, and working directories. |
-| Logging | `src/utils/logger.ts` | VS Code `LogOutputChannel` (levels and timestamps handled by the editor). |
-| Utilities | `src/utils/nonce.ts` | Generates cryptographically secure nonces for CSP. |
-
-### Webview Architecture (`src/webview/main.ts`)
-
-The Webview UI is built with a class-based architecture for better maintainability and testability:
-
-| Class | Responsibility |
-| --- | --- |
-| `DOMElements` | Manages all DOM element references in one place. |
-| `SessionStateManager` | Handles session state (activeSession, sessionIds, buffers). |
-| `UIStateManager` | Manages UI state (pendingRequest, viewMode, splitRatio, paneSessions). |
-| `ThemeStateManager` | Manages theme state (currentThemeKey, availablePresets). |
-| `TerminalManager` | Handles xterm.js terminal instances and DOM operations. |
-| `AppController` | Main controller that orchestrates event handling and state coordination. |
-
-This architecture provides:
-- **Encapsulation**: All global variables are encapsulated in class private fields.
-- **Single Responsibility**: Each class has a clear, focused responsibility.
-- **Testability**: Independent state managers make unit testing easier.
-- **Maintainability**: State changes are easy to trace and debug.
-
----
-
-## Localization
-
-- English: `README.md` (this file)
-- Japanese: [`README_JP.md`](README_JP.md)
-
-Both files describe the same features, usage steps, and roadmap so contributors can reference their preferred language.
+| | |
+|---|---|
+| Download | [Releases](https://github.com/den0206/terminal-for-ai-cli/releases/latest) |
+| Japanese README | [README_JP.md](README_JP.md) |
+| Changelog | [CHANGELOG.md](CHANGELOG.md) |
+| Bugs & requests | [Issues](https://github.com/den0206/terminal-for-ai-cli/issues) |
+| License | [MIT](LICENSE.md) |
