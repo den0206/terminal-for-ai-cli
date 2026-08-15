@@ -2,7 +2,7 @@
   "name": "terminal-for-ai-cli",
   "displayName": "Terminal For AI CLI",
   "description": "Terminal view in the Cursor secondary sidebar.",
-  "version": "0.0.5",
+  "version": "0.1.0",
   "publisher": "yuuki-sakai",
   "icon": "media/icon.png",
   "license": "MIT",
