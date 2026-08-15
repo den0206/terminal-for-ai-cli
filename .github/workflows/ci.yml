@@ -57,6 +57,37 @@ jobs:
           echo "Build artifacts verified successfully"
         shell: bash
 
+  # Export VSIX の "Sync version and README to main" が正しく動いたことの検証。
+  # 何らかの理由で main への反映が落ちると、ここが赤くなって気づける。
+  version-check:
+    name: Version not behind latest release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Ver_* タグの取得に必要
+
+      - name: Compare package.json version with latest release tag
+        shell: bash
+        run: |
+          # +N は再ビルド番号で package.json には入らないため比較前に落とす
+          LATEST="$(git tag -l 'Ver_*' | sed 's/^Ver_//; s/+.*//' | sort -V | tail -1)"
+          CURRENT="$(node -p "require('./package.json').version")"
+
+          if [ -z "$LATEST" ]; then
+            echo "リリースタグがまだありません (current: $CURRENT)"
+            exit 0
+          fi
+
+          # sort -V で新しい方が後ろに来る。同値なら CURRENT が返るので合格。
+          if [ "$(printf '%s\n%s\n' "$LATEST" "$CURRENT" | sort -V | tail -1)" != "$CURRENT" ]; then
+            echo "::error::package.json の version ($CURRENT) が最新リリース Ver_$LATEST より古いままです。Export VSIX の main 同期が失敗した可能性があります"
+            exit 1
+          fi
+          echo "OK: package.json $CURRENT >= 最新リリース $LATEST"
+
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
