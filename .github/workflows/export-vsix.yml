@@ -104,6 +104,16 @@ jobs:
           fi
 
           EXISTING="$(git ls-remote --tags origin | sed -n 's#.*refs/tags/\(Ver_[0-9][0-9A-Za-z.+-]*\)$#\1#p' | sort -u)"
+
+          # ブランチ名のタイプミスで古いバージョンを公開してしまうのを防ぐ。
+          # 一度公開すると Open VSX 側の取り消しが効かないため、ここで止める。
+          # 同値は Ver_X.Y.Z の +N 再ビルドなので許可する。
+          HIGHEST="$(printf '%s\n' "$EXISTING" | sed 's/^Ver_//; s/+.*//' | sort -V | tail -1)"
+          if [ -n "$HIGHEST" ] && [ "$(printf '%s\n%s\n' "$HIGHEST" "$REQUESTED" | sort -V | tail -1)" != "$REQUESTED" ]; then
+            echo "::error::Ver_$REQUESTED は既存の最新 Ver_$HIGHEST より古いバージョンです。ブランチ名を確認してください"
+            exit 1
+          fi
+
           if printf '%s\n' "$EXISTING" | grep -Fxq "Ver_$REQUESTED"; then
             N=1
             while printf '%s\n' "$EXISTING" | grep -Fxq "Ver_$REQUESTED+$N"; do
@@ -200,22 +210,65 @@ jobs:
             --title "Terminal for AI CLI ${VERSION}" \
             "${NOTES_ARGS[@]}"
 
+      # Open VSX (Cursor / VSCodium の拡張機能検索) へ公開する。
+      # VS Code Marketplace には出さない: Cursor は MS Marketplace を参照できず、
+      # publish に要る PAT の発行元 Azure DevOps 組織が有料サブスクリプション必須になったため。
+      #
+      # +N 再ビルドは VSIX 内の version が X.Y.Z のままなので Open VSX が重複として弾く。
+      # よって初回の Ver_X.Y.Z (version == marketing) だけを公開対象にする。
+      # 名前空間 yuukisakai は初回のみ手動で作る:
+      #   npx ovsx create-namespace yuukisakai -p <token>
+      - name: Publish to Open VSX
+        if: steps.meta.outputs.tag && steps.meta.outputs.version == steps.meta.outputs.marketing
+        env:
+          # ovsx は OVSX_PAT を自動で読む。-p で argv に渡さないのは、
+          # 未設定時に対話プロンプトへ落ちて CI がハングするのを避けるため
+          # (空文字なら即 Invalid access token で失敗する)。
+          OVSX_PAT: ${{ secrets.OVSX_TOKEN }}
+        run: |
+          if [ -z "$OVSX_PAT" ]; then
+            echo "::warning::OVSX_TOKEN が未設定のため Open VSX への公開をスキップしました"
+            exit 0
+          fi
+          npx --yes ovsx publish vsix/terminal-for-ai-cli.vsix --skip-duplicate
+
       # README の <!-- BEGIN:release --> ブロックを最新リリースに更新して push する。
       # コミットメッセージの [skip ci] が、この push による再実行ループを防ぐ。
-      - name: Update README release info
+      # 版上げと README の <!-- BEGIN:release --> ブロック更新を main へ直接コミットする。
+      # release ブランチにコミットすると main の version と README が古いまま取り残され、
+      # 「リリース後に手で main へマージする」という忘れられる運用が生まれるため。
+      # コミットメッセージの [skip ci] が、この push による再実行ループを防ぐ。
+      #
+      # 作業ツリーを持ち運ばず main の最新から2つの決定的な編集をやり直す。
+      # 持ち運ぶと、リリース中に main 側で入った別の編集を巻き戻す危険がある。
+      - name: Sync version and README to main
         if: steps.meta.outputs.tag
         env:
           RELEASE_TAG: ${{ steps.meta.outputs.tag }}
           RELEASE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.meta.outputs.tag }}
-        run: node scripts/update-readme-release-info.mjs
-
-      - name: Commit version and README
-        if: steps.meta.outputs.tag
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+
+          # この自動化が main に運ぶのは version と README だけ。release ブランチ上で
+          # 直接コードを直した場合は取りこぼすので、気づけるように警告を出す。
+          UNMERGED="$(git log --oneline "origin/main..$GITHUB_SHA")"
+          if [ -n "$UNMERGED" ]; then
+            echo "::warning::release ブランチに main 未取り込みのコミットがあります。手動で main に取り込んでください:"
+            echo "$UNMERGED"
+          fi
+
+          # -f で作業ツリーの変更を捨てる (下で main の内容から作り直すため)
+          git switch -f -C main origin/main
+          npm version "${{ steps.meta.outputs.marketing }}" --no-git-tag-version --allow-same-version
+          node scripts/update-readme-release-info.mjs
+
           git add package.json package-lock.json README.md README_JP.md
           git diff --cached --quiet && exit 0
-          git commit -m 'docs: リリース情報を更新 [skip ci]'
-          git pull --rebase --autostash
-          git push
+          git commit -m "docs: ${{ steps.meta.outputs.tag }} のリリース情報を反映 [skip ci]"
+          # main のブランチ保護が有効だとこの push は拒否される。失敗時に気づけるよう明示する。
+          if ! git push origin main; then
+            echo "::error::main への push に失敗しました。main がブランチ保護されている場合は、GitHub Actions bot からの直接 push を許可するか、保護ルールで github-actions をバイパスに追加してください"
+            exit 1
+          fi
