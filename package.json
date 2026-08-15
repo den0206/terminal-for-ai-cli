@@ -2,7 +2,7 @@
   "name": "terminal-for-ai-cli",
   "displayName": "Terminal For AI CLI",
   "description": "Terminal view in the Cursor secondary sidebar.",
-  "version": "0.0.2",
+  "version": "0.0.5",
   "publisher": "yuukisakai",
   "icon": "media/icon.png",
   "license": "MIT",
@@ -17,6 +17,17 @@
   "categories": [
     "Other"
   ],
+  "keywords": [
+    "terminal",
+    "cursor",
+    "ai",
+    "cli",
+    "sidebar"
+  ],
+  "galleryBanner": {
+    "color": "#111111",
+    "theme": "dark"
+  },
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
