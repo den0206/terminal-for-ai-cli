@@ -14,8 +14,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/den0206/terminal-for-ai-cli/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/den0206/terminal-for-ai-cli/ci.yml?branch=main&style=flat-square&label=CI&labelColor=111111&color=2f7bff"></a>
-  <a href="https://github.com/den0206/terminal-for-ai-cli/actions/workflows/pr-check.yml"><img alt="PR Check" src="https://img.shields.io/github/actions/workflow/status/den0206/terminal-for-ai-cli/pr-check.yml?branch=main&style=flat-square&label=PR%20Check&labelColor=111111&color=2f7bff"></a>
   <img alt="VS Code 1.125+" src="https://img.shields.io/badge/VS%20Code%20%2F%20Cursor-1.125%2B-2f7bff?style=flat-square&labelColor=111111">
   <img alt="Cross platform" src="https://img.shields.io/badge/Platform-macOS%20%2F%20Linux%20%2F%20Windows-2f7bff?style=flat-square&labelColor=111111">
   <a href="https://opensource.org/licenses/MIT"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-2f7bff?style=flat-square&labelColor=111111"></a>
