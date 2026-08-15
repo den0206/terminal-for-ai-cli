@@ -216,8 +216,8 @@ jobs:
       #
       # +N 再ビルドは VSIX 内の version が X.Y.Z のままなので Open VSX が重複として弾く。
       # よって初回の Ver_X.Y.Z (version == marketing) だけを公開対象にする。
-      # 名前空間 yuukisakai は初回のみ手動で作る:
-      #   npx ovsx create-namespace yuukisakai -p <token>
+      # 名前空間 (package.json の publisher) は初回のみ手動で作る:
+      #   npx ovsx create-namespace <publisher> -p <token>
       - name: Publish to Open VSX
         if: steps.meta.outputs.tag && steps.meta.outputs.version == steps.meta.outputs.marketing
         env:

@@ -3,7 +3,7 @@
   "displayName": "Terminal For AI CLI",
   "description": "Terminal view in the Cursor secondary sidebar.",
   "version": "0.0.5",
-  "publisher": "yuukisakai",
+  "publisher": "yuuki-sakai",
   "icon": "media/icon.png",
   "license": "MIT",
   "repository": {
