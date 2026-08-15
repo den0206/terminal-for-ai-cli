@@ -321,17 +321,58 @@ Run `node scripts/verify-prebuilds.mjs` before packaging to confirm every target
 
 ### Releasing
 
+#### First-time setup (Open VSX, once)
+
+[Open VSX](https://open-vsx.org/) is the only distribution channel. The extension is not published to
+the VS Code Marketplace: Cursor cannot read that marketplace, and the Azure DevOps organization needed
+to issue a publishing PAT now requires a paid Azure subscription.
+
+| # | Step | Where |
+|---|------|-------|
+| 1 | Make the repository public | GitHub → Settings → Danger Zone |
+| 2 | Create an Eclipse account and fill in the **GitHub Username** field | [accounts.eclipse.org](https://accounts.eclipse.org/user/edit) |
+| 3 | Log in with GitHub and sign the **Publisher Agreement** | [open-vsx.org](https://open-vsx.org/) |
+| 4 | Generate an access token (it is shown only once) | [open-vsx.org/user-settings/tokens](https://open-vsx.org/user-settings/tokens) |
+| 5 | Store the token as the secret `OVSX_TOKEN` | GitHub → Settings → Secrets and variables → Actions |
+| 6 | `npx --yes ovsx create-namespace <publisher> -p <token>` | Locally |
+
+The **GitHub Username** field in step 2 must match the GitHub account used to log in to open-vsx.org
+exactly; publishing fails with a 401 if it is empty or different. The Eclipse username itself is not
+checked. The ECA (Eclipse Contributor Agreement) is a separate agreement for contributing code to
+Eclipse projects and is not required here.
+
+`<publisher>` in step 6 is the `publisher` field in `package.json` — the namespace must match it.
+
+If `OVSX_TOKEN` is unset the release still succeeds — only the publish step is skipped, with a warning.
+
+#### Every release
+
 Push a `release/Ver_X.Y.Z` branch. The `Export VSIX` workflow then:
 
 1. Builds `node-pty` on every OS/arch and packages one cross-platform VSIX.
 2. Writes `X.Y.Z` into `package.json` (the branch name is the source of truth for the version).
 3. Publishes a GitHub Release tagged `Ver_X.Y.Z` with `terminal-for-ai-cli-X.Y.Z.vsix` attached.
-4. Publishes to [Open VSX](https://open-vsx.org/extension/yuukisakai/terminal-for-ai-cli) when `OVSX_TOKEN` is set (`+N` rebuilds are skipped).
+4. Publishes to [Open VSX](https://open-vsx.org/?search=terminal-for-ai-cli) when `OVSX_TOKEN` is set (`+N` rebuilds are skipped).
 5. Commits the version bump and the refreshed `<!-- BEGIN:release -->` block **straight to `main`** — no manual merge of the release branch is needed.
 
-**Published releases are immutable.** If `Ver_X.Y.Z` already exists, `X.Y.Z` is kept and a rebuild
-number is appended — `Ver_X.Y.Z+1`, then `+2`. The `+N` form only appears in the tag and the asset
-name; `package.json` keeps the plain `X.Y.Z` that VS Code requires.
+```bash
+git switch main && git pull
+git switch -c release/Ver_0.1.0
+git push -u origin release/Ver_0.1.0
+```
+
+**The branch name is the only source of truth for the version.** You never edit `package.json` by
+hand — the workflow writes it before building and commits it to `main` afterwards.
+
+| Version the branch asks for | Behaviour |
+|-----------------------------|-----------|
+| Newer than the latest tag | Published as-is. Skipping numbers is fine (`Ver_0.0.5` → `Ver_0.0.9`) |
+| Equal to an existing tag | `X.Y.Z` is kept and a rebuild number is appended — `Ver_X.Y.Z+1`, then `+2`. **Published releases are immutable**, so the Open VSX publish is skipped |
+| Older than the latest tag | **The workflow fails**, guarding against a typo'd branch name publishing a rollback |
+| Not in `release/Ver_X.Y.Z` form | **The workflow fails** |
+
+The `+N` form only appears in the tag and the asset name; `package.json` keeps the plain `X.Y.Z` that
+VS Code requires.
 
 Release notes are resolved in this order:
 
@@ -360,7 +401,7 @@ workflow artifact without creating a release.
 
 | Workflow | Trigger | Checks |
 |----------|---------|--------|
-| `ci.yml` | push to `feature/**`, `fix/**`, `main`, `develop` | Type check, compile, Vitest, coverage (Node 20.x) |
+| `ci.yml` | push to `feature/**`, `fix/**`, `main`, `develop` | Type check, compile, Vitest, coverage (Node 20.x); also fails if `package.json` fell behind the latest `Ver_*` tag, which catches a broken sync to `main` |
 | `pr-check.yml` | all pull requests | Full validation, coverage comment, bundle size, `npm audit`, TruffleHog secret scan |
 | `export-vsix.yml` | push to `release/**`, manual | Cross-platform `node-pty` build + VSIX artifact; on `release/Ver_X.Y.Z` it also publishes the GitHub Release — see [Releasing](#releasing) |
 

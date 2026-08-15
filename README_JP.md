@@ -313,17 +313,57 @@ VS Code / Cursor のどのバージョンでも動きます。差異は OS と C
 
 ### リリース手順
 
+#### 初回セットアップ（Open VSX、1 回だけ）
+
+配布先は [Open VSX](https://open-vsx.org/) のみです。VS Code Marketplace には公開していません
+（Cursor は MS Marketplace を参照できず、publish に必要な PAT の発行元である Azure DevOps 組織が
+有料の Azure サブスクリプション必須になったため）。
+
+| # | 作業 | 場所 |
+|---|------|------|
+| 1 | リポジトリを Public にする | GitHub → Settings → Danger Zone |
+| 2 | Eclipse アカウントを作成し、**GitHub Username** 欄を埋める | [accounts.eclipse.org](https://accounts.eclipse.org/user/edit) |
+| 3 | GitHub でログインし **Publisher Agreement** に署名 | [open-vsx.org](https://open-vsx.org/) |
+| 4 | アクセストークンを発行（再表示されないので控える） | [open-vsx.org/user-settings/tokens](https://open-vsx.org/user-settings/tokens) |
+| 5 | トークンを Secret `OVSX_TOKEN` として登録 | GitHub → Settings → Secrets and variables → Actions |
+| 6 | `npx --yes ovsx create-namespace <publisher> -p <token>` | ローカル |
+
+手順 2 の **GitHub Username 欄**は、open-vsx.org にログインする GitHub アカウントと完全に一致させます。
+ここが空または不一致だと publish が 401 で落ちます。Eclipse 側のユーザー名自体は照合に使われません。
+また ECA（Eclipse Contributor Agreement）は Eclipse プロジェクトにコードを提供するための別の同意書で、
+拡張機能の公開には不要です。
+
+手順 6 の `<publisher>` は `package.json` の `publisher` フィールドです。名前空間はこれと一致させます。
+
+`OVSX_TOKEN` が未設定の場合、リリース自体は成功し公開ステップだけが警告付きでスキップされます。
+
+#### 通常のリリース
+
 `release/Ver_X.Y.Z` ブランチを push します。`Export VSIX` ワークフローが以下を行います：
 
 1. 各 OS/arch で `node-pty` をビルドし、全プラットフォーム対応の VSIX を 1 つ作成
 2. `package.json` の version を `X.Y.Z` に設定（バージョンの正はブランチ名）
 3. `Ver_X.Y.Z` タグで GitHub Release を公開し、`terminal-for-ai-cli-X.Y.Z.vsix` を添付
-4. [Open VSX](https://open-vsx.org/extension/yuukisakai/terminal-for-ai-cli) に公開（`OVSX_TOKEN` 設定時。`+N` 再ビルドは対象外）
+4. [Open VSX](https://open-vsx.org/?search=terminal-for-ai-cli) に公開（`OVSX_TOKEN` 設定時。`+N` 再ビルドは対象外）
 5. version の変更と更新後の `<!-- BEGIN:release -->` ブロックを **main に直接コミット**（release ブランチを手で main へマージする必要はありません）
 
-**公開済みリリースは不変です。** `Ver_X.Y.Z` が既に存在する場合、`X.Y.Z` は保ったまま再ビルド番号を付けます
-（`Ver_X.Y.Z+1`、次は `+2`）。`+N` はタグと資産名にだけ現れ、`package.json` には VS Code が要求する
-数値3成分の `X.Y.Z` が入ります。
+```bash
+git switch main && git pull
+git switch -c release/Ver_0.1.0
+git push -u origin release/Ver_0.1.0
+```
+
+**バージョンの正はブランチ名だけです。** `package.json` を手で編集する必要はありません
+（ワークフローがビルド前に書き込み、リリース後に main へコミットします）。
+
+| ブランチ名が指す版 | 挙動 |
+|--------------------|------|
+| 既存の最新より新しい | そのまま公開。番号を飛ばしても構いません（`Ver_0.0.5` → `Ver_0.0.9` など） |
+| 既存と同じ | `X.Y.Z` を保ったまま再ビルド番号を付与（`Ver_X.Y.Z+1`、次は `+2`）。**公開済みリリースは不変**なので Open VSX への公開はスキップされます |
+| 既存の最新より古い | **ワークフローが失敗**。ブランチ名のタイプミスによる誤公開を防ぎます |
+| `release/Ver_X.Y.Z` 形式でない | **ワークフローが失敗** |
+
+`+N` はタグと資産名にだけ現れ、`package.json` には VS Code が要求する数値3成分の `X.Y.Z` が入ります。
 
 リリースノートは次の優先順で決まります：
 
@@ -351,7 +391,7 @@ scripts/gen-release-notes.sh 0.0.3 --stdout   # 表示のみ
 
 | ワークフロー | トリガー | 内容 |
 |--------------|----------|------|
-| `ci.yml` | `feature/**`, `fix/**`, `main`, `develop` への push | 型チェック、コンパイル、Vitest、カバレッジ（Node 20.x） |
+| `ci.yml` | `feature/**`, `fix/**`, `main`, `develop` への push | 型チェック、コンパイル、Vitest、カバレッジ（Node 20.x）。`package.json` が最新の `Ver_*` タグより古い場合も失敗し、main への同期漏れを検知します |
 | `pr-check.yml` | すべての PR | フル検証、カバレッジコメント、バンドルサイズ、`npm audit`、TruffleHog |
 | `export-vsix.yml` | `release/**` への push、手動実行 | 全プラットフォームの `node-pty` ビルド + VSIX artifact。`release/Ver_X.Y.Z` なら GitHub Release も公開 → [リリース手順](#リリース手順) |
 
