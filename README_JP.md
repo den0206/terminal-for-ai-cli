@@ -318,7 +318,8 @@ VS Code / Cursor のどのバージョンでも動きます。差異は OS と C
 1. 各 OS/arch で `node-pty` をビルドし、全プラットフォーム対応の VSIX を 1 つ作成
 2. `package.json` の version を `X.Y.Z` に設定（バージョンの正はブランチ名）
 3. `Ver_X.Y.Z` タグで GitHub Release を公開し、`terminal-for-ai-cli-X.Y.Z.vsix` を添付
-4. version の変更と更新後の `<!-- BEGIN:release -->` ブロックをブランチにコミット
+4. [Open VSX](https://open-vsx.org/extension/yuukisakai/terminal-for-ai-cli) に公開（`OVSX_TOKEN` 設定時。`+N` 再ビルドは対象外）
+5. version の変更と更新後の `<!-- BEGIN:release -->` ブロックを **main に直接コミット**（release ブランチを手で main へマージする必要はありません）
 
 **公開済みリリースは不変です。** `Ver_X.Y.Z` が既に存在する場合、`X.Y.Z` は保ったまま再ビルド番号を付けます
 （`Ver_X.Y.Z+1`、次は `+2`）。`+N` はタグと資産名にだけ現れ、`package.json` には VS Code が要求する

@@ -326,7 +326,8 @@ Push a `release/Ver_X.Y.Z` branch. The `Export VSIX` workflow then:
 1. Builds `node-pty` on every OS/arch and packages one cross-platform VSIX.
 2. Writes `X.Y.Z` into `package.json` (the branch name is the source of truth for the version).
 3. Publishes a GitHub Release tagged `Ver_X.Y.Z` with `terminal-for-ai-cli-X.Y.Z.vsix` attached.
-4. Commits the version bump and the refreshed `<!-- BEGIN:release -->` block back to the branch.
+4. Publishes to [Open VSX](https://open-vsx.org/extension/yuukisakai/terminal-for-ai-cli) when `OVSX_TOKEN` is set (`+N` rebuilds are skipped).
+5. Commits the version bump and the refreshed `<!-- BEGIN:release -->` block **straight to `main`** — no manual merge of the release branch is needed.
 
 **Published releases are immutable.** If `Ver_X.Y.Z` already exists, `X.Y.Z` is kept and a rebuild
 number is appended — `Ver_X.Y.Z+1`, then `+2`. The `+N` form only appears in the tag and the asset
