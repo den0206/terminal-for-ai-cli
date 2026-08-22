@@ -856,6 +856,41 @@ describe('AiTerminalViewProvider', () => {
           expect(true).toBe(true);
         }
       });
+
+      it('should send the terminal slot alongside the label', async () => {
+        const webviewView = createMockWebviewView();
+        provider.resolveWebviewView(webviewView);
+
+        const messageHandler = (
+          webviewView.webview.onDidReceiveMessage as ReturnType<typeof vi.fn>
+        ).mock.calls[0][0];
+
+        // Initialize (creates Terminal 1)
+        await messageHandler({type: 'webview-ready'});
+        await waitForSessionCreation(sessionManager, 1);
+
+        const postMessageMock = webviewView.webview.postMessage as ReturnType<
+          typeof vi.fn
+        >;
+        postMessageMock.mockClear();
+
+        // Create Terminal 2
+        await messageHandler({
+          type: 'request-new-session',
+          payload: {cols: 80, rows: 24},
+        });
+        await waitForPostMessage(postMessageMock, 1);
+
+        const sessionCreatedCall = postMessageMock.mock.calls.find(
+          (call) => call[0]?.type === 'session-created'
+        );
+
+        expect(sessionCreatedCall).toBeDefined();
+        if (sessionCreatedCall) {
+          expect(sessionCreatedCall[0].payload.slot).toBe(2);
+          expect(sessionCreatedCall[0].payload.label).toBe('Terminal 2');
+        }
+      });
     });
 
     describe('session exit handling', () => {
@@ -975,6 +1010,71 @@ describe('AiTerminalViewProvider', () => {
         expect(themeUpdateCall).toBeDefined();
       });
 
+      it('should persist the selection to the setting of the given terminal', async () => {
+        const webviewView = createMockWebviewView();
+        provider.resolveWebviewView(webviewView);
+
+        const messageHandler = (
+          webviewView.webview.onDidReceiveMessage as ReturnType<typeof vi.fn>
+        ).mock.calls[0][0];
+
+        await messageHandler({type: 'webview-ready'});
+
+        const getConfiguration = vi.mocked(
+          (await import('vscode')).workspace.getConfiguration
+        );
+        getConfiguration.mockClear();
+
+        await messageHandler({
+          type: 'theme-select',
+          payload: {presetKey: 'ocean', slot: 1},
+        });
+        await messageHandler({
+          type: 'theme-select',
+          payload: {presetKey: 'homebrew', slot: 2},
+        });
+
+        const updateCalls = getConfiguration.mock.results
+          .map((result) => result.value as {update: ReturnType<typeof vi.fn>})
+          .flatMap((config) => config.update?.mock.calls ?? []);
+
+        expect(updateCalls).toContainEqual(
+          expect.arrayContaining(['themePreset', 'ocean'])
+        );
+        expect(updateCalls).toContainEqual(
+          expect.arrayContaining(['themePresetSecondary', 'homebrew'])
+        );
+      });
+
+      it('should fall back to Terminal 1 when the slot is unknown', async () => {
+        const webviewView = createMockWebviewView();
+        provider.resolveWebviewView(webviewView);
+
+        const messageHandler = (
+          webviewView.webview.onDidReceiveMessage as ReturnType<typeof vi.fn>
+        ).mock.calls[0][0];
+
+        await messageHandler({type: 'webview-ready'});
+
+        const getConfiguration = vi.mocked(
+          (await import('vscode')).workspace.getConfiguration
+        );
+        getConfiguration.mockClear();
+
+        await messageHandler({
+          type: 'theme-select',
+          payload: {presetKey: 'grass', slot: 99},
+        });
+
+        const updateCalls = getConfiguration.mock.results
+          .map((result) => result.value as {update: ReturnType<typeof vi.fn>})
+          .flatMap((config) => config.update?.mock.calls ?? []);
+
+        expect(updateCalls).toContainEqual(
+          expect.arrayContaining(['themePreset', 'grass'])
+        );
+      });
+
       it('should ignore invalid theme preset keys', async () => {
         const webviewView = createMockWebviewView();
         provider.resolveWebviewView(webviewView);
@@ -1032,8 +1132,16 @@ describe('AiTerminalViewProvider', () => {
           expect.objectContaining({
             type: 'theme-update',
             payload: expect.objectContaining({
-              presetKey: expect.any(String),
-              palette: expect.any(Object),
+              slots: expect.objectContaining({
+                1: expect.objectContaining({
+                  presetKey: expect.any(String),
+                  palette: expect.any(Object),
+                }),
+                2: expect.objectContaining({
+                  presetKey: expect.any(String),
+                  palette: expect.any(Object),
+                }),
+              }),
               presets: expect.any(Array),
             }),
           })

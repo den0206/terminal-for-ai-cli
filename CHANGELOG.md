@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **ターミナル別テーマ**: Terminal 1 / Terminal 2 がそれぞれ独立したテーマプリセットを持てるように変更。ビュー内のドロップダウンはフォーカス中のターミナルに適用され（対象は「Theme」ラベル横のバッジで表示）、`aiTerminal.themePreset`（Terminal 1）と新設の `aiTerminal.themePresetSecondary`（Terminal 2）に保存。`aiTerminal.themePresetSecondary` が空の場合は Terminal 1 のテーマを引き継ぐ。分割ビューでは各ペインが枠線を含めてそれぞれの配色で描画される
 - **リリース自動化**: `release/Ver_X.Y.Z` ブランチの push で、全プラットフォーム対応 VSIX のビルド → `package.json` の version 反映 → `Ver_X.Y.Z` タグの GitHub Release 公開（VSIX 添付）まで `Export VSIX` ワークフローが実行。既存タグと衝突する場合は `+N` で採番し、公開済みリリースは不変
 - **リリースノート生成**: `scripts/gen-release-notes.sh` が前版タグ以降の `feat:` / `fix:` コミットから骨子を生成。手書きの `docs/release-notes/X.Y.Z.md` があればそちらを優先
 - **README のリリース情報自動更新**: 公開後、`scripts/update-readme-release-info.mjs` が README.md / README_JP.md の `release` ブロックを更新してコミット

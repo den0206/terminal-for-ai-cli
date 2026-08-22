@@ -46,10 +46,29 @@ export type ThemePresetInfo = {
   preview: ThemePreview;
 };
 
-/** Webview に渡すテーマのスナップショット（プリセットキー・パレット・一覧） */
-export type ThemeSnapshot = {
+/**
+ * ターミナルの通し番号（Terminal 1 / Terminal 2）。
+ * セッション ID は起動ごとに変わるため、テーマはこのスロット単位で保持する。
+ */
+export type TerminalSlot = 1 | 2;
+
+export const TERMINAL_SLOTS: readonly TerminalSlot[] = [1, 2];
+
+export function isTerminalSlot(value: unknown): value is TerminalSlot {
+  return value === 1 || value === 2;
+}
+
+/** 1 つのターミナルに適用されるテーマ */
+export type ThemeSlotSnapshot = {
   presetKey: ThemePresetKey;
   palette: ThemePalette;
+  /** true の場合は Terminal 1 のテーマを引き継いでいる（個別設定なし） */
+  inherited: boolean;
+};
+
+/** Webview に渡すテーマのスナップショット（ターミナルごとの配色・プリセット一覧） */
+export type ThemeSnapshot = {
+  slots: Record<TerminalSlot, ThemeSlotSnapshot>;
   presets: ThemePresetInfo[];
 };
 
@@ -60,6 +79,7 @@ export type ThemeSnapshot = {
 export type SessionMeta = {
   shell: string;
   label: string;
+  slot?: TerminalSlot;
 };
 
 // ============================================================================
@@ -67,11 +87,7 @@ export type SessionMeta = {
 // ============================================================================
 
 /** Payload for the theme-update message (Extension → Webview) */
-export type ThemeUpdatePayload = {
-  presetKey: ThemePresetKey;
-  palette: ThemePalette;
-  presets: ThemePresetInfo[];
-};
+export type ThemeUpdatePayload = ThemeSnapshot;
 
 /**
  * Messages sent from Extension to Webview.
@@ -81,7 +97,7 @@ export type InboundMessage =
   | {type: 'session-count'; payload: {total: number}}
   | {
       type: 'session-created';
-      payload: {id: string; shell: string; label?: string};
+      payload: {id: string; shell: string; label?: string; slot?: TerminalSlot};
     }
   | {type: 'session-data'; payload: {sessionId: string; data: string}}
   | {
@@ -108,7 +124,7 @@ export type OutboundMessage =
     }
   | {type: 'dispose-session'; payload: {sessionId: string}}
   | {type: 'dispose-all-sessions'}
-  | {type: 'theme-select'; payload: {presetKey: string}}
+  | {type: 'theme-select'; payload: {presetKey: string; slot?: number}}
   | {
       type: 'image-drop';
       payload: {

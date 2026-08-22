@@ -7,8 +7,10 @@ export type {
   InboundMessage,
   OutboundMessage,
   SessionMeta,
+  TerminalSlot,
   ThemePalette,
   ThemePresetInfo,
+  ThemeSlotSnapshot,
   ThemeUpdatePayload,
 } from '../../shared/types';
 

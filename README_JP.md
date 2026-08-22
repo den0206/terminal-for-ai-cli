@@ -133,7 +133,14 @@ Activity Bar から **Terminal For AI** を開きます。ログインシェル�
 ### 高さとテーマ
 
 ターミナル下のハンドルをドラッグしてリサイズ（220〜1000px、保存されます）。
-テーマのドロップダウンはプリセットを即時適用し、`aiTerminal.themePreset` に書き戻すため再起動後も維持されます。
+
+**テーマはターミナルごとに設定できます。** ドロップダウンはフォーカス中のターミナルに適用され、
+対象は「Theme」ラベル横のバッジ（`Terminal 1` / `Terminal 2`）に表示されます。
+ペインをクリックする（またはセッションのドロップダウンで切り替える）と対象が変わります。
+選択は即時適用され、`aiTerminal.themePreset`（Terminal 1）または
+`aiTerminal.themePresetSecondary`（Terminal 2）に書き戻されるため再起動後も維持されます。
+Terminal 2 は個別に設定するまで Terminal 1 のテーマを引き継ぎます。
+分割ビューでは各ペインが枠線も含めてそれぞれの配色で描画されます。
 
 ### すべて閉じる
 
@@ -152,6 +159,7 @@ Activity Bar から **Terminal For AI** を開きます。ログインシェル�
 | 画像クリーンアップ | セッション終了時・拡張の deactivate 時・起動時（孤児と 24 時間 TTL）に削除 |
 | 使用状況表示 | 保存画像の合計と拡張ホストの RSS。可視時に 30 秒ごと更新 |
 | テーマプリセット | `modern`, `basic`, `clearDark`, `clearLight`, `grass`, `homebrew`, `manPage`, `ocean`, `pro` |
+| ターミナル別テーマ | `Terminal 1` / `Terminal 2` がそれぞれのプリセットを保持。ドロップダウンはフォーカス中のターミナルに適用 |
 | 高さ調整 | ドラッグハンドル、220〜1000px、Webview state に永続化 |
 | 起動コマンド | セッション作成直後に順番送信 |
 | 作業ディレクトリ | ワークスペースルート（無ければホーム）。使用前に検証 |
@@ -164,7 +172,8 @@ Activity Bar から **Terminal For AI** を開きます。ログインシェル�
 |------|------|------|
 | 既定シェル | `aiTerminal.defaultShell` | シェルの絶対パス。空ならログインシェル。不正なパスは警告のうえ既定にフォールバック。 |
 | 起動コマンド | `aiTerminal.startupCommands` | セッション作成直後に順に送信するコマンド配列。不正な要素は除外されます。 |
-| テーマプリセット | `aiTerminal.themePreset` | 9 プリセットのいずれか。Webview のドロップダウンも同じ設定を書き換えます。 |
+| テーマプリセット（Terminal 1） | `aiTerminal.themePreset` | 9 プリセットのいずれか。Terminal 1 にフォーカスがある間、Webview のドロップダウンも同じ設定を書き換えます。 |
+| テーマプリセット（Terminal 2） | `aiTerminal.themePresetSecondary` | 9 プリセットのいずれか。空なら Terminal 1 のテーマを引き継ぎます。Terminal 2 にフォーカスがある間、Webview のドロップダウンが書き換えます。 |
 
 ## コマンド
 

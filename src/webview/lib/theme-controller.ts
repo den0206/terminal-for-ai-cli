@@ -1,51 +1,100 @@
 import type {DOMElements} from './dom';
 import type {ThemeStateManager} from './state-managers';
-import type {OutboundMessage, ThemePalette, ThemePresetInfo} from './types';
+import {PANES} from './types';
+import type {
+  OutboundMessage,
+  Pane,
+  TerminalSlot,
+  ThemePalette,
+  ThemePresetInfo,
+  ThemeUpdatePayload,
+} from './types';
 
 /**
  * Manages theme selection, rendering, and application.
  *
- * Extracted from AppController to reduce class size and isolate
- * theme-related concerns.
+ * テーマはターミナル番号（Terminal 1 / Terminal 2）ごとに保持され、
+ * そのターミナルを表示しているペインに個別に適用される。
+ * ドロップダウンはフォーカス中のターミナルを対象に動作する。
  */
 export class ThemeController {
   constructor(
     private readonly dom: DOMElements,
     private readonly themeState: ThemeStateManager,
-    private readonly refreshTheme: () => void,
+    /** ペインの CSS 変数を更新したあと xterm 側のテーマを追従させる */
+    private readonly refreshPaneTheme: (pane: Pane) => void,
     private readonly postMessage: (msg: OutboundMessage) => void,
     private readonly addEventListener: (
       target: EventTarget,
       event: string,
       handler: EventListener
-    ) => void
+    ) => void,
+    /** ペインに表示中のターミナル番号（セッション未割り当てなら undefined） */
+    private readonly getPaneSlot: (pane: Pane) => TerminalSlot | undefined,
+    /** ドロップダウンの操作対象（フォーカス中のターミナル） */
+    private readonly getActiveSlot: () => TerminalSlot | undefined
   ) {}
 
   setupThemeSelect(): void {
     if (this.dom.themeSelect) {
       this.addEventListener(this.dom.themeSelect, 'change', () => {
         const presetKey = this.dom.themeSelect?.value;
-        if (!presetKey || presetKey === this.themeState.currentThemeKey) {
+        const slot = this.getActiveSlot() ?? 1;
+        if (!presetKey) {
+          return;
+        }
+        const current = this.themeState.getSlotTheme(slot);
+        // 継承中（個別設定なし）の場合は同じキーでも送信し、そのターミナルに固定する
+        if (current && !current.inherited && current.presetKey === presetKey) {
           return;
         }
         this.postMessage({
           type: 'theme-select',
-          payload: {presetKey},
+          payload: {presetKey, slot},
         });
       });
     }
   }
 
-  applyTheme(palette: ThemePalette): void {
-    const root = document.documentElement;
-    root.style.setProperty('--terminal-bg', palette.background);
-    root.style.setProperty('--terminal-fg', palette.foreground);
-    root.style.setProperty('--terminal-cursor', palette.cursor);
-    root.style.setProperty('--terminal-selection', palette.selection);
-    this.refreshTheme();
+  /** Extension から届いたスナップショットを保持して全ペインに反映する */
+  applyThemeUpdate(payload: ThemeUpdatePayload): void {
+    this.themeState.slotThemes = payload.slots;
+    this.themeState.availablePresets = payload.presets;
+    this.applyPaneThemes();
+    this.renderThemeDropdown();
   }
 
+  /** ペインとセッションの対応が変わったときに配色を貼り直す */
+  applyPaneThemes(): void {
+    const base = this.themeState.getBaseTheme();
+    if (base) {
+      // ビュー全体の枠線・文字色は Terminal 1 のテーマを基準にする
+      this.writePalette(document.documentElement, base.palette);
+    }
+    PANES.forEach((pane) => {
+      const paneTheme =
+        this.themeState.getSlotTheme(this.getPaneSlot(pane)) ?? base;
+      const element = this.dom.paneElements[pane];
+      if (element && paneTheme) {
+        this.writePalette(element, paneTheme.palette);
+      }
+      this.refreshPaneTheme(pane);
+    });
+  }
+
+  private writePalette(element: HTMLElement, palette: ThemePalette): void {
+    element.style.setProperty('--terminal-bg', palette.background);
+    element.style.setProperty('--terminal-fg', palette.foreground);
+    element.style.setProperty('--terminal-cursor', palette.cursor);
+    element.style.setProperty('--terminal-selection', palette.selection);
+  }
+
+  /** ドロップダウンの選択値・説明・プレビューをフォーカス中のターミナルに合わせる */
   renderThemeDropdown(): void {
+    const slot = this.getActiveSlot() ?? 1;
+    if (this.dom.themeScopeLabel) {
+      this.dom.themeScopeLabel.textContent = `Terminal ${slot}`;
+    }
     if (!this.dom.themeSelect) {
       return;
     }
@@ -56,10 +105,11 @@ export class ThemeController {
       option.textContent = preset.label;
       this.dom.themeSelect?.appendChild(option);
     });
-    if (this.themeState.currentThemeKey) {
-      this.dom.themeSelect.value = this.themeState.currentThemeKey;
+    const currentKey = this.themeState.getSlotTheme(slot)?.presetKey;
+    if (currentKey) {
+      this.dom.themeSelect.value = currentKey;
     }
-    const active = this.themeState.getActivePreset();
+    const active = this.themeState.getPresetInfo(currentKey);
     if (this.dom.themeActiveLabel) {
       this.dom.themeActiveLabel.textContent = active ? active.description : '―';
     }
