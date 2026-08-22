@@ -103,7 +103,36 @@
             "青と白のコントラストが強い配色",
             "シルバーの筐体風ダークグレー配色"
           ],
-          "description": "Webview 内のターミナルテーマ。Terminal For AI CLI ビュー内でも選択できます。"
+          "description": "Terminal 1 のターミナルテーマ。Terminal For AI CLI ビュー内でも選択できます。"
+        },
+        "aiTerminal.themePresetSecondary": {
+          "type": "string",
+          "default": "",
+          "enum": [
+            "",
+            "modern",
+            "basic",
+            "clearDark",
+            "clearLight",
+            "grass",
+            "homebrew",
+            "manPage",
+            "ocean",
+            "pro"
+          ],
+          "enumDescriptions": [
+            "Terminal 1 と同じテーマを使用",
+            "（おすすめ）VS Code のテーマに馴染む落ち着いた配色",
+            "黒地に白文字のシンプルなクラシックターミナル",
+            "暗めの背景に柔らかいシアン系文字色",
+            "明るい背景にダークグレーの文字色",
+            "緑基調のレトロな配色",
+            "黒背景・ネオングリーンの Homebrew 風スタイル",
+            "マニュアル風の淡い背景と濃い文字色",
+            "青と白のコントラストが強い配色",
+            "シルバーの筐体風ダークグレー配色"
+          ],
+          "description": "Terminal 2 のターミナルテーマ。空の場合は Terminal 1 と同じテーマになります。Terminal For AI CLI ビュー内でも選択できます。"
         }
       }
     }

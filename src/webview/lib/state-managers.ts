@@ -1,5 +1,10 @@
 import {SHARED_CONSTANTS} from '../../shared/constants';
-import type {SessionMeta, ThemePresetInfo} from '../../shared/types';
+import type {
+  SessionMeta,
+  TerminalSlot,
+  ThemePresetInfo,
+  ThemeSlotSnapshot,
+} from '../../shared/types';
 import {PANES, type Pane, type ViewMode, type ViewState} from './types';
 import {
   clampSplitRatio,
@@ -7,6 +12,11 @@ import {
   validateTerminalHeight,
   type DebouncedFunction,
 } from './utils';
+
+/** 1-based の並び順をターミナル番号（1 or 2）に丸める */
+function toTerminalSlot(position: number): TerminalSlot {
+  return position >= 2 ? 2 : 1;
+}
 
 // ============================================================================
 // Session State Manager
@@ -32,10 +42,11 @@ export class SessionStateManager {
     // Initialize buffers for existing sessions
     this.sessionIds.forEach((id, index) => {
       this.buffers.set(id, '');
-      this.sessionMeta[id] = this.sessionMeta[id] ?? {
-        shell: 'Shell',
-        label: `Terminal ${index + 1}`,
-      };
+      const slot = toTerminalSlot(index + 1);
+      const restored = this.sessionMeta[id];
+      this.sessionMeta[id] = restored
+        ? {...restored, slot: restored.slot ?? slot}
+        : {shell: 'Shell', label: `Terminal ${slot}`, slot};
     });
 
     this.debouncedCleanup = debounce(() => this.dropOrphanedBuffers(), 300);
@@ -50,14 +61,29 @@ export class SessionStateManager {
     );
   }
 
-  addSession(id: string, shell: string, label?: string): void {
+  addSession(
+    id: string,
+    shell: string,
+    label?: string,
+    slot?: TerminalSlot
+  ): void {
     this.sessionIds = this.sessionIds.filter((sid) => sid !== id);
     this.sessionIds.push(id);
+    const resolvedSlot = slot ?? toTerminalSlot(this.sessionIds.length);
     this.sessionMeta[id] = {
       shell,
-      label: label ?? `Terminal ${this.sessionIds.length}`,
+      label: label ?? `Terminal ${resolvedSlot}`,
+      slot: resolvedSlot,
     };
     this.buffers.set(id, '');
+  }
+
+  /** テーマ適用に使うターミナル番号。未知のセッションは undefined。 */
+  getSessionSlot(sessionId: string | undefined): TerminalSlot | undefined {
+    if (!sessionId) {
+      return undefined;
+    }
+    return this.sessionMeta[sessionId]?.slot;
   }
 
   removeSession(sessionId: string): void {
@@ -197,12 +223,26 @@ export class UIStateManager {
 // ============================================================================
 
 export class ThemeStateManager {
-  currentThemeKey: string | undefined;
   availablePresets: ThemePresetInfo[] = [];
+  /** ターミナル番号ごとのテーマ。Extension から theme-update で届く。 */
+  slotThemes: Partial<Record<TerminalSlot, ThemeSlotSnapshot>> = {};
 
-  getActivePreset(): ThemePresetInfo | undefined {
-    return this.availablePresets.find(
-      (preset) => preset.key === this.currentThemeKey
-    );
+  getSlotTheme(slot: TerminalSlot | undefined): ThemeSlotSnapshot | undefined {
+    if (!slot) {
+      return undefined;
+    }
+    return this.slotThemes[slot];
+  }
+
+  /** ペインにセッションが無いときなどに使う既定テーマ（Terminal 1） */
+  getBaseTheme(): ThemeSlotSnapshot | undefined {
+    return this.slotThemes[1];
+  }
+
+  getPresetInfo(presetKey: string | undefined): ThemePresetInfo | undefined {
+    if (!presetKey) {
+      return undefined;
+    }
+    return this.availablePresets.find((preset) => preset.key === presetKey);
   }
 }

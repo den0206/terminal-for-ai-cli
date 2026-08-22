@@ -135,8 +135,14 @@ Files up to 10MB and `image/*` types only. Non-image files are ignored.
 
 ### Height and theme
 
-Drag the handle under the terminal to resize (220–1000px, persisted). The theme dropdown applies a
-preset immediately and writes it back to `aiTerminal.themePreset`, so it survives restarts.
+Drag the handle under the terminal to resize (220–1000px, persisted).
+
+**Each terminal keeps its own theme.** The theme dropdown targets the focused terminal — the badge
+next to the "Theme" label shows which one (`Terminal 1` / `Terminal 2`). Click a pane (or switch with
+the session dropdown) to retarget it. The selection applies immediately and is written back to
+`aiTerminal.themePreset` (Terminal 1) or `aiTerminal.themePresetSecondary` (Terminal 2), so it
+survives restarts. `Terminal 2` follows `Terminal 1` until it is given a theme of its own. In split
+view both panes are painted with their own palette, including their borders.
 
 ### Closing everything
 
@@ -155,6 +161,7 @@ escalating to `SIGKILL` after 2s) and deletes every saved image.
 | Image cleanup | Deleted on session exit, on deactivation, and on startup (orphans, 24h TTL) |
 | Usage readout | Saved-image total and extension host RSS, refreshed every 30s while visible |
 | Theme presets | `modern`, `basic`, `clearDark`, `clearLight`, `grass`, `homebrew`, `manPage`, `ocean`, `pro` |
+| Per-terminal themes | `Terminal 1` and `Terminal 2` each hold their own preset; the dropdown targets the focused terminal |
 | Height control | Drag handle, 220–1000px, persisted in Webview state |
 | Startup commands | Commands sent in order right after a session starts |
 | Working directory | Workspace root, falling back to the home directory; validated before use |
@@ -167,7 +174,8 @@ escalating to `SIGKILL` after 2s) and deletes every saved image.
 |---------|-----|-------------|
 | Default shell | `aiTerminal.defaultShell` | Absolute path to the shell executable. Empty falls back to your login shell. Invalid paths are rejected with a warning and the default is used. |
 | Startup commands | `aiTerminal.startupCommands` | Array of commands sent (in order) right after a session starts. Invalid entries are filtered out. |
-| Theme preset | `aiTerminal.themePreset` | One of the nine presets. The Webview dropdown writes to the same setting. |
+| Theme preset (Terminal 1) | `aiTerminal.themePreset` | One of the nine presets. The Webview dropdown writes to the same setting while Terminal 1 is focused. |
+| Theme preset (Terminal 2) | `aiTerminal.themePresetSecondary` | One of the nine presets, or empty to follow Terminal 1. The Webview dropdown writes to it while Terminal 2 is focused. |
 
 ## Commands
 

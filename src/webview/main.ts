@@ -25,6 +25,7 @@ import type {
 import {
   debounce,
   getComputedVar,
+  getComputedVarFrom,
   isValidViewState,
   webviewLog,
   type CancellableFunction,
@@ -135,31 +136,43 @@ class TerminalManager {
     });
   }
 
-  refreshTheme(): void {
-    const theme = {
-      background: getComputedVar(
+  /**
+   * Syncs one pane's xterm colors with the CSS variables resolved on that
+   * pane's element, so panes showing different terminals keep their own theme.
+   */
+  refreshPaneTheme(pane: Pane): void {
+    const element = this.dom.paneElements[pane];
+    this.paneContexts[pane].terminal.options.theme = {
+      background: getComputedVarFrom(
+        element,
         '--terminal-bg',
         '--vscode-editor-background',
         '#1e1e1e'
       ),
-      foreground: getComputedVar(
+      foreground: getComputedVarFrom(
+        element,
         '--terminal-fg',
         '--vscode-editor-foreground',
         '#cccccc'
       ),
-      cursor: getComputedVar(
+      cursor: getComputedVarFrom(
+        element,
         '--terminal-cursor',
         '--vscode-terminalCursor-foreground',
         '#ffffff'
       ),
-      selectionBackground: getComputedVar(
+      selectionBackground: getComputedVarFrom(
+        element,
         '--terminal-selection',
         '--vscode-editor-selectionBackground',
         'rgba(255,255,255,0.15)'
       ),
     };
+  }
+
+  refreshTheme(): void {
     PANES.forEach((pane) => {
-      this.paneContexts[pane].terminal.options.theme = {...theme};
+      this.refreshPaneTheme(pane);
     });
   }
 
@@ -275,9 +288,12 @@ class AppController {
     this.themeController = new ThemeController(
       this.dom,
       this.themeState,
-      () => this.terminalManager.refreshTheme(),
+      (pane) => this.terminalManager.refreshPaneTheme(pane),
       (msg) => this.vscode.postMessage(msg),
-      (target, event, handler) => this.addEventListener(target, event, handler)
+      (target, event, handler) => this.addEventListener(target, event, handler),
+      (pane) =>
+        this.sessionState.getSessionSlot(this.uiState.paneSessions[pane]),
+      () => this.sessionState.getSessionSlot(this.sessionState.activeSessionId)
     );
 
     this.dragDropHandler = new DragDropHandler(
@@ -515,7 +531,8 @@ class AppController {
         this.sessionState.addSession(
           message.payload.id,
           message.payload.shell,
-          message.payload.label
+          message.payload.label,
+          message.payload.slot
         );
         this.persistState();
         this.switchActiveSession(
@@ -588,10 +605,7 @@ class AppController {
         break;
 
       case 'theme-update':
-        this.themeController.applyTheme(message.payload.palette);
-        this.themeState.currentThemeKey = message.payload.presetKey;
-        this.themeState.availablePresets = message.payload.presets;
-        this.themeController.renderThemeDropdown();
+        this.themeController.applyThemeUpdate(message.payload);
         break;
 
       case 'all-sessions-cleared':
@@ -788,6 +802,16 @@ class AppController {
       );
     }
     this.resizeController.applySplitSizing();
+    this.refreshThemeUi();
+  }
+
+  /**
+   * Re-applies each pane's theme (pane assignments decide which terminal's
+   * theme applies) and points the theme picker at the focused terminal.
+   */
+  private refreshThemeUi(): void {
+    this.themeController.applyPaneThemes();
+    this.themeController.renderThemeDropdown();
   }
 
   private assignPane(
@@ -843,6 +867,7 @@ class AppController {
     this.persistState();
     this.updateSessionControls();
     this.updatePaneActiveStates();
+    this.themeController.renderThemeDropdown();
     this.terminalManager.focusTerminal(pane);
     this.setStatus(`Focused ${this.sessionState.getSessionLabel(sessionId)}`);
   }

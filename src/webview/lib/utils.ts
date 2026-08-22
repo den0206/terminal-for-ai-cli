@@ -111,7 +111,25 @@ export function getComputedVar(
   fallbackVar?: string,
   fallbackValue?: string
 ): string {
-  const styles = getComputedStyle(document.documentElement);
+  return getComputedVarFrom(
+    document.documentElement,
+    name,
+    fallbackVar,
+    fallbackValue
+  );
+}
+
+/**
+ * Reads a CSS custom property as resolved for a specific element, so that
+ * per-pane overrides (each terminal has its own theme) are picked up.
+ */
+export function getComputedVarFrom(
+  element: Element | null | undefined,
+  name: string,
+  fallbackVar?: string,
+  fallbackValue?: string
+): string {
+  const styles = getComputedStyle(element ?? document.documentElement);
   const value = styles.getPropertyValue(name)?.trim();
   if (value) {
     return value;

@@ -3,7 +3,9 @@ import {SHARED_CONSTANTS} from '../shared/constants';
 import type {
   InboundMessage as WebviewInboundMessage,
   OutboundMessage as WebviewOutboundMessage,
+  TerminalSlot,
 } from '../shared/types';
+import {TERMINAL_SLOTS, isTerminalSlot} from '../shared/types';
 import {SessionManager} from '../terminal/sessionManager';
 import {isValidPresetKey} from '../theming/themePresets';
 import {Logger} from '../utils/logger';
@@ -16,11 +18,15 @@ import {
 import {resolveWorkingDirectory} from '../utils/workingDirectory';
 import {ThemeSnapshot, buildWebviewHtml} from './htmlTemplate';
 import {ImageManager} from './imageManager';
-import {getThemeSnapshot} from './themeSnapshot';
+import {THEME_CONFIG_KEYS, getThemeSnapshot} from './themeSnapshot';
 
 // Extension 視点: 送信 = WebviewInboundMessage (shared), 受信 = WebviewOutboundMessage (shared)
 type OutboundMessage = WebviewInboundMessage;
 type InboundMessage = WebviewOutboundMessage;
+
+function labelForSlot(slot: TerminalSlot): string {
+  return `Terminal ${slot}`;
+}
 
 /**
  * Bridges the extension host and the webview UI: session lifecycle, message
@@ -38,7 +44,8 @@ export class AiTerminalViewProvider
   private readonly messageQueue: OutboundMessage[] = [];
   private readonly disposables: vscode.Disposable[] = [];
   private messageDisposable?: vscode.Disposable;
-  private readonly sessionLabels = new Map<string, string>();
+  /** セッション ID → ターミナル番号（Terminal 1 / Terminal 2） */
+  private readonly sessionSlots = new Map<string, TerminalSlot>();
   private readonly imageManager: ImageManager;
   private usageTimer?: ReturnType<typeof setInterval>;
 
@@ -59,14 +66,17 @@ export class AiTerminalViewProvider
           type: 'session-exited',
           payload: {sessionId: id, code, signal},
         });
-        this.sessionLabels.delete(id);
+        this.sessionSlots.delete(id);
         this.imageManager.deleteSessionImages(id).catch((error) => {
           Logger.error(`Failed to delete images for session ${id}`, error);
         });
         this.postSessionCount();
       }),
       vscode.workspace.onDidChangeConfiguration((event) => {
-        if (event.affectsConfiguration('aiTerminal.themePreset')) {
+        const themeChanged = TERMINAL_SLOTS.some((slot) =>
+          event.affectsConfiguration(`aiTerminal.${THEME_CONFIG_KEYS[slot]}`),
+        );
+        if (themeChanged) {
           this.postThemeUpdate();
         }
       }),
@@ -83,7 +93,7 @@ export class AiTerminalViewProvider
     clearInterval(this.usageTimer);
     this.usageTimer = undefined;
     vscode.Disposable.from(...this.disposables).dispose();
-    this.sessionLabels.clear();
+    this.sessionSlots.clear();
     this.imageManager.clearTracking();
     this.messageQueue.length = 0;
     this.webviewView = undefined;
@@ -163,7 +173,7 @@ export class AiTerminalViewProvider
           await this.imageManager.deleteSessionImages(
             message.payload.sessionId,
           );
-          this.sessionLabels.delete(message.payload.sessionId);
+          this.sessionSlots.delete(message.payload.sessionId);
           this.removeSessionFromQueue(message.payload.sessionId);
           this.sessionManager.disposeSession(message.payload.sessionId);
           this.postSessionCount();
@@ -172,7 +182,10 @@ export class AiTerminalViewProvider
           await this.handleClearAllSessions();
           break;
         case 'theme-select':
-          await this.updateThemePreset(message.payload.presetKey);
+          await this.updateThemePreset(
+            message.payload.presetKey,
+            message.payload.slot,
+          );
           break;
         case 'image-drop':
           await this.handleImageDrop(message.payload);
@@ -261,9 +274,12 @@ export class AiTerminalViewProvider
         startupCommands,
         cwd: resolveWorkingDirectory(),
       });
-      const label = this.getOrCreateLabel(info.id);
+      const slot = this.getOrCreateSlot(info.id);
 
-      this.postMessage({type: 'session-created', payload: {...info, label}});
+      this.postMessage({
+        type: 'session-created',
+        payload: {...info, label: labelForSlot(slot), slot},
+      });
       this.postSessionCount();
     } catch (error) {
       Logger.error('Failed to create Terminal For AI CLI session', error);
@@ -378,14 +394,18 @@ export class AiTerminalViewProvider
     this.postMessage({type: 'theme-update', payload: this.getThemeValues()});
   }
 
-  /** Persists the selected preset to global settings. Invalid keys are ignored. */
-  private async updateThemePreset(presetKey: string) {
+  /**
+   * Persists the selected preset for one terminal to global settings.
+   * Invalid keys are ignored; an unknown slot falls back to Terminal 1.
+   */
+  private async updateThemePreset(presetKey: string, slot?: number) {
     if (!isValidPresetKey(presetKey)) {
       return;
     }
+    const targetSlot: TerminalSlot = isTerminalSlot(slot) ? slot : 1;
     const config = vscode.workspace.getConfiguration('aiTerminal');
     await config.update(
-      'themePreset',
+      THEME_CONFIG_KEYS[targetSlot],
       presetKey,
       vscode.ConfigurationTarget.Global,
     );
@@ -439,7 +459,7 @@ export class AiTerminalViewProvider
     for (const session of this.sessionManager.getActiveSessions()) {
       this.sessionManager.disposeSession(session.id);
     }
-    this.sessionLabels.clear();
+    this.sessionSlots.clear();
     await this.imageManager.clearAllImages();
     this.postMessage({type: 'all-sessions-cleared'});
     this.postSessionCount();
@@ -466,38 +486,32 @@ export class AiTerminalViewProvider
   /** Replays active sessions to the webview so it can restore its state. */
   private postExistingSessions() {
     for (const session of this.sessionManager.getActiveSessions()) {
+      const slot = this.getOrCreateSlot(session.id);
       this.postMessage({
         type: 'session-created',
-        payload: {...session, label: this.getOrCreateLabel(session.id)},
+        payload: {...session, label: labelForSlot(slot), slot},
       });
     }
   }
 
-  private getOrCreateLabel(sessionId: string) {
-    const existing = this.sessionLabels.get(sessionId);
+  /**
+   * Returns the terminal number assigned to a session, assigning one on first
+   * use. The number decides which theme setting the session follows.
+   */
+  private getOrCreateSlot(sessionId: string): TerminalSlot {
+    const existing = this.sessionSlots.get(sessionId);
     if (existing) {
       return existing;
     }
-    const label = `Terminal ${this.findNextLabelIndex()}`;
-    this.sessionLabels.set(sessionId, label);
-    return label;
+    const slot = this.findNextSlot();
+    this.sessionSlots.set(sessionId, slot);
+    return slot;
   }
 
-  /** Lowest unused index from 1, so numbers freed by closed sessions are reused. */
-  private findNextLabelIndex() {
-    const usedIndexes = new Set<number>();
-    for (const label of this.sessionLabels.values()) {
-      const match = label.match(/Terminal\s*(\d+)/);
-      if (match) {
-        usedIndexes.add(Number(match[1]));
-      }
-    }
-
-    let index = 1;
-    while (usedIndexes.has(index)) {
-      index++;
-    }
-    return index;
+  /** Lowest unused number from 1, so numbers freed by closed sessions are reused. */
+  private findNextSlot(): TerminalSlot {
+    const used = new Set(this.sessionSlots.values());
+    return TERMINAL_SLOTS.find((slot) => !used.has(slot)) ?? TERMINAL_SLOTS[0];
   }
 
   /** Stores the dropped image and types its escaped path into the session. */

@@ -31,8 +31,10 @@ export function buildWebviewHtml({
         <style>
           :root {
             color-scheme: light dark;
-            --terminal-bg: ${theme.palette.background};
-            --terminal-fg: ${theme.palette.foreground};
+            /* ビュー全体の枠線・文字色は Terminal 1 のテーマを基準にする。
+               各ペインは data-terminal-pane 要素側で個別に上書きされる。 */
+            --terminal-bg: ${theme.slots[1].palette.background};
+            --terminal-fg: ${theme.slots[1].palette.foreground};
           }
           html,
           body {
@@ -191,6 +193,20 @@ export function buildWebviewHtml({
             align-items: center;
             gap: 0.5rem;
           }
+          .theme-picker__scope {
+            display: inline-block;
+            margin-left: 0.35rem;
+            padding: 0.05rem 0.4rem;
+            border-radius: 999px;
+            border: 1px solid color-mix(in srgb, var(--terminal-fg) 30%, transparent);
+            font-size: 0.7rem;
+            opacity: 0.85;
+          }
+          .theme-picker__hint {
+            margin: 0;
+            font-size: 0.7rem;
+            opacity: 0.7;
+          }
           select[data-theme-select] {
             flex: 0 0 220px;
             background: var(--vscode-dropdown-background);
@@ -347,7 +363,10 @@ export function buildWebviewHtml({
         </div>
         <section class="theme-picker" aria-label="Theme selector">
           <label style="font-size:0.85rem;display:flex;flex-direction:column;gap:0.35rem;">
-            Theme
+            <span>
+              Theme
+              <span class="theme-picker__scope" data-theme-scope>Terminal 1</span>
+            </span>
             <div class="theme-picker__control">
               <select data-theme-select></select>
               <span data-theme-active-label style="font-size:0.75rem;opacity:0.8;">―</span>
@@ -357,6 +376,9 @@ export function buildWebviewHtml({
             <span class="theme-preview__swatch" data-theme-swatch></span>
             <span data-theme-preview-text>Preview</span>
           </div>
+          <p class="theme-picker__hint">
+            Applies to the focused terminal. Each terminal keeps its own theme.
+          </p>
         </section>
         <section class="clear-all" aria-label="Danger zone">
           <button class="danger-button" data-session-clear-all type="button">

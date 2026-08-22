@@ -26,6 +26,7 @@ export class DOMElements {
   readonly sessionSelect = $<HTMLSelectElement>('[data-session-select]');
   readonly themeSelect = $<HTMLSelectElement>('[data-theme-select]');
   readonly themeActiveLabel = $<HTMLSpanElement>('[data-theme-active-label]');
+  readonly themeScopeLabel = $<HTMLSpanElement>('[data-theme-scope]');
   readonly themePreviewText = $<HTMLSpanElement>('[data-theme-preview-text]');
   readonly themePreviewSwatch = $<HTMLSpanElement>('[data-theme-swatch]');
   readonly clearAllButton = $<HTMLButtonElement>('[data-session-clear-all]');
