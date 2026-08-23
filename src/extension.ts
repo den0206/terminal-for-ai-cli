@@ -37,23 +37,20 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       'terminal-for-ai-cli.cleanupImages',
       async () => {
+        const deleteLabel = vscode.l10n.t('Delete');
         const result = await vscode.window.showWarningMessage(
-          'すべての保存済み画像を削除しますか？',
+          vscode.l10n.t('Delete every saved image?'),
           {modal: true},
-          '削除'
+          deleteLabel
         );
 
-        if (result === '削除') {
+        if (result === deleteLabel) {
           const deletedCount = await provider.cleanupOrphanedImages();
-          if (deletedCount > 0) {
-            vscode.window.showInformationMessage(
-              `${deletedCount}個の画像を削除しました`
-            );
-          } else {
-            vscode.window.showInformationMessage(
-              '削除する画像がありませんでした'
-            );
-          }
+          vscode.window.showInformationMessage(
+            deletedCount > 0
+              ? vscode.l10n.t('Deleted {0} image(s)', deletedCount)
+              : vscode.l10n.t('There were no images to delete')
+          );
         }
       }
     )

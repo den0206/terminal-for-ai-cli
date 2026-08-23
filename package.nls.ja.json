@@ -1,4 +1,24 @@
 {
+  "capabilities.untrustedWorkspaces.description": "信頼していないワークスペースではシェルのパスと起動コマンドを無視します。リポジトリ側から任意のコマンドを実行させられないようにするためです。",
+  "command.category": "Terminal For AI CLI",
+  "command.focus.title": "フォーカス",
+  "command.newSession.title": "新しいセッション",
+  "command.cleanupImages.title": "画像をクリーンアップ",
+  "config.defaultShell.description": "新しいセッションに使用するシェルのパス。空の場合はユーザーの既定シェルを使用します。machine スコープのため、ワークスペース設定からは上書きできません。",
+  "config.startupCommands.description": "セッション作成時に順番に送信されるコマンドのリスト。machine スコープのため、ワークスペース設定からは上書きできません。",
+  "config.confirmOpenLink.description": "ターミナル内のリンクを Cmd / Ctrl + クリックで開く前に確認ダイアログを表示します。",
+  "config.themePreset.description": "Terminal 1 のターミナルテーマ。Terminal For AI CLI ビュー内でも選択できます。",
+  "config.themePresetSecondary.description": "Terminal 2 のターミナルテーマ。空の場合は Terminal 1 と同じテーマになります。Terminal For AI CLI ビュー内でも選択できます。",
+  "theme.inherit": "Terminal 1 と同じテーマを使用",
+  "theme.modern": "（おすすめ）VS Code のテーマに馴染む落ち着いた配色",
+  "theme.basic": "黒地に白文字のシンプルなクラシックターミナル",
+  "theme.clearDark": "暗めの背景に柔らかいシアン系文字色",
+  "theme.clearLight": "明るい背景にダークグレーの文字色",
+  "theme.grass": "緑基調のレトロな配色",
+  "theme.homebrew": "黒背景・ネオングリーンの Homebrew 風スタイル",
+  "theme.manPage": "マニュアル風の淡い背景と濃い文字色",
+  "theme.ocean": "青と白のコントラストが強い配色",
+  "theme.pro": "シルバーの筐体風ダークグレー配色",
   "walkthrough.setup.title": "Terminal For AI CLI を使い始める",
   "walkthrough.setup.description": "ターミナルをコードの隣に置き、最初のセッションを開きます。",
   "walkthrough.setup.move.title": "ターミナルをセカンダリサイドバーへ移す",
@@ -6,6 +26,5 @@
   "walkthrough.setup.move.altText": "アクティビティバーの Terminal For AI アイコンを右クリックし、［移動先］→［セカンダリ サイド バー］を選ぶ操作",
   "walkthrough.setup.session.title": "最初のセッションを開く",
   "walkthrough.setup.session.description": "ビューを開くと、ワークスペースのルートでシェルが自動的に起動します。そこで AI CLI を走らせれば、エディタは自分の作業のまま使えます。\n[Terminal For AI を開く](command:terminal-for-ai-cli.focus)\nセッションは最大 2 つ。`+` で 2 つめを追加し、`▢` で同時に表示できます。Shift を押しながら画像をドロップすると、そのパスがシェルに入力されます。",
-  "walkthrough.setup.session.altText": "Terminal For AI CLI のアイコン",
-  "capabilities.untrustedWorkspaces.description": "信頼していないワークスペースではシェルのパスと起動コマンドを無視します。リポジトリ側から任意のコマンドを実行させられないようにするためです。"
+  "walkthrough.setup.session.altText": "Terminal For AI CLI のアイコン"
 }

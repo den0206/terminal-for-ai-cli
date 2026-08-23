@@ -29,6 +29,7 @@
     "theme": "dark"
   },
   "main": "./dist/extension.js",
+  "l10n": "./l10n",
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
@@ -61,15 +62,18 @@
     "commands": [
       {
         "command": "terminal-for-ai-cli.focus",
-        "title": "Terminal For AI CLI: フォーカス"
+        "category": "%command.category%",
+        "title": "%command.focus.title%"
       },
       {
         "command": "terminal-for-ai-cli.newSession",
-        "title": "Terminal For AI CLI: 新しいセッション"
+        "category": "%command.category%",
+        "title": "%command.newSession.title%"
       },
       {
         "command": "terminal-for-ai-cli.cleanupImages",
-        "title": "Terminal For AI CLI: 画像をクリーンアップ"
+        "category": "%command.category%",
+        "title": "%command.cleanupImages.title%"
       }
     ],
     "configuration": {
@@ -78,8 +82,8 @@
         "aiTerminal.defaultShell": {
           "type": "string",
           "default": "",
-
-          "scope": "machine",          "description": "新しいセッションに使用するシェルのパス。空の場合はユーザーの既定シェルを使用します。"
+          "scope": "machine",
+          "description": "%config.defaultShell.description%"
         },
         "aiTerminal.startupCommands": {
           "type": "array",
@@ -87,13 +91,13 @@
             "type": "string"
           },
           "default": [],
-
-          "scope": "machine",          "description": "セッション作成時に順番に送信されるコマンドのリスト。"
+          "scope": "machine",
+          "description": "%config.startupCommands.description%"
         },
         "aiTerminal.confirmOpenLink": {
           "type": "boolean",
           "default": true,
-          "description": "ターミナル内のリンクを Cmd / Ctrl + クリックで開く前に確認ダイアログを表示します。"
+          "description": "%config.confirmOpenLink.description%"
         },
         "aiTerminal.themePreset": {
           "type": "string",
@@ -110,17 +114,17 @@
             "pro"
           ],
           "enumDescriptions": [
-            "（おすすめ）VS Code のテーマに馴染む落ち着いた配色",
-            "黒地に白文字のシンプルなクラシックターミナル",
-            "暗めの背景に柔らかいシアン系文字色",
-            "明るい背景にダークグレーの文字色",
-            "緑基調のレトロな配色",
-            "黒背景・ネオングリーンの Homebrew 風スタイル",
-            "マニュアル風の淡い背景と濃い文字色",
-            "青と白のコントラストが強い配色",
-            "シルバーの筐体風ダークグレー配色"
+            "%theme.modern%",
+            "%theme.basic%",
+            "%theme.clearDark%",
+            "%theme.clearLight%",
+            "%theme.grass%",
+            "%theme.homebrew%",
+            "%theme.manPage%",
+            "%theme.ocean%",
+            "%theme.pro%"
           ],
-          "description": "Terminal 1 のターミナルテーマ。Terminal For AI CLI ビュー内でも選択できます。"
+          "description": "%config.themePreset.description%"
         },
         "aiTerminal.themePresetSecondary": {
           "type": "string",
@@ -138,18 +142,18 @@
             "pro"
           ],
           "enumDescriptions": [
-            "Terminal 1 と同じテーマを使用",
-            "（おすすめ）VS Code のテーマに馴染む落ち着いた配色",
-            "黒地に白文字のシンプルなクラシックターミナル",
-            "暗めの背景に柔らかいシアン系文字色",
-            "明るい背景にダークグレーの文字色",
-            "緑基調のレトロな配色",
-            "黒背景・ネオングリーンの Homebrew 風スタイル",
-            "マニュアル風の淡い背景と濃い文字色",
-            "青と白のコントラストが強い配色",
-            "シルバーの筐体風ダークグレー配色"
+            "%theme.inherit%",
+            "%theme.modern%",
+            "%theme.basic%",
+            "%theme.clearDark%",
+            "%theme.clearLight%",
+            "%theme.grass%",
+            "%theme.homebrew%",
+            "%theme.manPage%",
+            "%theme.ocean%",
+            "%theme.pro%"
           ],
-          "description": "Terminal 2 のターミナルテーマ。空の場合は Terminal 1 と同じテーマになります。Terminal For AI CLI ビュー内でも選択できます。"
+          "description": "%config.themePresetSecondary.description%"
         }
       }
     },
