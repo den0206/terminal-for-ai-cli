@@ -174,3 +174,35 @@ export function validateTerminalDimensions(
         : DEFAULT_ROWS,
   };
 }
+
+/**
+ * Validates a URL coming from terminal output and returns its normalized form.
+ * Terminal output is untrusted, so only http(s) is allowed - other schemes
+ * (file:, vscode:, custom app handlers) can launch programs.
+ *
+ * Returns the parsed href rather than the input string: the URL parser drops
+ * tabs and newlines, so a link that reads as good.com across two lines can
+ * resolve to evil.com. Callers must show and open this return value, never
+ * the original string, or the confirmation prompt shows a different host
+ * than the one that opens.
+ * @param uri The URL to validate
+ * @returns The normalized URL, or undefined when it is not safe to open
+ */
+export function normalizeExternalUrl(uri: unknown): string | undefined {
+  if (typeof uri !== 'string' || uri.length > 2048) {
+    return undefined;
+  }
+  // Control characters vanish during parsing but survive in a modal, so they
+  // let one host be displayed while another is opened.
+  if (/[\u0000-\u001f\u007f]/.test(uri)) {
+    return undefined;
+  }
+  try {
+    const url = new URL(uri);
+    return url.protocol === 'http:' || url.protocol === 'https:'
+      ? url.href
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
