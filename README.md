@@ -195,9 +195,10 @@ escalating to `SIGKILL` after 2s) and deletes every saved image.
 
 | Setting | Key | Description |
 |---------|-----|-------------|
-| Default shell | `aiTerminal.defaultShell` | Absolute path to the shell executable. Empty falls back to your login shell. Invalid paths are rejected with a warning and the default is used. |
-| Startup commands | `aiTerminal.startupCommands` | Array of commands sent (in order) right after a session starts. Invalid entries are filtered out. |
+| Default shell | `aiTerminal.defaultShell` | Absolute path to the shell executable. Empty falls back to your login shell. Invalid paths are rejected with a warning and the default is used. **Machine scope** — a workspace cannot override it. |
+| Startup commands | `aiTerminal.startupCommands` | Array of commands sent (in order) right after a session starts. Empty entries are dropped. **Machine scope** — a workspace cannot override it. |
 | Confirm before opening a link | `aiTerminal.confirmOpenLink` | Show a modal with the full URL before a clicked link is opened in the browser. Default `true`. |
+| Resource readout | `aiTerminal.showResourceStats` | Show saved-image size and extension host memory in the toolbar. Default `true`. Turning it off also stops the polling behind it. |
 | Theme preset (Terminal 1) | `aiTerminal.themePreset` | One of the nine presets. The Webview dropdown writes to the same setting while Terminal 1 is focused. |
 | Theme preset (Terminal 2) | `aiTerminal.themePresetSecondary` | One of the nine presets, or empty to follow Terminal 1. The Webview dropdown writes to it while Terminal 2 is focused. |
 
@@ -205,23 +206,31 @@ escalating to `SIGKILL` after 2s) and deletes every saved image.
 
 | Command | Description |
 |---------|-------------|
-| `Terminal For AI CLI: フォーカス` | Focus and reveal the terminal view. |
-| `Terminal For AI CLI: 新しいセッション` | Create a new terminal session. |
-| `Terminal For AI CLI: 画像をクリーンアップ` | Delete saved images from global storage (with confirmation). |
+| `Terminal For AI CLI: Focus` | Focus and reveal the terminal view. |
+| `Terminal For AI CLI: New Session` | Create a new terminal session. |
+| `Terminal For AI CLI: Clean Up Images` | Delete saved images from this window's storage (with confirmation). |
+
+Command titles and settings descriptions come from `package.nls*.json`, and runtime messages from
+`l10n/bundle.l10n.*.json`. English is the source language; Japanese ships alongside it.
 
 ## Storage and Memory
 
 The toolbar readout is `💾 <saved images> · 🧠 <RSS>`, refreshed every 30 seconds while the view is
-visible.
+visible. Set `aiTerminal.showResourceStats` to `false` to hide it, which also stops the polling
+behind it. The directory scan is cached and only redone after an image is saved or deleted, so a
+steady state costs no I/O.
 
 **💾 Saved images** — the total size of files under
-`<globalStorage>/terminal-for-ai-cli/images/`. These are the images you dropped in. They are removed:
+`<workspaceStorage>/terminal-for-ai-cli/images/`. These are the images you dropped in. Storage is
+**per window (per workspace)**, falling back to global storage only when no folder is open: every
+window runs its own extension host, so a shared directory would let one window's startup cleanup
+delete files another window is still using. They are removed:
 
 | When | What is deleted |
 |------|-----------------|
 | A session is closed, or its shell exits | Every image dropped into that session |
 | "Clear all sessions" | All images |
-| The extension deactivates (window closed) | All images |
+| The extension deactivates (window closed) | All of that window's images |
 | Extension startup | Orphans left by a crash, plus anything older than 24h |
 
 So this number stays near zero in normal use. A number that keeps growing means cleanup is not
@@ -236,14 +245,28 @@ Not counted: the Webview (a separate renderer process — the xterm scrollback l
 shells themselves (child processes of the extension host). Treat the number as a trend line for
 spotting leaks, not as an attribution.
 
+**Webview memory** — the view runs with `retainContextWhenHidden: true`. That costs memory even
+while the view is hidden, and buys terminals that survive switching away from the sidebar. It holds
+3000 lines of xterm scrollback per session plus a restore buffer used when a session moves between
+panes (up to 2M characters per session). The restore buffer keeps the received chunks as they
+arrived and drops whole chunks from the front once the cap is reached, so a burst of output never
+pays a multi-megabyte copy per chunk.
+
 ## Security
 
+- **Workspace Trust** — `aiTerminal.defaultShell` and `aiTerminal.startupCommands` are **machine
+  scope** and listed under `capabilities.untrustedWorkspaces.restrictedConfigurations`. A repository
+  cannot point the extension at its own shell or startup commands through `.vscode/settings.json`.
 - **Shell path validation** — must be absolute, existing, and executable before anything is spawned.
-- **Startup command sanitization** — commands are filtered and validated, with warnings for dangerous patterns.
+- **Startup commands** — non-empty strings are sent as written. The setting can only come from your
+  own machine settings, so its contents are not screened: that is the same trust level as
+  `terminal.integrated.profiles`.
 - **Working directory validation** — checked for existence before use.
 - **Image validation** — MIME type, 10MB size limit, base64 integrity, and filename sanitization against path traversal.
 - **External links** — only `http` / `https` URLs are handed to the OS; anything else is dropped with a warning.
-- **Shell escaping** — dropped image paths are quoted per platform before being written to the shell.
+- **Shell escaping** — dropped image paths are quoted per platform before being written to the shell:
+  single quotes on POSIX, double quotes on Windows, and a path containing `"`, `%`, or `!` is
+  rejected rather than escaped in a way `cmd.exe` would still expand.
 - **Strict CSP** — nonce-based script execution in the Webview; nonces and session IDs come from Node's `crypto`, never `Math.random()`.
 - **Zero `any` types** — every message crossing the Webview boundary goes through a discriminated union with an exhaustive check.
 - **No network access** — the extension never makes a request.
@@ -408,19 +431,28 @@ hand — the workflow writes it before building and commits it to `main` afterwa
 The `+N` form only appears in the tag and the asset name; `package.json` keeps the plain `X.Y.Z` that
 VS Code requires.
 
-Release notes are resolved in this order:
+`CHANGELOG.md` drives the release notes. Before the VSIX is built, the workflow runs
+`scripts/release-changelog.mjs`, which cuts `[Unreleased]` into a `## [X.Y.Z] - YYYY-MM-DD` heading
+and rewrites the compare links at the bottom. That order matters: the Changelog tab on the extension
+page renders the `CHANGELOG.md` packaged *inside* the VSIX, so fixing it on `main` afterwards would
+leave the published page reading `Unreleased`. The script is idempotent, so `+N` rebuilds are no-ops.
+
+The release body is then resolved in this order:
 
 | Priority | Source |
 |----------|--------|
 | 1 | Hand-written `docs/release-notes/X.Y.Z.md` (shared by all `+N` rebuilds of that version) |
-| 2 | Generated from the commits since the previous `Ver_*` tag — `feat:` and `fix:` only |
-| 3 | `gh release create --generate-notes` as a fallback |
+| 2 | The `[X.Y.Z]` section of `CHANGELOG.md` — or `[Unreleased]` if the cut has not run yet |
+| 3 | Commits since the previous `Ver_*` tag — `feat:` and `fix:` only |
+| 4 | `gh release create --generate-notes` as a fallback |
 
-Draft the notes yourself before releasing, then edit the result by hand:
+Preview what a release would publish, or draft a hand-written override:
 
 ```bash
-scripts/gen-release-notes.sh 0.0.3            # -> docs/release-notes/0.0.3.md
-scripts/gen-release-notes.sh 0.0.3 --stdout   # preview only
+scripts/gen-release-notes.sh 0.0.3 --stdout          # preview only
+scripts/gen-release-notes.sh 0.0.3                   # -> docs/release-notes/0.0.3.md
+scripts/gen-release-notes.sh 0.0.3 --from-commits    # ignore CHANGELOG, use commits
+node scripts/release-changelog.mjs 0.0.3             # cut [Unreleased] by hand
 ```
 
 Pushing to any other `release/**` branch, or running the workflow manually, builds the VSIX as a
