@@ -20,8 +20,7 @@ tsconfig.json
 # Source maps (not needed in production)
 **/*.map
 
-# Documentation (keep README.md and LICENSE.md)
-CHANGELOG.md
+# CHANGELOG.md は同梱する - 拡張機能ページの Changelog タブがこれを表示するため
 
 # Package files (node_modules は含める - node-pty 等の runtime 依存のため)
 # パッケージ前に npm prune --omit=dev で devDependencies を外すと VSIX が軽量になる

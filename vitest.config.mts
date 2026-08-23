@@ -11,7 +11,7 @@ export default defineConfig({
     pool: 'threads',
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'scripts/**/*.test.mjs'],
     testTimeout: 15000, // Increase timeout for CI environments (especially for PTY operations)
     hookTimeout: 15000,
     coverage: {
