@@ -3,6 +3,7 @@ import {isAbsolute} from 'node:path';
 import {tmpdir} from 'node:os';
 import {
   getDefaultShell,
+  normalizeExternalUrl,
   validateShellPath,
   validateStartupCommands,
   validateWorkingDirectory,
@@ -110,6 +111,49 @@ describe('validation', () => {
       // This test assumes /etc/hosts exists as a file
       const result = validateWorkingDirectory('/etc/hosts');
       expect(result).toBeUndefined();
+    });
+  });
+
+  describe('normalizeExternalUrl', () => {
+    it('should accept http and https URLs', () => {
+      expect(
+        normalizeExternalUrl('https://auth.openai.com/codex/device')
+      ).toBe('https://auth.openai.com/codex/device');
+      expect(normalizeExternalUrl('http://localhost:3000/callback')).toBe(
+        'http://localhost:3000/callback'
+      );
+    });
+
+    it('should reject other schemes and malformed input', () => {
+      expect(normalizeExternalUrl('file:///etc/passwd')).toBeUndefined();
+      expect(normalizeExternalUrl('vscode://install')).toBeUndefined();
+      expect(normalizeExternalUrl('javascript:alert(1)')).toBeUndefined();
+      expect(normalizeExternalUrl('not a url')).toBeUndefined();
+      expect(normalizeExternalUrl(undefined)).toBeUndefined();
+    });
+
+    it('should reject absurdly long URLs', () => {
+      expect(
+        normalizeExternalUrl(`https://example.com/${'a'.repeat(2048)}`)
+      ).toBeUndefined();
+    });
+
+    // The URL parser silently drops these, so the string shown in the confirm
+    // prompt would name a different host than the one that actually opens.
+    it.each([
+      ['tab', '\t'],
+      ['newline', '\n'],
+      ['carriage return', '\r'],
+    ])('should reject a %s hiding a different host', (_name, control) => {
+      expect(
+        normalizeExternalUrl(`https://good.example.com${control}@evil.example`)
+      ).toBeUndefined();
+    });
+
+    it('should normalize so the returned host is the host that opens', () => {
+      expect(normalizeExternalUrl('https://good.example.com@evil.example')).toBe(
+        'https://good.example.com@evil.example/'
+      );
     });
   });
 });
