@@ -48,7 +48,16 @@ export const commands = {
   executeCommand: vi.fn(),
 };
 
+export const env = {
+  openExternal: vi.fn(),
+};
+
 export const Uri = {
+  parse: vi.fn((value: string) => ({
+    toString: () => value,
+    scheme: value.split(':')[0],
+    path: value,
+  })),
   file: vi.fn((path: string) => ({
     fsPath: path,
     scheme: 'file',
