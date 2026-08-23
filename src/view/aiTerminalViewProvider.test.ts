@@ -2,6 +2,7 @@ import type {IPty} from 'node-pty';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import type * as vscode from 'vscode';
 import {env as mockEnv, window as mockWindow} from 'vscode';
+import {SHARED_CONSTANTS} from '../shared/constants';
 import {SessionManager} from '../terminal/sessionManager';
 import {Logger} from '../utils/logger';
 import {AiTerminalViewProvider} from './aiTerminalViewProvider';
@@ -485,6 +486,45 @@ describe('AiTerminalViewProvider', () => {
       expect(postMessageMock).toHaveBeenCalled();
     });
 
+    it('should cap queued output across entries, not per entry', async () => {
+      const webviewView = createMockWebviewView();
+      provider.resolveWebviewView(webviewView);
+
+      const messageHandler = (
+        webviewView.webview.onDidReceiveMessage as ReturnType<typeof vi.fn>
+      ).mock.calls[0][0];
+
+      // Alternating sessions defeat the merge, so every chunk takes its own
+      // queue slot - the case a per-entry cap fails to bound.
+      const chunk = 'x'.repeat(100_000);
+      for (let i = 0; i < 40; i++) {
+        sessionManager['onDataEmitter'].fire({
+          id: i % 2 === 0 ? 'session-a' : 'session-b',
+          data: chunk,
+        });
+      }
+      sessionManager['onDataEmitter'].fire({id: 'session-b', data: 'TAIL'});
+
+      await messageHandler({type: 'webview-ready'});
+
+      const postMessageMock = webviewView.webview.postMessage as ReturnType<
+        typeof vi.fn
+      >;
+      const flushed = postMessageMock.mock.calls
+        .map(([message]) => message)
+        .filter((message) => message?.type === 'session-data');
+      const total = flushed.reduce(
+        (sum, message) => sum + message.payload.data.length,
+        0
+      );
+
+      // 4.1M characters were queued; only the newest 2M may survive.
+      expect(total).toBe(SHARED_CONSTANTS.MAX_BUFFER_SIZE);
+      expect(flushed[flushed.length - 1].payload.data.endsWith('TAIL')).toBe(
+        true
+      );
+    });
+
     it('should prevent duplicate webview-ready processing', async () => {
       const webviewView = createMockWebviewView();
       provider.resolveWebviewView(webviewView);
@@ -646,7 +686,7 @@ describe('AiTerminalViewProvider', () => {
       const webviewView = createMockWebviewView();
       provider.resolveWebviewView(webviewView);
       (mockWindow.showInformationMessage as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce('開く');
+        .mockResolvedValueOnce('Open');
 
       await getMessageHandler(webviewView)({
         type: 'open-link',
@@ -1556,20 +1596,47 @@ describe('AiTerminalViewProvider', () => {
       expect(webviewView.webview.postMessage).toHaveBeenCalled();
     });
 
-    it('should limit message queue size', async () => {
+    it('should merge consecutive session-data instead of dropping output', async () => {
       const webviewView = createMockWebviewView();
       provider.resolveWebviewView(webviewView);
 
-      // Generate many messages before webview is ready
+      // Generate many chunks before the webview is ready
       for (let i = 0; i < 150; i++) {
         sessionManager['onDataEmitter'].fire({
           id: 'test-session',
+          data: `data ${i};`,
+        });
+      }
+
+      // Merging keeps the queue short, so nothing is dropped
+      expect(Logger.warn).not.toHaveBeenCalled();
+
+      const queue = provider['messageQueue'] as Array<{
+        type: string;
+        payload: {sessionId: string; data: string};
+      }>;
+      const dataMessages = queue.filter((m) => m.type === 'session-data');
+      expect(dataMessages).toHaveLength(1);
+      expect(dataMessages[0].payload.data).toContain('data 0;');
+      expect(dataMessages[0].payload.data).toContain('data 149;');
+    });
+
+    it('should drop the oldest message once non-mergeable messages fill the queue', async () => {
+      const webviewView = createMockWebviewView();
+      provider.resolveWebviewView(webviewView);
+
+      // Alternate sessions so no two neighbours can merge
+      for (let i = 0; i < 150; i++) {
+        sessionManager['onDataEmitter'].fire({
+          id: `session-${i % 2}`,
           data: `data ${i}`,
         });
       }
 
-      // Should log warning about queue size
       expect(Logger.warn).toHaveBeenCalled();
+      expect(
+        (provider['messageQueue'] as unknown[]).length
+      ).toBeLessThanOrEqual(SHARED_CONSTANTS.MESSAGE_QUEUE_MAX_SIZE);
     });
   });
 });

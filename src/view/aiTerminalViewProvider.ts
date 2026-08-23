@@ -43,6 +43,8 @@ export class AiTerminalViewProvider
   private webviewReady = false;
   private initialSessionEnsured = false;
   private readonly messageQueue: OutboundMessage[] = [];
+  /** Characters of `session-data` currently held in `messageQueue`. */
+  private queuedDataChars = 0;
   private readonly disposables: vscode.Disposable[] = [];
   private messageDisposable?: vscode.Disposable;
   /** セッション ID → ターミナル番号（Terminal 1 / Terminal 2） */
@@ -100,6 +102,7 @@ export class AiTerminalViewProvider
     this.sessionSlots.clear();
     this.imageManager.clearTracking();
     this.messageQueue.length = 0;
+    this.queuedDataChars = 0;
     this.webviewView = undefined;
     this.webviewReady = false;
     this.initialSessionEnsured = false;
@@ -397,21 +400,91 @@ export class AiTerminalViewProvider
 
   /**
    * Posts a message to the webview, or queues it while the webview is not ready.
-   * The oldest message is dropped once the queue is full.
+   *
+   * Consecutive `session-data` for one session is merged into the queued entry
+   * instead of taking a slot: dropping the oldest entry would silently swallow
+   * terminal output, and shell startup alone emits far more than
+   * MESSAGE_QUEUE_MAX_SIZE chunks. Queued output is capped across the whole
+   * queue rather than per entry, so interleaved sessions cannot multiply the
+   * ceiling by the number of queue slots.
    */
   private postMessage(message: OutboundMessage): void {
     if (!this.webviewView || !this.webviewReady) {
-      if (this.messageQueue.length >= SHARED_CONSTANTS.MESSAGE_QUEUE_MAX_SIZE) {
-        Logger.warn('Message queue is full, dropping oldest message');
-        this.messageQueue.shift();
+      if (!this.mergeIntoQueuedData(message)) {
+        if (
+          this.messageQueue.length >= SHARED_CONSTANTS.MESSAGE_QUEUE_MAX_SIZE
+        ) {
+          Logger.warn('Message queue is full, dropping oldest message');
+          this.removeQueuedAt(0);
+        }
+        this.messageQueue.push(message);
+        if (message.type === 'session-data') {
+          this.queuedDataChars += message.payload.data.length;
+        }
       }
-      this.messageQueue.push(message);
+      this.trimQueuedData();
       return;
     }
     try {
       this.webviewView.webview.postMessage(message);
     } catch (error) {
       Logger.error('Failed to post message to webview', error);
+    }
+  }
+
+  /**
+   * Appends `session-data` onto the last queued chunk for the same session.
+   * @returns true when the message was merged and must not be queued again
+   */
+  private mergeIntoQueuedData(message: OutboundMessage): boolean {
+    if (message.type !== 'session-data') {
+      return false;
+    }
+    const last = this.messageQueue[this.messageQueue.length - 1];
+    if (
+      last?.type !== 'session-data' ||
+      last.payload.sessionId !== message.payload.sessionId
+    ) {
+      return false;
+    }
+    last.payload.data += message.payload.data;
+    this.queuedDataChars += message.payload.data.length;
+    return true;
+  }
+
+  /** Removes one queued entry, keeping `queuedDataChars` in step. */
+  private removeQueuedAt(index: number): void {
+    const [removed] = this.messageQueue.splice(index, 1);
+    if (removed?.type === 'session-data') {
+      this.queuedDataChars -= removed.payload.data.length;
+    }
+  }
+
+  /**
+   * Caps the terminal output held across the whole queue at MAX_BUFFER_SIZE by
+   * dropping the oldest characters - the same "keep the newest" rule the
+   * webview applies to its own per-session buffer. Trimming across entries
+   * rather than within each one keeps the ceiling independent of how many
+   * sessions are interleaved in the queue.
+   */
+  private trimQueuedData(): void {
+    let overflow = this.queuedDataChars - SHARED_CONSTANTS.MAX_BUFFER_SIZE;
+    for (let i = 0; overflow > 0 && i < this.messageQueue.length; ) {
+      const entry = this.messageQueue[i];
+      if (entry.type !== 'session-data') {
+        i++;
+        continue;
+      }
+      const {data} = entry.payload;
+      if (data.length <= overflow) {
+        overflow -= data.length;
+        // Leaves `i` on the next entry, which shifted down into this slot.
+        this.removeQueuedAt(i);
+      } else {
+        entry.payload.data = data.slice(overflow);
+        this.queuedDataChars -= overflow;
+        overflow = 0;
+      }
     }
   }
 
@@ -446,7 +519,7 @@ export class AiTerminalViewProvider
           ? message.payload.sessionId === sessionId
           : message.type === 'session-created' && message.payload.id === sessionId;
       if (shouldRemove) {
-        this.messageQueue.splice(i, 1);
+        this.removeQueuedAt(i);
       }
     }
   }
@@ -467,6 +540,7 @@ export class AiTerminalViewProvider
         }
       }
     }
+    this.queuedDataChars = 0;
   }
 
   /** Creates a session on first webview-ready if none exist. */
