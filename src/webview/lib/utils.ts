@@ -35,14 +35,16 @@ export function debounce<T extends (...args: never[]) => void>(
   fn: T,
   delay: number
 ): DebouncedFunction<T> {
-  let handle: number | undefined;
+  // Plain setTimeout, not window.setTimeout: identical in the webview, and it
+  // keeps this module usable from the test runner, which has no window.
+  let handle: ReturnType<typeof setTimeout> | undefined;
   let pendingArgs: Parameters<T> | undefined;
   const debounced = (...args: Parameters<T>) => {
     pendingArgs = args;
     if (handle) {
       clearTimeout(handle);
     }
-    handle = window.setTimeout(() => {
+    handle = setTimeout(() => {
       fn(...(pendingArgs as Parameters<T>));
       handle = undefined;
       pendingArgs = undefined;
@@ -73,7 +75,7 @@ export function throttle<T extends (...args: never[]) => void>(
   delay: number
 ): CancellableFunction<T> {
   let lastCall = 0;
-  let timeoutHandle: number | undefined;
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   let pendingArgs: Parameters<T> | undefined;
   const throttled = (...args: Parameters<T>) => {
     pendingArgs = args;
@@ -88,7 +90,7 @@ export function throttle<T extends (...args: never[]) => void>(
       if (timeoutHandle) {
         clearTimeout(timeoutHandle);
       }
-      timeoutHandle = window.setTimeout(() => {
+      timeoutHandle = setTimeout(() => {
         lastCall = Date.now();
         fn(...(pendingArgs as Parameters<T>));
         timeoutHandle = undefined;

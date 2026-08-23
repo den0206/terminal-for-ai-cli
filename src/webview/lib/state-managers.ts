@@ -13,6 +13,9 @@ import {
   type DebouncedFunction,
 } from './utils';
 
+/** セッションごとの出力バッファ。chunks の合計文字数を length に持つ。 */
+type SessionBuffer = {chunks: string[]; length: number};
+
 /** 1-based の並び順をターミナル番号（1 or 2）に丸める */
 function toTerminalSlot(position: number): TerminalSlot {
   return position >= 2 ? 2 : 1;
@@ -27,7 +30,15 @@ export class SessionStateManager {
   sessionIds: string[];
   sessionMeta: Record<string, SessionMeta>;
   totalSessions: number;
-  private readonly buffers = new Map<string, string>();
+  /**
+   * Per-session scrollback kept for pane reassignment.
+   *
+   * Chunks are stored as received and only joined when a pane actually needs
+   * them. Keeping a single concatenated string meant every chunk past the cap
+   * re-sliced MAX_BUFFER_SIZE characters, so a burst of output paid a
+   * multi-megabyte copy per chunk.
+   */
+  private readonly buffers = new Map<string, SessionBuffer>();
   /** Runs 300ms after the last appendToBuffer call so bursts are batched */
   private readonly debouncedCleanup: DebouncedFunction<() => void>;
 
@@ -41,7 +52,7 @@ export class SessionStateManager {
 
     // Initialize buffers for existing sessions
     this.sessionIds.forEach((id, index) => {
-      this.buffers.set(id, '');
+      this.buffers.set(id, {chunks: [], length: 0});
       const slot = toTerminalSlot(index + 1);
       const restored = this.sessionMeta[id];
       this.sessionMeta[id] = restored
@@ -75,7 +86,7 @@ export class SessionStateManager {
       label: label ?? `Terminal ${resolvedSlot}`,
       slot: resolvedSlot,
     };
-    this.buffers.set(id, '');
+    this.buffers.set(id, {chunks: [], length: 0});
   }
 
   /** テーマ適用に使うターミナル番号。未知のセッションは undefined。 */
@@ -112,18 +123,47 @@ export class SessionStateManager {
 
   // Buffer management
   appendToBuffer(sessionId: string, chunk: string): void {
-    const next = (this.buffers.get(sessionId) ?? '') + chunk;
-    this.buffers.set(
-      sessionId,
-      next.length > SHARED_CONSTANTS.MAX_BUFFER_SIZE
-        ? next.slice(next.length - SHARED_CONSTANTS.MAX_BUFFER_SIZE)
-        : next
-    );
+    if (!chunk) {
+      return;
+    }
+    let buffer = this.buffers.get(sessionId);
+    if (!buffer) {
+      buffer = {chunks: [], length: 0};
+      this.buffers.set(sessionId, buffer);
+    }
+    buffer.chunks.push(chunk);
+    buffer.length += chunk.length;
+
+    // Trim from the front until the cap holds. Whole chunks are dropped by
+    // reference; at most one slice runs per call, and it only ever copies the
+    // head chunk - never the whole MAX_BUFFER_SIZE window.
+    let overflow = buffer.length - SHARED_CONSTANTS.MAX_BUFFER_SIZE;
+    while (overflow > 0) {
+      const head = buffer.chunks[0];
+      if (head.length <= overflow) {
+        buffer.chunks.shift();
+        buffer.length -= head.length;
+        overflow -= head.length;
+      } else {
+        buffer.chunks[0] = head.slice(overflow);
+        buffer.length -= overflow;
+        overflow = 0;
+      }
+    }
+
     this.debouncedCleanup();
   }
 
   getBuffer(sessionId: string): string | undefined {
-    return this.buffers.get(sessionId);
+    const buffer = this.buffers.get(sessionId);
+    if (!buffer) {
+      return undefined;
+    }
+    // Collapse to one chunk so a repeated pane switch does not re-join.
+    if (buffer.chunks.length > 1) {
+      buffer.chunks = [buffer.chunks.join('')];
+    }
+    return buffer.chunks[0] ?? '';
   }
 
   private dropOrphanedBuffers(): void {
