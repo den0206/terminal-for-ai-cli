@@ -125,6 +125,7 @@ export type OutboundMessage =
   | {type: 'dispose-session'; payload: {sessionId: string}}
   | {type: 'dispose-all-sessions'}
   | {type: 'theme-select'; payload: {presetKey: string; slot?: number}}
+  | {type: 'open-link'; payload: {uri: string}}
   | {
       type: 'image-drop';
       payload: {

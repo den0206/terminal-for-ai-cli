@@ -12,6 +12,7 @@ import {Logger} from '../utils/logger';
 import {getNonce} from '../utils/nonce';
 import {
   getDefaultShell,
+  normalizeExternalUrl,
   validateShellPath,
   validateStartupCommands,
 } from '../utils/validation';
@@ -186,6 +187,9 @@ export class AiTerminalViewProvider
             message.payload.presetKey,
             message.payload.slot,
           );
+          break;
+        case 'open-link':
+          await this.handleOpenLink(message.payload.uri);
           break;
         case 'image-drop':
           await this.handleImageDrop(message.payload);
@@ -512,6 +516,39 @@ export class AiTerminalViewProvider
   private findNextSlot(): TerminalSlot {
     const used = new Set(this.sessionSlots.values());
     return TERMINAL_SLOTS.find((slot) => !used.has(slot)) ?? TERMINAL_SLOTS[0];
+  }
+
+  /**
+   * Opens a URL clicked in the terminal with the OS default browser.
+   *
+   * Terminal output is untrusted, so the scheme is restricted to http(s) and -
+   * unless `aiTerminal.confirmOpenLink` is turned off - the full URL is shown
+   * in a modal first. VS Code itself never prompts for `env.openExternal`
+   * (microsoft/vscode#82277, as-designed), so the confirmation has to live here.
+   *
+   * The normalized URL is what gets shown and opened, so the host in the
+   * prompt is always the host that opens.
+   */
+  private async handleOpenLink(uri: string): Promise<void> {
+    const target = normalizeExternalUrl(uri);
+    if (!target) {
+      Logger.warn('Blocked link with unsupported scheme or malformed URL');
+      return;
+    }
+    const confirm = vscode.workspace
+      .getConfiguration('aiTerminal')
+      .get<boolean>('confirmOpenLink', true);
+    if (confirm) {
+      const choice = await vscode.window.showInformationMessage(
+        'ブラウザでこのリンクを開きますか？',
+        {modal: true, detail: target},
+        '開く',
+      );
+      if (choice !== '開く') {
+        return;
+      }
+    }
+    await vscode.env.openExternal(vscode.Uri.parse(target));
   }
 
   /** Stores the dropped image and types its escaped path into the session. */

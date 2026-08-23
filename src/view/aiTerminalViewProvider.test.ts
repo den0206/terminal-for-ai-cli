@@ -1,6 +1,7 @@
 import type {IPty} from 'node-pty';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import type * as vscode from 'vscode';
+import {env as mockEnv, window as mockWindow} from 'vscode';
 import {SessionManager} from '../terminal/sessionManager';
 import {Logger} from '../utils/logger';
 import {AiTerminalViewProvider} from './aiTerminalViewProvider';
@@ -41,7 +42,7 @@ vi.mock('vscode', async () => {
     ...actual,
     workspace: {
       getConfiguration: vi.fn(() => ({
-        get: vi.fn((key: string) => {
+        get: vi.fn((key: string, defaultValue?: unknown) => {
           if (key === 'defaultShell') {
             return '';
           }
@@ -51,7 +52,7 @@ vi.mock('vscode', async () => {
           if (key === 'themePreset') {
             return 'modern';
           }
-          return undefined;
+          return defaultValue;
         }),
         update: vi.fn().mockResolvedValue(undefined),
       })),
@@ -72,6 +73,11 @@ vi.mock('vscode', async () => {
       showInformationMessage: vi.fn(),
     },
     Uri: {
+      parse: vi.fn((value: string) => ({
+        scheme: value.split(':')[0],
+        path: value,
+        toString: () => value,
+      })),
       file: vi.fn((path: string) => ({
         scheme: 'file',
         fsPath: path,
@@ -628,6 +634,54 @@ describe('AiTerminalViewProvider', () => {
       });
 
       expect(writeSpy).toHaveBeenCalledWith(sessionId, 'ls -la\r');
+    });
+  });
+
+  describe('handleMessage - open-link', () => {
+    const getMessageHandler = (webviewView: ReturnType<typeof createMockWebviewView>) =>
+      (webviewView.webview.onDidReceiveMessage as ReturnType<typeof vi.fn>).mock
+        .calls[0][0];
+
+    it('should open an http(s) link after the user confirms', async () => {
+      const webviewView = createMockWebviewView();
+      provider.resolveWebviewView(webviewView);
+      (mockWindow.showInformationMessage as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce('開く');
+
+      await getMessageHandler(webviewView)({
+        type: 'open-link',
+        payload: {uri: 'https://auth.openai.com/codex/device'},
+      });
+
+      expect(mockWindow.showInformationMessage).toHaveBeenCalled();
+      expect(mockEnv.openExternal).toHaveBeenCalled();
+    });
+
+    it('should not open the link when the user cancels', async () => {
+      const webviewView = createMockWebviewView();
+      provider.resolveWebviewView(webviewView);
+      (mockWindow.showInformationMessage as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(undefined);
+
+      await getMessageHandler(webviewView)({
+        type: 'open-link',
+        payload: {uri: 'https://example.com'},
+      });
+
+      expect(mockEnv.openExternal).not.toHaveBeenCalled();
+    });
+
+    it('should reject non-http schemes without prompting', async () => {
+      const webviewView = createMockWebviewView();
+      provider.resolveWebviewView(webviewView);
+
+      await getMessageHandler(webviewView)({
+        type: 'open-link',
+        payload: {uri: 'file:///etc/passwd'},
+      });
+
+      expect(mockWindow.showInformationMessage).not.toHaveBeenCalled();
+      expect(mockEnv.openExternal).not.toHaveBeenCalled();
     });
   });
 
