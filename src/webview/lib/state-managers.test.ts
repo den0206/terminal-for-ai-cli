@@ -1,4 +1,5 @@
 import {describe, expect, it} from 'vitest';
+import {SHARED_CONSTANTS} from '../../shared/constants';
 import {SessionStateManager, ThemeStateManager} from './state-managers';
 import type {ViewState} from './types';
 
@@ -85,5 +86,66 @@ describe('ThemeStateManager', () => {
     expect(theme.getPresetInfo('ocean')?.label).toBe('Ocean');
     expect(theme.getPresetInfo('missing')).toBeUndefined();
     expect(theme.getPresetInfo(undefined)).toBeUndefined();
+  });
+});
+
+describe('SessionStateManager output buffer', () => {
+  it('returns the chunks in order', () => {
+    const state = new SessionStateManager(emptyState);
+    state.addSession('a', 'zsh');
+    state.appendToBuffer('a', 'one ');
+    state.appendToBuffer('a', 'two ');
+    state.appendToBuffer('a', 'three');
+    expect(state.getBuffer('a')).toBe('one two three');
+  });
+
+  it('starts a buffer for a session it has not seen', () => {
+    const state = new SessionStateManager(emptyState);
+    state.appendToBuffer('ghost', 'hello');
+    expect(state.getBuffer('ghost')).toBe('hello');
+  });
+
+  it('ignores empty chunks', () => {
+    const state = new SessionStateManager(emptyState);
+    state.addSession('a', 'zsh');
+    state.appendToBuffer('a', '');
+    expect(state.getBuffer('a')).toBe('');
+  });
+
+  it('keeps the newest output once the cap is passed', () => {
+    const state = new SessionStateManager(emptyState);
+    state.addSession('a', 'zsh');
+    const chunk = 'x'.repeat(100_000);
+    // 25 chunks = 2.5M chars against a 2M cap
+    for (let i = 0; i < 25; i++) {
+      state.appendToBuffer('a', chunk);
+    }
+    state.appendToBuffer('a', 'TAIL');
+
+    const buffer = state.getBuffer('a') ?? '';
+    expect(buffer.endsWith('TAIL')).toBe(true);
+    // Hard cap: trimming slices into the head chunk rather than overshooting
+    expect(buffer.length).toBe(SHARED_CONSTANTS.MAX_BUFFER_SIZE);
+  });
+
+  it('trims a single chunk that is larger than the cap on its own', () => {
+    const state = new SessionStateManager(emptyState);
+    state.addSession('a', 'zsh');
+    state.appendToBuffer(
+      'a',
+      'y'.repeat(SHARED_CONSTANTS.MAX_BUFFER_SIZE + 500) + 'END'
+    );
+
+    const buffer = state.getBuffer('a') ?? '';
+    expect(buffer.length).toBe(SHARED_CONSTANTS.MAX_BUFFER_SIZE);
+    expect(buffer.endsWith('END')).toBe(true);
+  });
+
+  it('drops the buffer when the session goes away', () => {
+    const state = new SessionStateManager(emptyState);
+    state.addSession('a', 'zsh');
+    state.appendToBuffer('a', 'data');
+    state.removeSession('a');
+    expect(state.getBuffer('a')).toBeUndefined();
   });
 });
