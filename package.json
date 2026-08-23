@@ -99,6 +99,11 @@
           "default": true,
           "description": "%config.confirmOpenLink.description%"
         },
+        "aiTerminal.showResourceStats": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.showResourceStats.description%"
+        },
         "aiTerminal.themePreset": {
           "type": "string",
           "default": "modern",
