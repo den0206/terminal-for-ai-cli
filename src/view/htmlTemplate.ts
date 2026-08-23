@@ -12,6 +12,15 @@ type HtmlTemplateParams = {
   xtermCssUri: vscode.Uri;
 };
 
+/** Escapes a string for use inside a double-quoted HTML attribute. */
+function escapeAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 export function buildWebviewHtml({
   webview,
   nonce,
@@ -306,9 +315,12 @@ export function buildWebviewHtml({
           <span
             class="usage"
             data-usage
-            title="保存画像の合計サイズ / 拡張ホストプロセス全体のメモリ (RSS)"
-            >―</span
-          >
+            title="${escapeAttribute(
+              vscode.l10n.t(
+                'Total size of saved images / resident memory of the whole extension host process (RSS), which is shared with every other extension. Turn it off with aiTerminal.showResourceStats.'
+              )
+            )}"
+          ></span>
           <button class="icon-button" data-session-add title="New session">+</button>
           <button
             class="icon-button"

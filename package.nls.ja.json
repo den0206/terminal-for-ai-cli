@@ -7,6 +7,7 @@
   "config.defaultShell.description": "新しいセッションに使用するシェルのパス。空の場合はユーザーの既定シェルを使用します。machine スコープのため、ワークスペース設定からは上書きできません。",
   "config.startupCommands.description": "セッション作成時に順番に送信されるコマンドのリスト。machine スコープのため、ワークスペース設定からは上書きできません。",
   "config.confirmOpenLink.description": "ターミナル内のリンクを Cmd / Ctrl + クリックで開く前に確認ダイアログを表示します。",
+  "config.showResourceStats.description": "保存済み画像のサイズと拡張機能ホストのメモリ使用量をツールバーに表示します。メモリの値は拡張機能ホストのプロセス全体（他の拡張機能と共有）の値です。",
   "config.themePreset.description": "Terminal 1 のターミナルテーマ。Terminal For AI CLI ビュー内でも選択できます。",
   "config.themePresetSecondary.description": "Terminal 2 のターミナルテーマ。空の場合は Terminal 1 と同じテーマになります。Terminal For AI CLI ビュー内でも選択できます。",
   "theme.inherit": "Terminal 1 と同じテーマを使用",

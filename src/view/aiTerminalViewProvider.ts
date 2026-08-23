@@ -80,6 +80,9 @@ export class AiTerminalViewProvider
         if (themeChanged) {
           this.postThemeUpdate();
         }
+        if (event.affectsConfiguration('aiTerminal.showResourceStats')) {
+          this.startUsagePolling();
+        }
       }),
     );
   }
@@ -230,7 +233,10 @@ export class AiTerminalViewProvider
       this.sessionManager.getSessionCount() >= SHARED_CONSTANTS.MAX_SESSIONS
     ) {
       vscode.window.showWarningMessage(
-        `Terminal For AI CLI supports up to ${SHARED_CONSTANTS.MAX_SESSIONS} sessions.`,
+        vscode.l10n.t(
+          'Terminal For AI CLI supports up to {0} sessions.',
+          SHARED_CONSTANTS.MAX_SESSIONS,
+        ),
       );
       this.postMessage({
         type: 'session-limit-reached',
@@ -252,7 +258,10 @@ export class AiTerminalViewProvider
           `Invalid shell path configured: "${configuredShell}". Using default shell instead.`,
         );
         vscode.window.showWarningMessage(
-          `Invalid shell path configured: "${configuredShell}". Using default shell instead.`,
+          vscode.l10n.t(
+            'Invalid shell path configured: "{0}". Using the default shell instead.',
+            configuredShell,
+          ),
         );
         shell = getDefaultShell();
       }
@@ -289,28 +298,40 @@ export class AiTerminalViewProvider
       Logger.error('Failed to create Terminal For AI CLI session', error);
 
       // Provide user-friendly error messages
-      let userMessage = 'Failed to create a terminal session.';
+      let userMessage = vscode.l10n.t('Failed to create a terminal session.');
       if (error instanceof Error) {
         const errorMessage = error.message.toLowerCase();
         if (
           errorMessage.includes('enoent') ||
           errorMessage.includes('not found')
         ) {
-          userMessage = `Shell not found. Please check your "aiTerminal.defaultShell" setting or ensure your default shell is available.`;
+          userMessage = vscode.l10n.t(
+            'Shell not found. Check your "aiTerminal.defaultShell" setting, or make sure your default shell is available.',
+          );
         } else if (
           errorMessage.includes('eacces') ||
           errorMessage.includes('permission')
         ) {
-          userMessage = `Permission denied. Please check that the shell is executable.`;
+          userMessage = vscode.l10n.t(
+            'Permission denied. Check that the shell is executable.',
+          );
         } else if (errorMessage.includes('spawn')) {
-          userMessage = `Failed to start shell process. Please check your shell configuration.`;
+          userMessage = vscode.l10n.t(
+            'Failed to start the shell process. Check your shell configuration.',
+          );
         } else {
-          userMessage = `Failed to create session: ${error.message}`;
+          userMessage = vscode.l10n.t(
+            'Failed to create session: {0}',
+            error.message,
+          );
         }
       }
 
       vscode.window.showErrorMessage(
-        `Terminal For AI CLI: ${userMessage} Check the Output channel for details.`,
+        vscode.l10n.t(
+          'Terminal For AI CLI: {0} Check the Output channel for details.',
+          userMessage,
+        ),
       );
       this.postMessage({
         type: 'session-error',
@@ -321,9 +342,25 @@ export class AiTerminalViewProvider
     }
   }
 
-  /** Refreshes the usage readout periodically while the view is visible. */
+  /** True when the user opted into the toolbar resource readout. */
+  private isResourceStatsEnabled(): boolean {
+    return vscode.workspace
+      .getConfiguration('aiTerminal')
+      .get<boolean>('showResourceStats', true);
+  }
+
+  /**
+   * Refreshes the usage readout periodically while the view is visible.
+   * Does nothing while `aiTerminal.showResourceStats` is off, so turning the
+   * readout off also stops the polling behind it.
+   */
   private startUsagePolling() {
     clearInterval(this.usageTimer);
+    this.usageTimer = undefined;
+    if (!this.isResourceStatsEnabled()) {
+      this.postMessage({type: 'usage-update', payload: {text: ''}});
+      return;
+    }
     void this.postUsage();
     this.usageTimer = setInterval(() => {
       if (this.webviewView?.visible) {
@@ -336,33 +373,17 @@ export class AiTerminalViewProvider
    * Posts "<saved images> / <extension host RSS>".
    * ponytail: RSS covers the whole extension host process (shared with other
    * extensions); per-extension memory would need a separate process to measure.
+   * The setting description says so, and the readout carries a tooltip.
    */
   private async postUsage() {
-    let imageBytes = 0;
-    try {
-      const imagesDir = vscode.Uri.joinPath(
-        this.context.globalStorageUri,
-        'images',
-      );
-      const entries = await vscode.workspace.fs.readDirectory(imagesDir);
-      for (const [name, type] of entries) {
-        if (type !== vscode.FileType.File) {
-          continue;
-        }
-        const stat = await vscode.workspace.fs.stat(
-          vscode.Uri.joinPath(imagesDir, name),
-        );
-        imageBytes += stat.size;
-      }
-    } catch {
-      // Images directory does not exist yet
-    }
-
+    const imageBytes = await this.imageManager.getStorageBytes();
     const mb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)}MB`;
     this.postMessage({
       type: 'usage-update',
       payload: {
-        text: `💾 ${mb(imageBytes)} · 🧠 ${mb(process.memoryUsage().rss)}`,
+        text: `\u{1F4BE} ${mb(imageBytes)} \u00B7 \u{1F9E0} ${mb(
+          process.memoryUsage().rss,
+        )}`,
       },
     });
   }
@@ -539,12 +560,13 @@ export class AiTerminalViewProvider
       .getConfiguration('aiTerminal')
       .get<boolean>('confirmOpenLink', true);
     if (confirm) {
+      const openLabel = vscode.l10n.t('Open');
       const choice = await vscode.window.showInformationMessage(
-        'ブラウザでこのリンクを開きますか？',
+        vscode.l10n.t('Open this link in your browser?'),
         {modal: true, detail: target},
-        '開く',
+        openLabel,
       );
-      if (choice !== '開く') {
+      if (choice !== openLabel) {
         return;
       }
     }
@@ -569,24 +591,30 @@ export class AiTerminalViewProvider
     } catch (error) {
       Logger.error('Failed to save image', error);
 
-      let userMessage = 'Failed to save image.';
+      let userMessage = vscode.l10n.t('Failed to save image.');
       if (error instanceof Error) {
         const errorMessage = error.message.toLowerCase();
         if (errorMessage.includes('too large')) {
           userMessage = error.message;
         } else if (errorMessage.includes('invalid file type')) {
-          userMessage = 'Only image files are supported.';
+          userMessage = vscode.l10n.t('Only image files are supported.');
         } else if (errorMessage.includes('invalid base64')) {
-          userMessage =
-            'Invalid image data. Please try dropping the image again.';
+          userMessage = vscode.l10n.t(
+            'Invalid image data. Try dropping the image again.',
+          );
         } else if (errorMessage.includes('invalid filename')) {
-          userMessage = 'Invalid filename. Please use a valid file name.';
+          userMessage = vscode.l10n.t('Invalid filename. Use a valid file name.');
         } else {
-          userMessage = `Failed to save image: ${error.message}`;
+          userMessage = vscode.l10n.t(
+            'Failed to save image: {0}',
+            error.message,
+          );
         }
       }
 
-      vscode.window.showErrorMessage(`Terminal For AI CLI: ${userMessage}`);
+      vscode.window.showErrorMessage(
+        vscode.l10n.t('Terminal For AI CLI: {0}', userMessage),
+      );
     }
   }
 

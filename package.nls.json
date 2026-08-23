@@ -7,6 +7,7 @@
   "config.defaultShell.description": "Path to the shell used for new sessions. Leave empty to use your login shell. Machine scope: a workspace cannot override it.",
   "config.startupCommands.description": "Commands sent to the shell in order right after a session is created. Machine scope: a workspace cannot override it.",
   "config.confirmOpenLink.description": "Show a confirmation dialog before opening a terminal link with Cmd / Ctrl + click.",
+  "config.showResourceStats.description": "Show saved-image size and extension host memory in the view toolbar. The memory figure covers the whole extension host process, which is shared with every other extension.",
   "config.themePreset.description": "Terminal theme for Terminal 1. Also selectable inside the Terminal For AI CLI view.",
   "config.themePresetSecondary.description": "Terminal theme for Terminal 2. Empty means it follows Terminal 1. Also selectable inside the Terminal For AI CLI view.",
   "theme.inherit": "Use the same theme as Terminal 1",
