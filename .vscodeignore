@@ -51,3 +51,9 @@ node_modules/node-pty/binding.gyp
 IMPROVEMENTS.md
 IMPROVEMENTS_JP.md
 README_JP.md
+
+# README 用のデモ GIF は VSIX に含めない
+media/demo.gif
+
+# README 用の操作説明画像は VSIX に含めない（ウォークスルーが使うのは .svg のみ）
+media/walkthrough/*.png
