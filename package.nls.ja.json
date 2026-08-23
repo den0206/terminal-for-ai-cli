@@ -6,5 +6,6 @@
   "walkthrough.setup.move.altText": "アクティビティバーの Terminal For AI アイコンを右クリックし、［移動先］→［セカンダリ サイド バー］を選ぶ操作",
   "walkthrough.setup.session.title": "最初のセッションを開く",
   "walkthrough.setup.session.description": "ビューを開くと、ワークスペースのルートでシェルが自動的に起動します。そこで AI CLI を走らせれば、エディタは自分の作業のまま使えます。\n[Terminal For AI を開く](command:terminal-for-ai-cli.focus)\nセッションは最大 2 つ。`+` で 2 つめを追加し、`▢` で同時に表示できます。Shift を押しながら画像をドロップすると、そのパスがシェルに入力されます。",
-  "walkthrough.setup.session.altText": "Terminal For AI CLI のアイコン"
+  "walkthrough.setup.session.altText": "Terminal For AI CLI のアイコン",
+  "capabilities.untrustedWorkspaces.description": "信頼していないワークスペースではシェルのパスと起動コマンドを無視します。リポジトリ側から任意のコマンドを実行させられないようにするためです。"
 }

@@ -6,5 +6,6 @@
   "walkthrough.setup.move.altText": "Right-clicking the Terminal For AI icon in the Activity Bar, then Move To, then Secondary Side Bar",
   "walkthrough.setup.session.title": "Start your first session",
   "walkthrough.setup.session.description": "Opening the view starts a shell in the workspace root automatically. Run your AI CLI there and keep the editor for yourself.\n[Open Terminal For AI](command:terminal-for-ai-cli.focus)\nUp to two sessions run at once — `+` adds the second, `▢` shows both at the same time. Hold Shift while dropping an image on the view to type its path into the shell.",
-  "walkthrough.setup.session.altText": "The Terminal For AI CLI icon"
+  "walkthrough.setup.session.altText": "The Terminal For AI CLI icon",
+  "capabilities.untrustedWorkspaces.description": "The shell path and startup commands are ignored in untrusted workspaces, so a repository cannot make the extension run its own commands."
 }

@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import {SHARED_CONSTANTS} from '../shared/constants';
-import {Logger} from './logger';
 
 /**
  * Validates that a shell path is safe to execute
@@ -77,9 +76,17 @@ export function getDefaultShell(): string {
 }
 
 /**
- * Validates startup commands to prevent command injection
- * @param commands Array of commands to validate
- * @returns Sanitized array of commands
+ * Normalizes the configured startup commands: keeps the non-empty strings and
+ * drops everything else.
+ *
+ * These commands are not screened for dangerous content on purpose. The setting
+ * is `machine` scope and listed in `capabilities.untrustedWorkspaces`, so it can
+ * only come from the user's own machine settings - the same trust level as
+ * `terminal.integrated.profiles`. Pattern-matching a handful of shapes like
+ * `rm -rf /` would filter nothing an attacker could not rewrite, while implying
+ * a guarantee this function cannot make.
+ * @param commands Array of commands to normalize
+ * @returns The non-empty trimmed commands
  */
 export function validateStartupCommands(commands: unknown): string[] {
   if (!Array.isArray(commands)) {
@@ -89,33 +96,7 @@ export function validateStartupCommands(commands: unknown): string[] {
   return commands
     .filter((cmd): cmd is string => typeof cmd === 'string')
     .map((cmd) => cmd.trim())
-    .filter((cmd) => {
-      // Filter out empty commands
-      if (!cmd) {
-        return false;
-      }
-
-      // Warn about potentially dangerous commands (but don't block them)
-      // Users should have control, but we log warnings
-      const dangerousPatterns = [
-        /^\s*rm\s+-rf\s+[/~]/, // rm -rf / or ~
-        /^\s*:\(\)\{.*\}:/, // fork bomb
-        /\bsudo\s+rm\b/, // sudo rm
-      ];
-
-      for (const pattern of dangerousPatterns) {
-        if (pattern.test(cmd)) {
-          Logger.warn(
-            `Potentially dangerous startup command detected: ${cmd.substring(
-              0,
-              50
-            )}...`
-          );
-        }
-      }
-
-      return true;
-    });
+    .filter((cmd) => cmd.length > 0);
 }
 
 /**

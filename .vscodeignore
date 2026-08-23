@@ -44,7 +44,12 @@ node_modules/node-pty/binding.gyp
 
 # Claude/Cursor specific
 .claude/**
+.cursor/**
 .cursorrules
+
+# Publishing credentials - never ship these
+.env
+.env.*
 
 # Additional documentation (only keep README.md and LICENSE.md)
 IMPROVEMENTS.md
