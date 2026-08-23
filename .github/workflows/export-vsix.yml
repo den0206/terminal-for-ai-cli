@@ -136,6 +136,17 @@ jobs:
         if: steps.meta.outputs.marketing
         run: npm version "${{ steps.meta.outputs.marketing }}" --no-git-tag-version --allow-same-version
 
+      # CHANGELOG の [Unreleased] を確定させる。**ビルドより前**であることが重要:
+      # 拡張機能ページの Changelog タブが表示するのは VSIX に同梱された CHANGELOG.md
+      # なので、後から main を直しても公開ページは Unreleased のままになる。
+      # 何度実行しても安全（同じ X.Y.Z の見出しが既にあれば no-op）。
+      - name: Cut CHANGELOG [Unreleased]
+        if: steps.meta.outputs.marketing
+        run: |
+          RELEASE_DATE="$(date -u +%F)"
+          echo "RELEASE_DATE=$RELEASE_DATE" >> "$GITHUB_ENV"
+          node scripts/release-changelog.mjs "${{ steps.meta.outputs.marketing }}" "$RELEASE_DATE"
+
       - name: Build extension
         run: npm run compile
 
@@ -176,8 +187,10 @@ jobs:
 
       # リリースノートの決め方(優先順):
       #   1. 手書き docs/release-notes/X.Y.Z.md があればそれを使う(+N 再ビルドも同じ X.Y.Z を共有)
-      #   2. 無ければ前版(祖先 Ver_* タグ)との差分から自動生成(feat/fix を分類)
-      #   3. 生成にも失敗したら gh の --generate-notes にフォールバック
+      #   2. 無ければ gen-release-notes.sh が CHANGELOG.md の [X.Y.Z] 節を本文にする
+      #      (直前の Cut CHANGELOG で切り出し済み。未切り出しなら [Unreleased] を読む)
+      #   3. CHANGELOG が空なら前版(祖先 Ver_* タグ)との差分から生成(feat/fix を分類)
+      #   4. 生成にも失敗したら gh の --generate-notes にフォールバック
       - name: Create GitHub Release
         if: steps.meta.outputs.tag
         env:
@@ -196,7 +209,7 @@ jobs:
           else
             GEN="$RUNNER_TEMP/relnotes-${MARKETING}.md"
             if bash scripts/gen-release-notes.sh "$MARKETING" --stdout > "$GEN"; then
-              echo "::notice::$NOTES_FILE が無いため前版との差分から自動生成しました"
+              echo "::notice::$NOTES_FILE が無いため CHANGELOG / コミットから生成しました"
               NOTES_ARGS=(--notes-file "$GEN")
             else
               echo "::warning::自動生成に失敗したため gh の --generate-notes にフォールバックします"
@@ -263,10 +276,13 @@ jobs:
           git switch -f -C main origin/main
           npm version "${{ steps.meta.outputs.marketing }}" --no-git-tag-version --allow-same-version
           node scripts/update-readme-release-info.mjs
+          # VSIX 側は切り出し済みだが、それは release ブランチ上の作業ツリーでの話。
+          # main にも同じ日付で同じ切り出しを適用する(冪等なので再実行しても安全)。
+          node scripts/release-changelog.mjs "${{ steps.meta.outputs.marketing }}" "$RELEASE_DATE"
 
-          git add package.json package-lock.json README.md README_JP.md
+          git add package.json package-lock.json README.md README_JP.md CHANGELOG.md
           git diff --cached --quiet && exit 0
-          git commit -m "docs: ${{ steps.meta.outputs.tag }} のリリース情報を反映 [skip ci]"
+          git commit -m "docs: ${{ steps.meta.outputs.tag }} のリリース情報と CHANGELOG を反映 [skip ci]"
           # main のブランチ保護が有効だとこの push は拒否される。失敗時に気づけるよう明示する。
           if ! git push origin main; then
             echo "::error::main への push に失敗しました。main がブランチ保護されている場合は、GitHub Actions bot からの直接 push を許可するか、保護ルールで github-actions をバイパスに追加してください"
