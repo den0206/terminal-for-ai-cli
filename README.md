@@ -145,6 +145,16 @@ the **escaped absolute path is written into the shell**, ready for an AI CLI tha
 
 Files up to 10MB and `image/*` types only. Non-image files are ignored.
 
+### Opening a link
+
+`Cmd` (macOS) / `Ctrl` (Windows, Linux) + click an `http(s)` URL in the output and it opens in your
+default browser — the same gesture as VS Code's own terminal. A plain click does nothing, so
+selecting text over a link stays harmless. Handy for AI CLI sign-in flows that print an auth URL.
+
+A confirmation modal shows the full URL before the browser is launched. VS Code itself never prompts
+for links opened by an extension, so this is the extension's own guard — turn it off with
+`aiTerminal.confirmOpenLink` if it gets in the way.
+
 ### Height and theme
 
 Drag the handle under the terminal to resize (220–1000px, persisted).
@@ -170,6 +180,7 @@ escalating to `SIGKILL` after 2s) and deletes every saved image.
 | Session naming | `Terminal N` with reuse of freed numbers |
 | Scrollback | 3000 lines in xterm, plus a 2MB per-session buffer replayed on Webview reload |
 | Image drag & drop | `Shift` + drop → saved to global storage, escaped path typed into the shell |
+| Clickable links | `Cmd` / `Ctrl` + click on an `http(s)` URL opens it in the default browser |
 | Image cleanup | Deleted on session exit, on deactivation, and on startup (orphans, 24h TTL) |
 | Usage readout | Saved-image total and extension host RSS, refreshed every 30s while visible |
 | Theme presets | `modern`, `basic`, `clearDark`, `clearLight`, `grass`, `homebrew`, `manPage`, `ocean`, `pro` |
@@ -186,6 +197,7 @@ escalating to `SIGKILL` after 2s) and deletes every saved image.
 |---------|-----|-------------|
 | Default shell | `aiTerminal.defaultShell` | Absolute path to the shell executable. Empty falls back to your login shell. Invalid paths are rejected with a warning and the default is used. |
 | Startup commands | `aiTerminal.startupCommands` | Array of commands sent (in order) right after a session starts. Invalid entries are filtered out. |
+| Confirm before opening a link | `aiTerminal.confirmOpenLink` | Show a modal with the full URL before a clicked link is opened in the browser. Default `true`. |
 | Theme preset (Terminal 1) | `aiTerminal.themePreset` | One of the nine presets. The Webview dropdown writes to the same setting while Terminal 1 is focused. |
 | Theme preset (Terminal 2) | `aiTerminal.themePresetSecondary` | One of the nine presets, or empty to follow Terminal 1. The Webview dropdown writes to it while Terminal 2 is focused. |
 
@@ -230,6 +242,7 @@ spotting leaks, not as an attribution.
 - **Startup command sanitization** — commands are filtered and validated, with warnings for dangerous patterns.
 - **Working directory validation** — checked for existence before use.
 - **Image validation** — MIME type, 10MB size limit, base64 integrity, and filename sanitization against path traversal.
+- **External links** — only `http` / `https` URLs are handed to the OS; anything else is dropped with a warning.
 - **Shell escaping** — dropped image paths are quoted per platform before being written to the shell.
 - **Strict CSP** — nonce-based script execution in the Webview; nonces and session IDs come from Node's `crypto`, never `Math.random()`.
 - **Zero `any` types** — every message crossing the Webview boundary goes through a discriminated union with an exhaustive check.
