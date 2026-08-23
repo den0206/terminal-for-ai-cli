@@ -11,8 +11,56 @@ import {Logger} from '../utils/logger';
  */
 export class ImageManager {
   private readonly sessionImages = new Map<string, Set<string>>();
+  /** Cached total size of the images directory; invalidated on every write/delete. */
+  private cachedBytes?: number;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
+
+  /**
+   * Root for saved images.
+   *
+   * Workspace storage, not global storage: every window runs its own extension
+   * host, so a shared directory means one window's startup cleanup (or its
+   * `deactivate`) deletes images another window is still using. `storageUri` is
+   * undefined when no folder is open, and only then do we fall back.
+   */
+  private get storageRoot(): vscode.Uri {
+    return this.context.storageUri ?? this.context.globalStorageUri;
+  }
+
+  private get imagesDir(): vscode.Uri {
+    return vscode.Uri.joinPath(this.storageRoot, 'images');
+  }
+
+  /**
+   * Total size in bytes of the saved images.
+   *
+   * The directory is only scanned when the cache is cold: every path that
+   * changes the directory clears it, so a periodic reader costs no I/O while
+   * nothing is being saved or deleted.
+   */
+  async getStorageBytes(): Promise<number> {
+    if (this.cachedBytes !== undefined) {
+      return this.cachedBytes;
+    }
+    let total = 0;
+    try {
+      const entries = await vscode.workspace.fs.readDirectory(this.imagesDir);
+      for (const [name, type] of entries) {
+        if (type !== vscode.FileType.File) {
+          continue;
+        }
+        const stat = await vscode.workspace.fs.stat(
+          vscode.Uri.joinPath(this.imagesDir, name)
+        );
+        total += stat.size;
+      }
+    } catch {
+      // Images directory does not exist yet
+    }
+    this.cachedBytes = total;
+    return total;
+  }
 
   /**
    * Handles image drop events.
@@ -106,15 +154,13 @@ export class ImageManager {
       );
     }
 
-    const storageUri = this.context.globalStorageUri;
-    await vscode.workspace.fs.createDirectory(storageUri);
-
-    const imagesDir = vscode.Uri.joinPath(storageUri, 'images');
+    const imagesDir = this.imagesDir;
     await vscode.workspace.fs.createDirectory(imagesDir);
 
     const imageUri = vscode.Uri.joinPath(imagesDir, uniqueFileName);
 
     await vscode.workspace.fs.writeFile(imageUri, buffer);
+    this.cachedBytes = undefined;
 
     // Track which session used this image
     if (!this.sessionImages.has(sessionId)) {
@@ -149,18 +195,16 @@ export class ImageManager {
     }
 
     this.sessionImages.delete(sessionId);
+    this.cachedBytes = undefined;
   }
 
   /**
-   * Clears all saved images from global storage.
+   * Clears all saved images from this window's storage.
    */
   async clearAllImages(): Promise<void> {
     try {
-      const storageUri = this.context.globalStorageUri;
-      const imagesDir = vscode.Uri.joinPath(storageUri, 'images');
-
       try {
-        await vscode.workspace.fs.delete(imagesDir, {
+        await vscode.workspace.fs.delete(this.imagesDir, {
           recursive: true,
           useTrash: false,
         });
@@ -172,9 +216,10 @@ export class ImageManager {
       }
     } catch (error) {
       Logger.warn('Failed to clear images', error);
+    } finally {
+      this.sessionImages.clear();
+      this.cachedBytes = undefined;
     }
-
-    this.sessionImages.clear();
   }
 
   /**
@@ -185,8 +230,7 @@ export class ImageManager {
    */
   async cleanupOrphanedImages(): Promise<number> {
     try {
-      const storageUri = this.context.globalStorageUri;
-      const imagesDir = vscode.Uri.joinPath(storageUri, 'images');
+      const imagesDir = this.imagesDir;
 
       let files: [string, vscode.FileType][];
       try {
@@ -233,6 +277,7 @@ export class ImageManager {
       }
 
       if (deletedCount > 0) {
+        this.cachedBytes = undefined;
         Logger.info(`Cleaned up ${deletedCount} orphaned image(s)`);
       }
 
@@ -260,14 +305,28 @@ export class ImageManager {
    */
   clearTracking(): void {
     this.sessionImages.clear();
+    this.cachedBytes = undefined;
   }
 
   /**
-   * Escapes shell special characters in a path to prevent command injection.
+   * Quotes a path so the shell takes it as a single literal argument.
+   *
+   * POSIX single quotes are literal, so the standard `'\''` break-out is enough
+   * for any byte. Windows has no such construct: inside double quotes `cmd.exe`
+   * still expands `%VAR%` and (with delayed expansion) `!VAR!`, and a `"` cannot
+   * be escaped portably across cmd.exe and PowerShell. Those characters are
+   * rejected instead of being escaped wrongly - the path is our own storage
+   * directory plus a filename sanitized to `[a-zA-Z0-9._-]`, so this only fires
+   * on an exotic storage location, where failing is the safe outcome.
    */
   private escapeShellPath(filePath: string): string {
     if (process.platform === 'win32') {
-      return `"${filePath.replace(/"/g, '""')}"`;
+      if (/["%!]/.test(filePath)) {
+        throw new Error(
+          `Image path contains characters that cannot be quoted safely on Windows: ${filePath}`
+        );
+      }
+      return `"${filePath}"`;
     }
     return `'${filePath.replace(/'/g, "'\\''")}'`;
   }

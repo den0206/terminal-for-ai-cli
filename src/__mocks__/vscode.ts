@@ -52,6 +52,16 @@ export const env = {
   openExternal: vi.fn(),
 };
 
+// vscode.l10n.t: 本体と同じく {0} 形式のプレースホルダを引数で置換する
+export const l10n = {
+  t: vi.fn((message: string, ...args: unknown[]): string =>
+    message.replace(/\{(\d+)\}/g, (match, index: string) => {
+      const value = args[Number(index)];
+      return value === undefined ? match : String(value);
+    })
+  ),
+};
+
 export const Uri = {
   parse: vi.fn((value: string) => ({
     toString: () => value,
@@ -63,10 +73,15 @@ export const Uri = {
     scheme: 'file',
     path,
   })),
-  joinPath: vi.fn((...args: unknown[]) => ({
-    fsPath: args.join('/'),
-    scheme: 'file',
-  })),
+  // 本体と同じく base の fsPath に segment を継ぎ足す（テストでパスを検証できるように）
+  joinPath: vi.fn((base: unknown, ...segments: string[]) => {
+    const root =
+      typeof base === 'string'
+        ? base
+        : ((base as {fsPath?: string} | null)?.fsPath ?? '');
+    const fsPath = [root, ...segments].filter(Boolean).join('/');
+    return {fsPath, scheme: 'file', path: fsPath};
+  }),
 };
 
 export class EventEmitter<T> {

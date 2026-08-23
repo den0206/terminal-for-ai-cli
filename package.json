@@ -29,6 +29,16 @@
     "theme": "dark"
   },
   "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "%capabilities.untrustedWorkspaces.description%",
+      "restrictedConfigurations": [
+        "aiTerminal.defaultShell",
+        "aiTerminal.startupCommands"
+      ]
+    }
+  },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -68,7 +78,8 @@
         "aiTerminal.defaultShell": {
           "type": "string",
           "default": "",
-          "description": "新しいセッションに使用するシェルのパス。空の場合はユーザーの既定シェルを使用します。"
+
+          "scope": "machine",          "description": "新しいセッションに使用するシェルのパス。空の場合はユーザーの既定シェルを使用します。"
         },
         "aiTerminal.startupCommands": {
           "type": "array",
@@ -76,7 +87,8 @@
             "type": "string"
           },
           "default": [],
-          "description": "セッション作成時に順番に送信されるコマンドのリスト。"
+
+          "scope": "machine",          "description": "セッション作成時に順番に送信されるコマンドのリスト。"
         },
         "aiTerminal.confirmOpenLink": {
           "type": "boolean",

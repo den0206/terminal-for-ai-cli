@@ -110,7 +110,8 @@ jobs:
         continue-on-error: true
 
       - name: Run security scan with TruffleHog
-        uses: trufflesecurity/trufflehog@main
+        # 可変 ref を追わないよう v3.97.0 のコミットに固定する
+        uses: trufflesecurity/trufflehog@bcfcf73aaf4759d4dadc2783177c245a02792318
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
