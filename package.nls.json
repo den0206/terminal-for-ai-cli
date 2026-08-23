@@ -1,4 +1,24 @@
 {
+  "capabilities.untrustedWorkspaces.description": "The shell path and startup commands are ignored in untrusted workspaces, so a repository cannot make the extension run its own commands.",
+  "command.category": "Terminal For AI CLI",
+  "command.focus.title": "Focus",
+  "command.newSession.title": "New Session",
+  "command.cleanupImages.title": "Clean Up Images",
+  "config.defaultShell.description": "Path to the shell used for new sessions. Leave empty to use your login shell. Machine scope: a workspace cannot override it.",
+  "config.startupCommands.description": "Commands sent to the shell in order right after a session is created. Machine scope: a workspace cannot override it.",
+  "config.confirmOpenLink.description": "Show a confirmation dialog before opening a terminal link with Cmd / Ctrl + click.",
+  "config.themePreset.description": "Terminal theme for Terminal 1. Also selectable inside the Terminal For AI CLI view.",
+  "config.themePresetSecondary.description": "Terminal theme for Terminal 2. Empty means it follows Terminal 1. Also selectable inside the Terminal For AI CLI view.",
+  "theme.inherit": "Use the same theme as Terminal 1",
+  "theme.modern": "(Recommended) Muted colors that blend with the VS Code theme",
+  "theme.basic": "Plain classic terminal: white on black",
+  "theme.clearDark": "Dark background with soft cyan text",
+  "theme.clearLight": "Light background with dark grey text",
+  "theme.grass": "Retro green-based palette",
+  "theme.homebrew": "Homebrew style: neon green on black",
+  "theme.manPage": "Man-page style: pale background, dark text",
+  "theme.ocean": "High-contrast blue and white",
+  "theme.pro": "Silver-chassis dark grey palette",
   "walkthrough.setup.title": "Get Started with Terminal For AI CLI",
   "walkthrough.setup.description": "Put the terminal beside your code, then start your first session.",
   "walkthrough.setup.move.title": "Move the terminal to the Secondary Side Bar",
@@ -6,6 +26,5 @@
   "walkthrough.setup.move.altText": "Right-clicking the Terminal For AI icon in the Activity Bar, then Move To, then Secondary Side Bar",
   "walkthrough.setup.session.title": "Start your first session",
   "walkthrough.setup.session.description": "Opening the view starts a shell in the workspace root automatically. Run your AI CLI there and keep the editor for yourself.\n[Open Terminal For AI](command:terminal-for-ai-cli.focus)\nUp to two sessions run at once — `+` adds the second, `▢` shows both at the same time. Hold Shift while dropping an image on the view to type its path into the shell.",
-  "walkthrough.setup.session.altText": "The Terminal For AI CLI icon",
-  "capabilities.untrustedWorkspaces.description": "The shell path and startup commands are ignored in untrusted workspaces, so a repository cannot make the extension run its own commands."
+  "walkthrough.setup.session.altText": "The Terminal For AI CLI icon"
 }
