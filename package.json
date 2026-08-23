@@ -106,7 +106,40 @@
           "description": "Webview 内のターミナルテーマ。Terminal For AI CLI ビュー内でも選択できます。"
         }
       }
-    }
+    },
+    "walkthroughs": [
+      {
+        "id": "terminalForAiCli.setup",
+        "title": "%walkthrough.setup.title%",
+        "description": "%walkthrough.setup.description%",
+        "steps": [
+          {
+            "id": "moveToSecondarySideBar",
+            "title": "%walkthrough.setup.move.title%",
+            "description": "%walkthrough.setup.move.description%",
+            "media": {
+              "svg": "media/walkthrough/move.svg",
+              "altText": "%walkthrough.setup.move.altText%"
+            },
+            "completionEvents": [
+              "onStepSelected"
+            ]
+          },
+          {
+            "id": "startSession",
+            "title": "%walkthrough.setup.session.title%",
+            "description": "%walkthrough.setup.session.description%",
+            "media": {
+              "image": "media/icon.png",
+              "altText": "%walkthrough.setup.session.altText%"
+            },
+            "completionEvents": [
+              "onCommand:terminal-for-ai-cli.focus"
+            ]
+          }
+        ]
+      }
+    ]
   },
   "scripts": {
     "bundle:webview": "esbuild src/webview/main.ts --bundle --format=iife --outfile=media/webview.js --platform=browser --sourcemap",

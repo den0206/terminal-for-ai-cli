@@ -1,0 +1,10 @@
+{
+  "walkthrough.setup.title": "Get Started with Terminal For AI CLI",
+  "walkthrough.setup.description": "Put the terminal beside your code, then start your first session.",
+  "walkthrough.setup.move.title": "Move the terminal to the Secondary Side Bar",
+  "walkthrough.setup.move.description": "The view starts in the Activity Bar, where it covers the file tree. Moving it to the Secondary Side Bar puts the terminal beside your code instead.\n1. Right-click the Terminal For AI icon in the Activity Bar\n2. Choose Move To\n3. Choose Secondary Side Bar\n\nDragging the icon to the right edge of the window does the same thing. To undo it, right-click the icon again and pick Move To → Side Bar.",
+  "walkthrough.setup.move.altText": "Right-clicking the Terminal For AI icon in the Activity Bar, then Move To, then Secondary Side Bar",
+  "walkthrough.setup.session.title": "Start your first session",
+  "walkthrough.setup.session.description": "Opening the view starts a shell in the workspace root automatically. Run your AI CLI there and keep the editor for yourself.\n[Open Terminal For AI](command:terminal-for-ai-cli.focus)\nUp to two sessions run at once — `+` adds the second, `▢` shows both at the same time. Hold Shift while dropping an image on the view to type its path into the shell.",
+  "walkthrough.setup.session.altText": "The Terminal For AI CLI icon"
+}

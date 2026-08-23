@@ -1,0 +1,10 @@
+{
+  "walkthrough.setup.title": "Terminal For AI CLI を使い始める",
+  "walkthrough.setup.description": "ターミナルをコードの隣に置き、最初のセッションを開きます。",
+  "walkthrough.setup.move.title": "ターミナルをセカンダリサイドバーへ移す",
+  "walkthrough.setup.move.description": "このビューは最初アクティビティバーに出るため、ファイルツリーを覆ってしまいます。セカンダリサイドバーへ移すと、ターミナルがコードの隣に並びます。\n1. アクティビティバーの Terminal For AI のアイコンを右クリック\n2. ［移動先］を選ぶ\n3. ［セカンダリ サイド バー］を選ぶ\n\nアイコンをウィンドウの右端へドラッグしても同じです。戻すときは同じ右クリックから［移動先］→［サイド バー］。",
+  "walkthrough.setup.move.altText": "アクティビティバーの Terminal For AI アイコンを右クリックし、［移動先］→［セカンダリ サイド バー］を選ぶ操作",
+  "walkthrough.setup.session.title": "最初のセッションを開く",
+  "walkthrough.setup.session.description": "ビューを開くと、ワークスペースのルートでシェルが自動的に起動します。そこで AI CLI を走らせれば、エディタは自分の作業のまま使えます。\n[Terminal For AI を開く](command:terminal-for-ai-cli.focus)\nセッションは最大 2 つ。`+` で 2 つめを追加し、`▢` で同時に表示できます。Shift を押しながら画像をドロップすると、そのパスがシェルに入力されます。",
+  "walkthrough.setup.session.altText": "Terminal For AI CLI のアイコン"
+}
