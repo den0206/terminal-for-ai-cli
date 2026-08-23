@@ -193,9 +193,10 @@ Terminal 2 は個別に設定するまで Terminal 1 のテーマを引き継ぎ
 
 | 項目 | キー | 説明 |
 |------|------|------|
-| 既定シェル | `aiTerminal.defaultShell` | シェルの絶対パス。空ならログインシェル。不正なパスは警告のうえ既定にフォールバック。 |
-| 起動コマンド | `aiTerminal.startupCommands` | セッション作成直後に順に送信するコマンド配列。不正な要素は除外されます。 |
+| 既定シェル | `aiTerminal.defaultShell` | シェルの絶対パス。空ならログインシェル。不正なパスは警告のうえ既定にフォールバック。**machine スコープ**のため、ワークスペース設定からは上書きできません。 |
+| 起動コマンド | `aiTerminal.startupCommands` | セッション作成直後に順に送信するコマンド配列。空文字は除外されます。**machine スコープ**のため、ワークスペース設定からは上書きできません。 |
 | リンクを開く前の確認 | `aiTerminal.confirmOpenLink` | クリックしたリンクをブラウザで開く前に、URL 全体を出した確認ダイアログを表示します。既定は `true`。 |
+| リソース表示 | `aiTerminal.showResourceStats` | ツールバーに保存画像サイズと拡張ホストのメモリを表示します。既定は `true`。`false` にすると表示だけでなく背後のポーリングも止まります。 |
 | テーマプリセット（Terminal 1） | `aiTerminal.themePreset` | 9 プリセットのいずれか。Terminal 1 にフォーカスがある間、Webview のドロップダウンも同じ設定を書き換えます。 |
 | テーマプリセット（Terminal 2） | `aiTerminal.themePresetSecondary` | 9 プリセットのいずれか。空なら Terminal 1 のテーマを引き継ぎます。Terminal 2 にフォーカスがある間、Webview のドロップダウンが書き換えます。 |
 
@@ -205,20 +206,26 @@ Terminal 2 は個別に設定するまで Terminal 1 のテーマを引き継ぎ
 |----------|------|
 | `Terminal For AI CLI: フォーカス` | ターミナルビューにフォーカスして表示します。 |
 | `Terminal For AI CLI: 新しいセッション` | 新しいターミナルセッションを作成します。 |
-| `Terminal For AI CLI: 画像をクリーンアップ` | グローバルストレージの保存画像を削除します（確認あり）。 |
+| `Terminal For AI CLI: 画像をクリーンアップ` | このウィンドウのストレージにある保存画像を削除します（確認あり）。 |
 
 ## ストレージとメモリ
 
 ツールバーの表示は `💾 <保存画像> · 🧠 <RSS>` で、ビューが可視の間 30 秒ごとに更新されます。
+`aiTerminal.showResourceStats` を `false` にすると、表示だけでなく背後のポーリングも止まります。
+ディレクトリの走査結果はキャッシュされ、画像の保存・削除が起きたときにだけ再計測するため、
+定常状態では I/O が発生しません。
 
-**💾 保存画像** — `<globalStorage>/terminal-for-ai-cli/images/` 以下のファイルの合計サイズ。
-ドロップした画像の実体です。削除タイミングは次のとおり：
+**💾 保存画像** — `<workspaceStorage>/terminal-for-ai-cli/images/` 以下のファイルの合計サイズ。
+ドロップした画像の実体です。保存先は**ウィンドウ（ワークスペース）単位**で、フォルダを開いて
+いない場合のみグローバルストレージにフォールバックします。ウィンドウごとに拡張ホストが
+分かれているため、共有すると片方の起動時クリーンアップがもう片方の使用中ファイルを消して
+しまうためです。削除タイミングは次のとおり：
 
 | タイミング | 削除対象 |
 |------------|----------|
 | セッションを閉じた / シェルが終了した | そのセッションにドロップされた画像 |
 | 「Clear all sessions」 | すべての画像 |
-| 拡張の deactivate（ウィンドウを閉じた） | すべての画像 |
+| 拡張の deactivate（ウィンドウを閉じた） | そのウィンドウのすべての画像 |
 | 拡張の起動時 | クラッシュで残った孤児ファイルと、24 時間より古いファイル |
 
 通常利用ではほぼ 0 のままです。増え続ける場合はクリーンアップが効いていないサインで、
@@ -231,14 +238,27 @@ Node ランタイム・インストール済みの他の全拡張機能・`node-
 含まれないもの：Webview（別のレンダラープロセス。xterm のスクロールバックはこちら）と、
 起動したシェル本体（拡張ホストの子プロセス）。リークを察知するための傾向値として使ってください。
 
+**Webview 側のメモリ** — ビューは `retainContextWhenHidden: true` で表示されます。非表示にしても
+Webview が破棄されないぶん常時メモリを使いますが、その代わりサイドバーを切り替えても
+ターミナルの状態がそのまま残ります。内訳はセッションごとに xterm のスクロールバック 3000 行と、
+ペイン切り替え時の復元用バッファ（1 セッションあたり最大 200 万文字）です。復元用バッファは
+受信チャンクをそのまま保持するリング構造で、上限を超えた分だけを先頭から捨てます。
+
 ## セキュリティ
 
+- **Workspace Trust 対応** — `aiTerminal.defaultShell` と `aiTerminal.startupCommands` は
+  **machine スコープ**で、かつ `capabilities.untrustedWorkspaces.restrictedConfigurations` に
+  登録しています。リポジトリ側の `.vscode/settings.json` からシェルや起動コマンドを差し替えて
+  任意コマンドを実行させることはできません。
 - **シェルパス検証** — プロセス起動前に、絶対パス・存在・実行可能を確認。
-- **起動コマンドのサニタイズ** — 危険なパターンを警告しつつフィルタリング・検証。
+- **起動コマンド** — 空文字を除いた文字列のみを送信します。設定はユーザーのマシン設定に
+  限定されているため、内容の検閲は行いません（`terminal.integrated.profiles` と同じ信頼水準）。
 - **作業ディレクトリ検証** — 使用前に存在を確認。
 - **画像の検証** — MIME タイプ、10MB のサイズ上限、Base64 の整合性、パストラバーサル対策のファイル名サニタイズ。
 - **外部リンク** — OS に渡すのは `http` / `https` のみ。それ以外のスキームは警告を出して破棄します。
 - **シェルエスケープ** — ドロップ画像のパスはプラットフォーム別にクォートしてからシェルに書き込み。
+  POSIX はシングルクォート、Windows はダブルクォートで、`cmd.exe` が展開する `%` `!` や `"` を
+  含むパスは誤ったエスケープをせずエラーにします。
 - **厳格な CSP** — nonce ベースのスクリプト実行。nonce とセッション ID は `Math.random()` ではなく Node の `crypto` で生成。
 - **`any` 型ゼロ** — Webview 境界をまたぐメッセージはすべて Discriminated Union + exhaustive check。
 - **ネットワークアクセスなし** — 拡張機能は一切通信しません。
@@ -400,19 +420,28 @@ git push -u origin release/Ver_0.1.0
 
 `+N` はタグと資産名にだけ現れ、`package.json` には VS Code が要求する数値3成分の `X.Y.Z` が入ります。
 
-リリースノートは次の優先順で決まります：
+リリースノートの元は `CHANGELOG.md` です。VSIX をビルドする前に
+`scripts/release-changelog.mjs` が走り、`[Unreleased]` を `## [X.Y.Z] - YYYY-MM-DD` の見出しへ
+切り出して末尾の比較リンクを書き換えます。この順序が重要で、拡張機能ページの Changelog タブが
+表示するのは **VSIX に同梱された** `CHANGELOG.md` です。後から `main` を直しても公開ページは
+`Unreleased` のまま残ります。スクリプトは冪等なので `+N` 再ビルドでは何もしません。
+
+本文は次の優先順で決まります：
 
 | 優先 | 参照元 |
 |------|--------|
 | 1 | 手書きの `docs/release-notes/X.Y.Z.md`（同じ版の `+N` 再ビルドで共有） |
-| 2 | 前版の `Ver_*` タグ以降のコミットから自動生成（`feat:` と `fix:` のみ） |
-| 3 | `gh release create --generate-notes` へフォールバック |
+| 2 | `CHANGELOG.md` の `[X.Y.Z]` 節（未切り出しなら `[Unreleased]`） |
+| 3 | 前版の `Ver_*` タグ以降のコミット（`feat:` と `fix:` のみ） |
+| 4 | `gh release create --generate-notes` へフォールバック |
 
-リリース前に骨子を生成し、人間向けの文言に整えてください：
+公開される内容の事前確認や、手書きノートの下書きは次のとおり：
 
 ```bash
-scripts/gen-release-notes.sh 0.0.3            # -> docs/release-notes/0.0.3.md
-scripts/gen-release-notes.sh 0.0.3 --stdout   # 表示のみ
+scripts/gen-release-notes.sh 0.0.3 --stdout          # 表示のみ
+scripts/gen-release-notes.sh 0.0.3                   # -> docs/release-notes/0.0.3.md
+scripts/gen-release-notes.sh 0.0.3 --from-commits    # CHANGELOG を無視しコミットから生成
+node scripts/release-changelog.mjs 0.0.3             # [Unreleased] を手動で切り出す
 ```
 
 `release/**` の他のブランチへの push や手動実行では、Release は作らず VSIX を artifact として出力するだけです。
