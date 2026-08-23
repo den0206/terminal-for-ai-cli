@@ -39,6 +39,18 @@
 エディタ下部のターミナルパネルはコードの縦幅を奪います。このビューは代わりに Activity Bar に置かれます。
 最大 2 つのシェルを、上下分割で、常に見える位置に、独立した高さとテーマで。
 
+<p align="center">
+  <img src="media/demo.gif" width="1172" alt="サイドバーで 2 つのシェルを並べて動かしている様子">
+</p>
+
+> **インストール後の最初の一手**: ビューをセカンダリサイドバーへ移動します。ファイルツリーを覆わず、コードの横にターミナルを置けます。
+> **Activity Bar の Terminal For AI アイコンを右クリック → Move To → Secondary Side Bar。**
+> アイコンをウィンドウ右端へドラッグしても同じことができます。
+
+<p align="center">
+  <img src="media/walkthrough/move.png" width="560" alt="Activity Bar の Terminal For AI アイコンを右クリックし、Move To → Secondary Side Bar を選ぶ操作">
+</p>
+
 ## 目次
 
 - [できること](#できること)

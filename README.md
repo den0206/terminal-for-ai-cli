@@ -41,6 +41,18 @@ The main editor terminal panel steals vertical space from your code. This view l
 Activity Bar instead: up to two shells, side-by-side or stacked, always visible, with their own
 height and theme.
 
+<p align="center">
+  <img src="media/demo.gif" width="1172" alt="Two shells running side by side in the sidebar, next to the editor">
+</p>
+
+> **First step after installing**: move the view to the Secondary Side Bar so the terminal sits beside your code instead of covering the file tree.
+> **Right-click the Terminal For AI icon in the Activity Bar → Move To → Secondary Side Bar.**
+> Dragging the icon to the right edge of the window does the same.
+
+<p align="center">
+  <img src="media/walkthrough/move.png" width="560" alt="Right-clicking the Terminal For AI icon in the Activity Bar, then Move To, then Secondary Side Bar">
+</p>
+
 ## Contents
 
 - [What It Does](#what-it-does)
