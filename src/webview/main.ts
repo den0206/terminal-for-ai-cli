@@ -1,4 +1,5 @@
 import {FitAddon} from '@xterm/addon-fit';
+import {WebLinksAddon} from '@xterm/addon-web-links';
 import {Terminal} from '@xterm/xterm';
 
 // Import shared modules
@@ -33,6 +34,13 @@ import {
 
 declare const acquireVsCodeApi: <State = undefined>() => VSCodeApi<State>;
 
+/**
+ * Ctrl+click is a right-click on macOS, so `ctrlKey` is set there by an
+ * ordinary context-menu gesture. Only Cmd counts as the open modifier on
+ * macOS; every other platform uses Ctrl, matching VS Code's own terminal.
+ */
+const IS_MAC = /mac/i.test(navigator.userAgent);
+
 // ============================================================================
 // Terminal Manager
 // ============================================================================
@@ -55,6 +63,11 @@ class TerminalManager {
     return new Terminal({
       allowTransparency: true,
       convertEol: true,
+      // OSC 8 hyperlinks (emitted by gh, npm, ...). Plain-text URLs are handled
+      // by WebLinksAddon below; both go through the same modifier check.
+      linkHandler: {
+        activate: (event, uri) => this.openLink(event, uri),
+      },
       cursorBlink: true,
       scrollback: SHARED_CONSTANTS.TERMINAL_SCROLLBACK_LINES,
       fontFamily: getComputedVar(
@@ -92,10 +105,22 @@ class TerminalManager {
     });
   }
 
+  private openLink(event: MouseEvent, uri: string): void {
+    if (IS_MAC ? event.metaKey : event.ctrlKey) {
+      this.postMessage({type: 'open-link', payload: {uri}});
+    }
+  }
+
   private createPaneContext(pane: Pane): PaneContext {
     const terminal = this.createTerminalInstance();
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
+    // Cmd (macOS) / Ctrl (Windows, Linux) + click opens the URL in the default
+    // browser, matching VS Code's own terminal. A plain click is ignored so
+    // selecting text over a link stays harmless.
+    terminal.loadAddon(
+      new WebLinksAddon((event, uri) => this.openLink(event, uri))
+    );
     const root = this.dom.paneRoots[pane];
     if (root) {
       terminal.open(root);
@@ -601,7 +626,9 @@ class AppController {
         break;
 
       case 'usage-update':
-        this.dom.usage.textContent = message.payload.text;
+        if (this.dom.usage) {
+          this.dom.usage.textContent = message.payload.text;
+        }
         break;
 
       case 'theme-update':
