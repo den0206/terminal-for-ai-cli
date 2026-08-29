@@ -4,6 +4,7 @@ import {
   clampSplitRatio,
   isShiftEnter,
   isValidViewState,
+  sanitizeText,
 } from './utils';
 
 describe('webview utils', () => {
@@ -132,4 +133,17 @@ describe('webview utils', () => {
     });
   });
 
+  describe('sanitizeText', () => {
+    it('strips control characters from program output', () => {
+      expect(sanitizeText('claude\x1b[31m\x07 code', 40)).toBe(
+        'claude [31m code'
+      );
+    });
+
+    it('truncates to the given length', () => {
+      const short = sanitizeText('y'.repeat(80), 40);
+      expect(short).toHaveLength(40);
+      expect(short.endsWith('…')).toBe(true);
+    });
+  });
 });
