@@ -29,6 +29,7 @@ import {
   getComputedVarFrom,
   isShiftEnter,
   isValidViewState,
+  sanitizeText,
   webviewLog,
   type CancellableFunction,
 } from './lib/utils';
@@ -295,6 +296,11 @@ class AppController {
   private readonly themeController: ThemeController;
   private readonly dragDropHandler: DragDropHandler;
   private readonly debouncedResize: CancellableFunction<() => void>;
+  /** Window title (OSC 0/1/2) most recently reported by each pane's session. */
+  private readonly paneTitles: Record<Pane, string> = {
+    primary: '',
+    secondary: '',
+  };
   // Store event listener references for proper cleanup
   private readonly _eventListeners: Array<{
     target: EventTarget;
@@ -319,6 +325,14 @@ class AppController {
       this.uiState,
       (msg) => this.vscode.postMessage(msg)
     );
+    // OSC 0/1/2: shells and CLIs report what they are running. Showing it next
+    // to the session name is how Ghostty / cmux label their tabs.
+    PANES.forEach((pane) => {
+      this.terminalManager.paneContexts[pane].terminal.onTitleChange((title) => {
+        this.paneTitles[pane] = sanitizeText(title, 40);
+        this.updatePaneLabel(pane, this.uiState.paneSessions[pane]);
+      });
+    });
 
     this.resizeController = new ResizeController(
       this.dom,
@@ -872,6 +886,7 @@ class AppController {
       return;
     }
     this.uiState.paneSessions[pane] = sessionId;
+    this.paneTitles[pane] = '';
     this.terminalManager.resetTerminal(pane);
     if (sessionId) {
       const buffer = this.sessionState.getBuffer(sessionId);
@@ -923,9 +938,11 @@ class AppController {
     if (!label) {
       return;
     }
-    label.textContent = sessionId
+    const name = sessionId
       ? this.sessionState.getSessionLabel(sessionId)
       : 'No session';
+    const title = sessionId ? this.paneTitles[pane] : '';
+    label.textContent = title ? `${name} — ${title}` : name;
   }
 
   private updatePaneActiveStates(): void {

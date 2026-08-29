@@ -197,3 +197,17 @@ export function isShiftEnter(event: KeyboardEvent): boolean {
     !event.metaKey
   );
 }
+
+/**
+ * Strips control characters (including ANSI escapes) from untrusted program
+ * output, such as the window title a shell reports, and caps the length.
+ */
+export function sanitizeText(text: string, maxLength: number): string {
+  const plain = text
+    .replace(/[\x00-\x1f\x7f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return plain.length > maxLength
+    ? `${plain.slice(0, maxLength - 1)}…`
+    : plain;
+}
