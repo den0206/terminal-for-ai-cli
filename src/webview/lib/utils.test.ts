@@ -2,6 +2,7 @@ import {describe, expect, it} from 'vitest';
 import {
   validateTerminalHeight,
   clampSplitRatio,
+  isShiftEnter,
   isValidViewState,
 } from './utils';
 
@@ -98,4 +99,37 @@ describe('webview utils', () => {
       ).toBe(false);
     });
   });
+
+  describe('isShiftEnter', () => {
+    const keyEvent = (overrides: Record<string, unknown>) =>
+      ({
+        type: 'keydown',
+        key: 'Enter',
+        shiftKey: false,
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        ...overrides,
+      }) as unknown as KeyboardEvent;
+
+    it('matches Shift+Enter on keydown', () => {
+      expect(isShiftEnter(keyEvent({shiftKey: true}))).toBe(true);
+    });
+
+    it('ignores a plain Enter and other keys', () => {
+      expect(isShiftEnter(keyEvent({}))).toBe(false);
+      expect(isShiftEnter(keyEvent({key: 'a', shiftKey: true}))).toBe(false);
+    });
+
+    it('ignores other modifiers and keyup', () => {
+      expect(isShiftEnter(keyEvent({shiftKey: true, altKey: true}))).toBe(false);
+      expect(isShiftEnter(keyEvent({shiftKey: true, ctrlKey: true}))).toBe(
+        false
+      );
+      expect(isShiftEnter(keyEvent({shiftKey: true, type: 'keyup'}))).toBe(
+        false
+      );
+    });
+  });
+
 });
