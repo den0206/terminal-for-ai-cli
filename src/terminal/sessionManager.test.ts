@@ -1,3 +1,4 @@
+import {spawn} from 'node-pty';
 import type {IPty} from 'node-pty';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {SHARED_CONSTANTS} from '../shared/constants';
@@ -67,6 +68,7 @@ describe('SessionManager', () => {
 
   afterEach(() => {
     sessionManager.dispose();
+    vi.unstubAllEnvs();
   });
 
   describe('createSession', () => {
@@ -78,6 +80,19 @@ describe('SessionManager', () => {
       expect(typeof info.id).toBe('string');
       expect(info.shell).toBeTruthy();
       expect(sessionManager.getSessionCount()).toBe(1);
+    });
+
+    it('should tell the shell it is a truecolor terminal', () => {
+      vi.stubEnv('TERM_PROGRAM_VERSION', '455');
+      sessionManager.createSession();
+
+      const env = vi.mocked(spawn).mock.calls[0]?.[2]?.env;
+      expect(env).toMatchObject({
+        COLORTERM: 'truecolor',
+        TERM_PROGRAM: 'terminal-for-ai-cli',
+      });
+      // The inherited version belongs to another program, not to us
+      expect(env).not.toHaveProperty('TERM_PROGRAM_VERSION');
     });
 
     it('should create a session with custom shell', () => {

@@ -280,6 +280,13 @@ export class SessionManager implements vscode.Disposable {
       ...process.env,
       ...additionalEnv,
       TERM: additionalEnv?.TERM || process.env.TERM || 'xterm-256color',
+      // xterm.js renders 24-bit color, and CLIs look for TERM_PROGRAM to decide
+      // which terminal features they may use.
+      COLORTERM: additionalEnv?.COLORTERM || 'truecolor',
+      TERM_PROGRAM: additionalEnv?.TERM_PROGRAM || 'terminal-for-ai-cli',
+      // The inherited version describes whichever program launched VS Code, so
+      // keeping it next to our own TERM_PROGRAM would just be misleading.
+      TERM_PROGRAM_VERSION: additionalEnv?.TERM_PROGRAM_VERSION,
       COLUMNS: String(dimensions.cols),
       LINES: String(dimensions.rows),
     };
