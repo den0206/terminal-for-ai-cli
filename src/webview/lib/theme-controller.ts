@@ -110,23 +110,16 @@ export class ThemeController {
       this.dom.themeSelect.value = currentKey;
     }
     const active = this.themeState.getPresetInfo(currentKey);
-    if (this.dom.themeActiveLabel) {
-      this.dom.themeActiveLabel.textContent = active ? active.description : '―';
-    }
+    this.dom.themeSelect.title = active ? active.description : '';
     this.updateThemePreview(active ?? null);
   }
 
   private updateThemePreview(preset: ThemePresetInfo | null): void {
-    if (!this.dom.themePreviewText || !this.dom.themePreviewSwatch) {
+    const swatch = this.dom.themePreviewSwatch;
+    if (!swatch) {
       return;
     }
-    if (preset) {
-      this.dom.themePreviewText.textContent = preset.label;
-      this.dom.themePreviewSwatch.style.background = preset.preview.background;
-      this.dom.themePreviewSwatch.style.color = preset.preview.foreground;
-    } else {
-      this.dom.themePreviewText.textContent = 'Preview';
-      this.dom.themePreviewSwatch.style.background = '';
-    }
+    swatch.style.background = preset?.preview.background ?? '';
+    swatch.style.color = preset?.preview.foreground ?? '';
   }
 }

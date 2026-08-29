@@ -50,7 +50,7 @@ export function buildWebviewHtml({
             height: 100%;
           }
           body {
-            padding: 12px;
+            padding: 8px;
             margin: 0;
             box-sizing: border-box;
             font-family: var(--vscode-font-family);
@@ -59,7 +59,7 @@ export function buildWebviewHtml({
             background: var(--vscode-sideBar-background);
             display: flex;
             flex-direction: column;
-            gap: 0.75rem;
+            gap: 0.5rem;
           }
           .header {
             display: flex;
@@ -192,81 +192,64 @@ export function buildWebviewHtml({
             background: currentColor;
             opacity: 0.6;
           }
-          .theme-picker {
+          .footer {
+            flex: 0 0 auto;
             display: flex;
-            flex-direction: column;
-            gap: 0.25rem;
-          }
-          .theme-picker__control {
-            display: flex;
+            flex-wrap: wrap;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.4rem;
+            border-top: 1px solid color-mix(in srgb, var(--terminal-fg) 20%, transparent);
+            padding-top: 0.5rem;
           }
           .theme-picker__scope {
-            display: inline-block;
-            margin-left: 0.35rem;
             padding: 0.05rem 0.4rem;
             border-radius: 999px;
             border: 1px solid color-mix(in srgb, var(--terminal-fg) 30%, transparent);
             font-size: 0.7rem;
             opacity: 0.85;
-          }
-          .theme-picker__hint {
-            margin: 0;
-            font-size: 0.7rem;
-            opacity: 0.7;
+            white-space: nowrap;
           }
           select[data-theme-select] {
-            flex: 0 0 220px;
+            /* The other items in the footer never shrink, so without a floor
+               the select collapses to nothing in a narrow sidebar. */
+            flex: 1 1 auto;
+            min-width: 5rem;
             background: var(--vscode-dropdown-background);
             color: var(--vscode-dropdown-foreground);
             border: 1px solid var(--vscode-dropdown-border, transparent);
             border-radius: 4px;
-            padding: 0.2rem 0.5rem;
-            font-size: 0.85rem;
+            padding: 0.2rem 0.4rem;
+            font-size: 0.8rem;
           }
           .theme-preview {
             display: inline-flex;
             align-items: center;
-            gap: 0.4rem;
-            padding: 0.35rem 0.5rem;
-            border-radius: 4px;
-            border: 1px solid color-mix(in srgb, var(--terminal-fg) 25%, transparent);
-            background: color-mix(in srgb, var(--terminal-bg) 70%, transparent);
-            font-size: 0.75rem;
-            width: fit-content;
+            gap: 0.35rem;
+            flex: 0 0 auto;
           }
           .theme-preview__swatch {
-            width: 32px;
-            height: 16px;
+            width: 22px;
+            height: 14px;
             border-radius: 999px;
-            box-shadow: inset 0 0 0 1px rgba(0,0,0,0.3);
+            box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
           }
           section {
             flex: 0 0 auto;
           }
-          .clear-all {
-            border-top: 1px solid color-mix(in srgb, var(--terminal-fg) 20%, transparent);
-            padding-top: 0.75rem;
-            margin-top: 0.25rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.4rem;
-          }
           .danger-button {
-            align-self: flex-start;
+            flex: 0 0 auto;
             background: transparent;
             color: var(--vscode-errorForeground, #f48771);
             border: 1px solid var(--vscode-errorForeground, #f48771);
             border-radius: 4px;
-            padding: 0.4rem 0.8rem;
-            font-size: 0.85rem;
+            padding: 0.2rem 0.5rem;
+            font-size: 0.75rem;
+            white-space: nowrap;
             cursor: pointer;
-            transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+            transition: background 0.15s ease, opacity 0.15s ease;
           }
           .danger-button:hover:enabled {
             background: color-mix(in srgb, var(--vscode-errorForeground, #f48771) 15%, transparent);
-            color: var(--vscode-errorForeground, #f48771);
           }
           .danger-button:disabled {
             opacity: 0.5;
@@ -274,6 +257,7 @@ export function buildWebviewHtml({
           }
           .clear-all__confirm {
             display: none;
+            margin-top: 0.4rem;
             flex-direction: column;
             gap: 0.35rem;
             border: 1px solid color-mix(in srgb, var(--terminal-fg) 25%, transparent);
@@ -373,42 +357,33 @@ export function buildWebviewHtml({
           </div>
           <div class="terminal-resizer" data-terminal-resizer aria-label="Adjust height"></div>
         </div>
-        <section class="theme-picker" aria-label="Theme selector">
-          <label style="font-size:0.85rem;display:flex;flex-direction:column;gap:0.35rem;">
-            <span>
-              Theme
-              <span class="theme-picker__scope" data-theme-scope>Terminal 1</span>
-            </span>
-            <div class="theme-picker__control">
-              <select data-theme-select></select>
-              <span data-theme-active-label style="font-size:0.75rem;opacity:0.8;">―</span>
-            </div>
-          </label>
-          <div class="theme-preview" data-theme-preview>
+        <footer class="footer">
+          <span
+            class="theme-preview"
+            title="Applies to the focused terminal. Each terminal keeps its own theme."
+          >
             <span class="theme-preview__swatch" data-theme-swatch></span>
-            <span data-theme-preview-text>Preview</span>
-          </div>
-          <p class="theme-picker__hint">
-            Applies to the focused terminal. Each terminal keeps its own theme.
-          </p>
-        </section>
-        <section class="clear-all" aria-label="Danger zone">
-          <button class="danger-button" data-session-clear-all type="button">
-            Clear all sessions
+            <span class="theme-picker__scope" data-theme-scope>Terminal 1</span>
+          </span>
+          <select data-theme-select aria-label="Terminal theme"></select>
+          <button
+            class="danger-button"
+            data-session-clear-all
+            type="button"
+            title="Closes every running shell in this view."
+          >
+            Clear all
           </button>
-          <p style="margin:0;font-size:0.75rem;opacity:0.8;">
-            Closes every running shell in this view.
-          </p>
-          <div class="clear-all__confirm" data-clear-all-confirm aria-hidden="true">
-            <span style="font-size:0.85rem;">
-              Are you sure you want to close every session?
-            </span>
-            <div class="clear-all__confirm-actions">
-              <button data-clear-all-confirm-accept type="button">Yes, close all</button>
-              <button data-clear-all-confirm-cancel type="button">Cancel</button>
-            </div>
+        </footer>
+        <div class="clear-all__confirm" data-clear-all-confirm aria-hidden="true">
+          <span style="font-size:0.85rem;">
+            Are you sure you want to close every session?
+          </span>
+          <div class="clear-all__confirm-actions">
+            <button data-clear-all-confirm-accept type="button">Yes, close all</button>
+            <button data-clear-all-confirm-cancel type="button">Cancel</button>
           </div>
-        </section>
+        </div>
         <script nonce="${nonce}" src="${scriptUri}"></script>
       </body>
     </html>`;
