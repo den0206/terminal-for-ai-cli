@@ -181,3 +181,19 @@ export function isValidViewState(state: unknown): state is ViewState {
     (s.splitRatio === undefined || typeof s.splitRatio === 'number')
   );
 }
+
+/**
+ * Shift+Enter, with no other modifier. AI CLIs (Claude Code, Codex) read
+ * ESC + CR as "newline inside the prompt"; xterm.js sends a bare CR, which
+ * submits instead.
+ */
+export function isShiftEnter(event: KeyboardEvent): boolean {
+  return (
+    event.type === 'keydown' &&
+    event.key === 'Enter' &&
+    event.shiftKey &&
+    !event.altKey &&
+    !event.ctrlKey &&
+    !event.metaKey
+  );
+}

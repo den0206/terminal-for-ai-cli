@@ -27,6 +27,7 @@ import {
   debounce,
   getComputedVar,
   getComputedVarFrom,
+  isShiftEnter,
   isValidViewState,
   webviewLog,
   type CancellableFunction,
@@ -69,6 +70,9 @@ class TerminalManager {
         activate: (event, uri) => this.openLink(event, uri),
       },
       cursorBlink: true,
+      // Option+B / Option+F word movement, as in Ghostty and iTerm2. The cost
+      // is that Option no longer composes accented characters on macOS.
+      macOptionIsMeta: true,
       scrollback: SHARED_CONSTANTS.TERMINAL_SCROLLBACK_LINES,
       fontFamily: getComputedVar(
         '--vscode-editor-font-family',
@@ -121,6 +125,21 @@ class TerminalManager {
     terminal.loadAddon(
       new WebLinksAddon((event, uri) => this.openLink(event, uri))
     );
+    // AI CLIs take ESC + CR as a newline inside the prompt; xterm.js would
+    // send a bare CR, which submits the prompt instead.
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (!isShiftEnter(event)) {
+        return true;
+      }
+      const sessionId = this.uiState.paneSessions[pane];
+      if (sessionId) {
+        this.postMessage({
+          type: 'terminal-input',
+          payload: {sessionId, data: '\x1b\r'},
+        });
+      }
+      return false;
+    });
     const root = this.dom.paneRoots[pane];
     if (root) {
       terminal.open(root);
