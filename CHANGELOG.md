@@ -36,6 +36,20 @@ Rules:
 
 ## [Unreleased]
 
+### Added
+
+- Shift+Enter now inserts a newline in the prompt of AI CLIs such as Claude Code and Codex, instead
+  of submitting it.
+- The window title reported by the shell (OSC 0/1/2) is shown next to the session name on the pane
+  header.
+
+### Changed
+
+- Option now acts as Meta on macOS, so word-wise shortcuts such as Option+B / Option+F reach the
+  shell. Option no longer composes accented characters in the terminal.
+- Sessions start with `COLORTERM=truecolor` and `TERM_PROGRAM=terminal-for-ai-cli`, so programs can
+  use 24-bit color and detect which terminal they are running in.
+
 ## [0.2.0] - 2026-08-23
 
 ### Security
