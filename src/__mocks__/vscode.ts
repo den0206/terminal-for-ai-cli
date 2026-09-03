@@ -51,6 +51,10 @@ export const commands = {
 export const env = {
   openExternal: vi.fn(),
   uriScheme: 'vscode',
+  clipboard: {
+    writeText: vi.fn(),
+    readText: vi.fn(),
+  },
 };
 
 // vscode.l10n.t: 本体と同じく {0} 形式のプレースホルダを引数で置換する

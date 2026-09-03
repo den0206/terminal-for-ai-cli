@@ -107,6 +107,43 @@ export function buildWebviewHtml({
             opacity: 0.6;
             cursor: default;
           }
+          .link-popover {
+            display: none;
+            position: fixed;
+            z-index: 20;
+            flex-direction: column;
+            gap: 0.35rem;
+            max-width: min(320px, calc(100vw - 16px));
+            padding: 0.5rem;
+            border-radius: 6px;
+            border: 1px solid color-mix(in srgb, var(--terminal-fg) 30%, transparent);
+            background: var(--vscode-editorWidget-background, var(--terminal-bg));
+            color: var(--vscode-editorWidget-foreground, var(--terminal-fg));
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+          }
+          .link-popover[aria-hidden='false'] {
+            display: flex;
+          }
+          .link-popover__url {
+            font-size: 0.72rem;
+            opacity: 0.85;
+            word-break: break-all;
+          }
+          .link-popover__actions {
+            display: flex;
+            gap: 0.35rem;
+          }
+          .link-popover__actions button {
+            flex: 1 1 auto;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            border: 1px solid var(--vscode-button-border, transparent);
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            font-size: 0.75rem;
+            white-space: nowrap;
+            cursor: pointer;
+          }
           .search-bar {
             display: none;
             flex: 0 0 auto;
@@ -470,6 +507,19 @@ export function buildWebviewHtml({
             Clear all
           </button>
         </footer>
+        <div
+          class="link-popover"
+          data-link-popover
+          role="dialog"
+          aria-label="Link actions"
+          aria-hidden="true"
+        >
+          <span class="link-popover__url" data-link-popover-url></span>
+          <div class="link-popover__actions">
+            <button data-link-popover-open type="button">Open in browser</button>
+            <button data-link-popover-copy type="button">Copy URL</button>
+          </div>
+        </div>
         <div class="clear-all__confirm" data-clear-all-confirm aria-hidden="true">
           <span style="font-size:0.85rem;">
             Are you sure you want to close every session?

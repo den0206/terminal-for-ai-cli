@@ -148,8 +148,14 @@ Files up to 10MB and `image/*` types only. Non-image files are ignored.
 ### Opening a link
 
 `Cmd` (macOS) / `Ctrl` (Windows, Linux) + click an `http(s)` URL in the output and it opens in your
-default browser — the same gesture as VS Code's own terminal. A plain click does nothing, so
-selecting text over a link stays harmless. Handy for AI CLI sign-in flows that print an auth URL.
+default browser — the same gesture as VS Code's own terminal. Handy for AI CLI sign-in flows that
+print an auth URL.
+
+A **plain click** opens a small popover next to the link instead, with **Open in browser** and
+**Copy URL**. Copying matters for sign-in flows: the URL often has to be pasted into a browser that
+is already signed in to the right account. The popover only appears for a click that stays put on a
+link with nothing selected, so dragging across a link still selects text. `Esc` or a click elsewhere
+dismisses it, and that `Esc` is not passed on to the CLI.
 
 A confirmation modal shows the full URL before the browser is launched. VS Code itself never prompts
 for links opened by an extension, so this is the extension's own guard — turn it off with
@@ -219,7 +225,7 @@ escalating to `SIGKILL` after 2s) and deletes every saved image.
 | Session naming | `Terminal N` with reuse of freed numbers |
 | Scrollback | 3000 lines in xterm, plus a 2MB per-session buffer replayed on Webview reload |
 | Image drag & drop | `Shift` + drop → saved to global storage, escaped path typed into the shell |
-| Clickable links | `Cmd` / `Ctrl` + click on an `http(s)` URL opens it in the default browser |
+| Clickable links | `Cmd` / `Ctrl` + click opens an `http(s)` URL in the default browser; a plain click offers Open / Copy |
 | Image cleanup | Deleted on session exit, on deactivation, and on startup (orphans, 24h TTL) |
 | Usage readout | Saved-image total and extension host RSS, refreshed every 30s while visible |
 | Scrollback search | `Cmd` / `Ctrl` + `F` searches the focused terminal, with match count, case and regex toggles |

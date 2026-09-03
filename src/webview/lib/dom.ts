@@ -36,6 +36,10 @@ export class DOMElements {
   readonly searchPrevButton = $<HTMLButtonElement>('[data-search-prev]');
   readonly searchNextButton = $<HTMLButtonElement>('[data-search-next]');
   readonly searchCloseButton = $<HTMLButtonElement>('[data-search-close]');
+  readonly linkPopover = $<HTMLDivElement>('[data-link-popover]');
+  readonly linkPopoverUrl = $<HTMLSpanElement>('[data-link-popover-url]');
+  readonly linkPopoverOpen = $<HTMLButtonElement>('[data-link-popover-open]');
+  readonly linkPopoverCopy = $<HTMLButtonElement>('[data-link-popover-copy]');
   readonly clearAllButton = $<HTMLButtonElement>('[data-session-clear-all]');
   readonly clearAllConfirm = $<HTMLDivElement>('[data-clear-all-confirm]');
   readonly clearAllConfirmAccept = $<HTMLButtonElement>(

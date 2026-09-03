@@ -38,6 +38,11 @@ Rules:
 
 ### Added
 
+- A plain click on a terminal link now opens a popover offering **Open in browser** and **Copy URL**,
+  instead of doing nothing. Copying helps with CLI sign-in flows, where the printed URL often has to
+  go into a browser that is already signed in. `Cmd` / `Ctrl` + click still opens the link directly,
+  and dragging across a link still selects text.
+
 - Find in the terminal scrollback. `Cmd` / `Ctrl` + `F` opens a find bar for the focused terminal
   with a match count, next/previous navigation, and case-sensitive and regular-expression toggles.
   `Ctrl` + `F` is claimed by the find bar before it can reach the shell as a forward-character key.
