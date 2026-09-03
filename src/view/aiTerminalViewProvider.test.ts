@@ -725,6 +725,40 @@ describe('AiTerminalViewProvider', () => {
     });
   });
 
+  describe('handleMessage - copy-link', () => {
+    const getMessageHandler = (
+      webviewView: ReturnType<typeof createMockWebviewView>
+    ) =>
+      (webviewView.webview.onDidReceiveMessage as ReturnType<typeof vi.fn>).mock
+        .calls[0][0];
+
+    it('should copy an http(s) link to the clipboard', async () => {
+      const webviewView = createMockWebviewView();
+      provider.resolveWebviewView(webviewView);
+
+      await getMessageHandler(webviewView)({
+        type: 'copy-link',
+        payload: {uri: 'https://example.com/path'},
+      });
+
+      expect(mockEnv.clipboard.writeText).toHaveBeenCalledWith(
+        'https://example.com/path'
+      );
+    });
+
+    it('should not copy a link with an unsupported scheme', async () => {
+      const webviewView = createMockWebviewView();
+      provider.resolveWebviewView(webviewView);
+
+      await getMessageHandler(webviewView)({
+        type: 'copy-link',
+        payload: {uri: 'javascript:alert(1)'},
+      });
+
+      expect(mockEnv.clipboard.writeText).not.toHaveBeenCalled();
+    });
+  });
+
   describe('handleMessage - terminal-resize', () => {
     it('should resize session', async () => {
       const webviewView = createMockWebviewView();

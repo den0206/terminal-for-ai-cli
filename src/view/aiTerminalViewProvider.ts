@@ -201,6 +201,9 @@ export class AiTerminalViewProvider
         case 'open-link':
           await this.handleOpenLink(message.payload.uri);
           break;
+        case 'copy-link':
+          await this.handleCopyLink(message.payload.uri);
+          break;
         case 'image-drop':
           await this.handleImageDrop(message.payload);
           break;
@@ -668,6 +671,20 @@ export class AiTerminalViewProvider
       }
     }
     await vscode.env.openExternal(vscode.Uri.parse(target));
+  }
+
+  /**
+   * Copies a terminal link to the clipboard. The URL goes through the same
+   * scheme check as opening one: an OSC 8 hyperlink can name any scheme, and
+   * the webview is not the last word on what is safe to hand to the user.
+   */
+  private async handleCopyLink(uri: string): Promise<void> {
+    const target = normalizeExternalUrl(uri);
+    if (!target) {
+      Logger.warn('Blocked copying a link with an unsupported scheme');
+      return;
+    }
+    await vscode.env.clipboard.writeText(target);
   }
 
   /** Stores the dropped image and types its escaped path into the session. */

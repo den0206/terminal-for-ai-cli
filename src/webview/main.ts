@@ -11,6 +11,11 @@ import {DOMElements} from './lib/dom';
 import {DragDropHandler} from './lib/drag-drop-handler';
 import {RendererController} from './lib/renderer-controller';
 import {ResizeController} from './lib/resize-controller';
+import {
+  LinkPopoverController,
+  distanceBetween,
+  isPlainClickActivation,
+} from './lib/link-popover';
 import {SearchController, hexColorOr} from './lib/search-controller';
 import {
   SessionStateManager,
@@ -64,6 +69,16 @@ function readInitialRendererType(): RendererType {
 // Terminal Manager
 // ============================================================================
 
+/** ターミナルの外側（AppController）が受け持つ入力の行き先。 */
+type TerminalHandlers = {
+  /** Cmd/Ctrl+F。ターミナルにフォーカスがある間は xterm より先に奪う。 */
+  onFindShortcut(): void;
+  /** リンクのクリック。修飾キーの有無で開くか選ばせるかを決めるのは呼び出し側。 */
+  onLinkClick(event: MouseEvent, uri: string): void;
+  /** Esc を UI 側で消費したなら true。ターミナルへは送らない。 */
+  onEscape(): boolean;
+};
+
 class TerminalManager {
   readonly paneContexts: Record<Pane, PaneContext>;
   private readonly rendererController: RendererController;
@@ -72,8 +87,7 @@ class TerminalManager {
     private readonly dom: DOMElements,
     private readonly uiState: UIStateManager,
     private readonly postMessage: (message: OutboundMessage) => void,
-    /** Cmd/Ctrl+F。ターミナルにフォーカスがある間は xterm より先に奪う。 */
-    private readonly onFindShortcut: () => void,
+    private readonly handlers: TerminalHandlers,
     rendererType: RendererType = 'auto'
   ) {
     this.paneContexts = {
@@ -146,9 +160,7 @@ class TerminalManager {
   }
 
   private openLink(event: MouseEvent, uri: string): void {
-    if (IS_MAC ? event.metaKey : event.ctrlKey) {
-      this.postMessage({type: 'open-link', payload: {uri}});
-    }
+    this.handlers.onLinkClick(event, uri);
   }
 
   private createPaneContext(pane: Pane): PaneContext {
@@ -172,7 +184,15 @@ class TerminalManager {
       if (isFindShortcut(event, IS_MAC)) {
         event.preventDefault();
         event.stopPropagation();
-        this.onFindShortcut();
+        this.handlers.onFindShortcut();
+        return false;
+      }
+      // Esc は AI CLI の中断キー。UI 側が閉じるものを持っているときだけ奪う。
+      if (
+        event.type === 'keydown' &&
+        event.key === 'Escape' &&
+        this.handlers.onEscape()
+      ) {
         return false;
       }
       if (!isShiftEnter(event)) {
@@ -353,6 +373,9 @@ class AppController {
   private readonly themeController: ThemeController;
   private readonly dragDropHandler: DragDropHandler;
   private readonly searchController: SearchController;
+  private readonly linkPopover: LinkPopoverController;
+  /** 直前の mousedown 位置。クリックか選択操作かの判定に使う。 */
+  private lastPointerDown: {x: number; y: number} | undefined;
   private readonly debouncedResize: CancellableFunction<() => void>;
   /** Window title (OSC 0/1/2) most recently reported by each pane's session. */
   private readonly paneTitles: Record<Pane, string> = {
@@ -382,7 +405,17 @@ class AppController {
       this.dom,
       this.uiState,
       (msg) => this.vscode.postMessage(msg),
-      () => this.searchController.openSearch(),
+      {
+        onFindShortcut: () => this.searchController.openSearch(),
+        onLinkClick: (event, uri) => this.handleLinkClick(event, uri),
+        onEscape: () => {
+          if (this.linkPopover.isOpen) {
+            this.linkPopover.dismiss();
+            return true;
+          }
+          return false;
+        },
+      },
       readInitialRendererType()
     );
     // OSC 0/1/2: shells and CLIs report what they are running. Showing it next
@@ -459,6 +492,46 @@ class AppController {
       this.terminalManager.paneContexts[pane].searchAddon.onDidChangeResults(
         (results) => this.searchController.reportResults(pane, results)
       );
+    });
+
+    this.linkPopover = new LinkPopoverController({
+      view: {
+        setUrl: (text) => {
+          if (this.dom.linkPopoverUrl) {
+            this.dom.linkPopoverUrl.textContent = text;
+          }
+        },
+        show: (position) => {
+          const popover = this.dom.linkPopover;
+          if (!popover) {
+            return;
+          }
+          popover.style.left = `${position.x}px`;
+          popover.style.top = `${position.y}px`;
+          popover.setAttribute('aria-hidden', 'false');
+        },
+        hide: () => {
+          this.dom.linkPopover?.setAttribute('aria-hidden', 'true');
+        },
+        getSize: () => {
+          const rect = this.dom.linkPopover?.getBoundingClientRect();
+          // 非表示のうちは実寸が取れないので、CSS の最大幅に近い概算で置く。
+          return {
+            width: rect?.width || 260,
+            height: rect?.height || 76,
+          };
+        },
+      },
+      getViewportSize: () => ({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      }),
+      openLink: (uri) =>
+        this.vscode.postMessage({type: 'open-link', payload: {uri}}),
+      copyLink: (uri) => {
+        this.vscode.postMessage({type: 'copy-link', payload: {uri}});
+        this.setStatus('Link copied to the clipboard.');
+      },
     });
 
     this.dragDropHandler = new DragDropHandler(
@@ -539,6 +612,7 @@ class AppController {
 
   private setupEventListeners(): void {
     this.setupSearchListeners();
+    this.setupLinkPopoverListeners();
     this.addEventListener(
       window,
       'message',
@@ -1050,6 +1124,72 @@ class AppController {
         '#a0a0a0'
       ),
     };
+  }
+
+  /**
+   * `Cmd` / `Ctrl` + クリックは従来どおり即座に開く。プレーンクリックは
+   * アクションを選ばせる。ただしテキスト選択を壊さないよう、押してから離すまでに
+   * 動いた場合と選択が残っている場合は何もしない。
+   */
+  private handleLinkClick(event: MouseEvent, uri: string): void {
+    if (IS_MAC ? event.metaKey : event.ctrlKey) {
+      this.linkPopover.dismiss();
+      this.vscode.postMessage({type: 'open-link', payload: {uri}});
+      return;
+    }
+    const travelledPx = this.lastPointerDown
+      ? distanceBetween(this.lastPointerDown, {
+          x: event.clientX,
+          y: event.clientY,
+        })
+      : 0;
+    const hasSelection = (window.getSelection()?.toString() ?? '').length > 0;
+    if (!isPlainClickActivation({travelledPx, hasSelection})) {
+      return;
+    }
+    this.linkPopover.present(uri, {x: event.clientX, y: event.clientY});
+  }
+
+  private setupLinkPopoverListeners(): void {
+    this.addEventListener(document, 'mousedown', (event: Event) => {
+      const mouseEvent = event as MouseEvent;
+      this.lastPointerDown = {x: mouseEvent.clientX, y: mouseEvent.clientY};
+      const popover = this.dom.linkPopover;
+      const target = mouseEvent.target;
+      if (
+        this.linkPopover.isOpen &&
+        popover &&
+        target instanceof Node &&
+        !popover.contains(target)
+      ) {
+        this.linkPopover.dismiss();
+      }
+    });
+
+    // ターミナル外にフォーカスがあるときの Esc（ターミナル内は xterm 側で奪う）
+    this.addEventListener(document, 'keydown', (event: Event) => {
+      const keyboardEvent = event as KeyboardEvent;
+      if (keyboardEvent.key === 'Escape' && this.linkPopover.isOpen) {
+        keyboardEvent.preventDefault();
+        this.linkPopover.dismiss();
+      }
+    });
+
+    // 画面が動くと座標がずれるだけなので、開き直させる
+    this.addEventListener(window, 'resize', () => {
+      this.linkPopover.dismiss();
+    });
+
+    if (this.dom.linkPopoverOpen) {
+      this.addEventListener(this.dom.linkPopoverOpen, 'click', () => {
+        this.linkPopover.confirmOpen();
+      });
+    }
+    if (this.dom.linkPopoverCopy) {
+      this.addEventListener(this.dom.linkPopoverCopy, 'click', () => {
+        this.linkPopover.confirmCopy();
+      });
+    }
   }
 
   private setupSearchListeners(): void {
