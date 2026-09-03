@@ -166,6 +166,29 @@ the session dropdown) to retarget it. The selection applies immediately and is w
 survives restarts. `Terminal 2` follows `Terminal 1` until it is given a theme of its own. In split
 view both panes are painted with their own palette, including their borders.
 
+### Rendering
+
+The terminal is drawn with a **WebGL renderer** when the GPU is available. Two things change
+compared with the DOM renderer xterm.js uses by default:
+
+- **Box-drawing and block characters are drawn by the terminal itself**, not taken from the font,
+  so the borders that AI CLI TUIs paint stay connected even at the line height used here.
+- **Heavy output costs less CPU**, because glyphs come from a GPU texture atlas instead of a DOM
+  node per row.
+
+`aiTerminal.rendererType` decides what is attempted:
+
+| Value | Behaviour |
+|-------|-----------|
+| `auto` (default) | Try WebGL; fall back to the DOM renderer if it cannot start |
+| `webgl` | Same attempt, stated explicitly — it still falls back rather than failing |
+| `dom` | Never use WebGL |
+
+The fallback is not only for machines without a GPU. A WebGL context can be lost at runtime (driver
+resets, too many live contexts in one window), and this view keeps its contexts alive even while
+hidden. When that happens the addon is detached and both panes continue on the DOM renderer for the
+rest of the session, rather than being retried into a flicker.
+
 ### Closing everything
 
 "Clear all sessions" at the bottom asks for confirmation, then terminates every shell (`SIGTERM`,
@@ -190,6 +213,7 @@ escalating to `SIGKILL` after 2s) and deletes every saved image.
 | Working directory | Workspace root, falling back to the home directory; validated before use |
 | Process cleanup | Whole process tree is killed on close; `SIGTERM` → `SIGKILL` after 2s |
 | Logging | VS Code `LogOutputChannel` ("Terminal For AI CLI" in the Output panel) |
+| GPU rendering | WebGL renderer when the GPU is available, with an automatic fallback to the DOM renderer |
 
 ## Settings
 
@@ -199,6 +223,7 @@ escalating to `SIGKILL` after 2s) and deletes every saved image.
 | Startup commands | `aiTerminal.startupCommands` | Array of commands sent (in order) right after a session starts. Empty entries are dropped. **Machine scope** — a workspace cannot override it. |
 | Confirm before opening a link | `aiTerminal.confirmOpenLink` | Show a modal with the full URL before a clicked link is opened in the browser. Default `true`. |
 | Resource readout | `aiTerminal.showResourceStats` | Show saved-image size and extension host memory in the toolbar. Default `true`. Turning it off also stops the polling behind it. |
+| Renderer | `aiTerminal.rendererType` | How the terminal is drawn: `auto` (default), `webgl` or `dom`. See [Rendering](#rendering). |
 | Theme preset (Terminal 1) | `aiTerminal.themePreset` | One of the nine presets. The Webview dropdown writes to the same setting while Terminal 1 is focused. |
 | Theme preset (Terminal 2) | `aiTerminal.themePresetSecondary` | One of the nine presets, or empty to follow Terminal 1. The Webview dropdown writes to it while Terminal 2 is focused. |
 

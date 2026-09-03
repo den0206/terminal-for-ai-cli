@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type {ThemeSnapshot} from '../shared/types';
+import type {RendererType, ThemeSnapshot} from '../shared/types';
 
 export type {ThemeSnapshot};
 
@@ -10,6 +10,7 @@ type HtmlTemplateParams = {
   iconUri: vscode.Uri;
   scriptUri: vscode.Uri;
   xtermCssUri: vscode.Uri;
+  rendererType: RendererType;
 };
 
 /** Escapes a string for use inside a double-quoted HTML attribute. */
@@ -28,6 +29,7 @@ export function buildWebviewHtml({
   iconUri,
   scriptUri,
   xtermCssUri,
+  rendererType,
 }: HtmlTemplateParams) {
   return /* html */ `<!DOCTYPE html>
     <html lang="en">
@@ -286,7 +288,7 @@ export function buildWebviewHtml({
           }
         </style>
       </head>
-      <body>
+      <body data-renderer-type="${escapeAttribute(rendererType)}">
         <header class="header">
           <div style="display:flex;align-items:center;gap:0.5rem;">
             <img src="${iconUri}" alt="Terminal For AI CLI" width="20" height="20" />
