@@ -1,5 +1,6 @@
 import {FitAddon} from '@xterm/addon-fit';
 import {SearchAddon} from '@xterm/addon-search';
+import {SerializeAddon} from '@xterm/addon-serialize';
 import {WebglAddon} from '@xterm/addon-webgl';
 import {WebLinksAddon} from '@xterm/addon-web-links';
 import {Terminal} from '@xterm/xterm';
@@ -16,6 +17,7 @@ import {
   distanceBetween,
   isPlainClickActivation,
 } from './lib/link-popover';
+import {formatRestoredScrollback} from './lib/scrollback-restore';
 import {SearchController, hexColorOr} from './lib/search-controller';
 import {
   SessionStateManager,
@@ -28,6 +30,8 @@ import type {
   VSCodeApi,
   InboundMessage,
   RendererType,
+  ScrollbackSnapshot,
+  TerminalSlot,
   OutboundMessage,
   ViewState,
   ViewMode,
@@ -169,6 +173,8 @@ class TerminalManager {
     terminal.loadAddon(fitAddon);
     const searchAddon = new SearchAddon();
     terminal.loadAddon(searchAddon);
+    const serializeAddon = new SerializeAddon();
+    terminal.loadAddon(serializeAddon);
     // Cmd (macOS) / Ctrl (Windows, Linux) + click opens the URL in the default
     // browser, matching VS Code's own terminal. A plain click is ignored so
     // selecting text over a link stays harmless.
@@ -230,7 +236,17 @@ class TerminalManager {
         });
       }
     });
-    return {terminal, fitAddon, searchAddon};
+    return {terminal, fitAddon, searchAddon, serializeAddon};
+  }
+
+  /** 再起動をまたいで保存するためのスナップショット。ANSI ごと再生できる文字列。 */
+  serializePane(pane: Pane, scrollback: number): string {
+    return this.paneContexts[pane].serializeAddon.serialize({scrollback});
+  }
+
+  /** 復元した履歴を、生きている出力と混ざらないよう区切り付きで書く。 */
+  writeRestoredScrollback(pane: Pane, snapshot: ScrollbackSnapshot): void {
+    this.paneContexts[pane].terminal.write(formatRestoredScrollback(snapshot));
   }
 
   getPaneDimensions(pane: Pane): {cols: number; rows: number} {
@@ -376,6 +392,13 @@ class AppController {
   private readonly linkPopover: LinkPopoverController;
   /** 直前の mousedown 位置。クリックか選択操作かの判定に使う。 */
   private lastPointerDown: {x: number; y: number} | undefined;
+  /** 出力が落ち着いてからスナップショットを取るためのペインごとのタイマー */
+  private readonly snapshotSchedulers: Record<
+    Pane,
+    CancellableFunction<() => void>
+  >;
+  /** 復元待ちの履歴。対応するスロットのセッションが出来た時点で書き込む。 */
+  private readonly pendingRestores = new Map<TerminalSlot, ScrollbackSnapshot>();
   private readonly debouncedResize: CancellableFunction<() => void>;
   /** Window title (OSC 0/1/2) most recently reported by each pane's session. */
   private readonly paneTitles: Record<Pane, string> = {
@@ -540,6 +563,17 @@ class AppController {
       (target, event, handler) => this.addEventListener(target, event, handler)
     );
 
+    this.snapshotSchedulers = {
+      primary: debounce(
+        () => this.captureScrollback('primary'),
+        SHARED_CONSTANTS.SCROLLBACK_RESTORE.SAVE_DEBOUNCE_MS
+      ),
+      secondary: debounce(
+        () => this.captureScrollback('secondary'),
+        SHARED_CONSTANTS.SCROLLBACK_RESTORE.SAVE_DEBOUNCE_MS
+      ),
+    };
+
     this.debouncedResize = debounce(() => {
       this.terminalManager.fitVisibleTerminals();
       this.notifyResize();
@@ -562,6 +596,7 @@ class AppController {
   private cleanup(): void {
     // Cancel pending resize operations
     this.debouncedResize.cancel();
+    PANES.forEach((pane) => this.snapshotSchedulers[pane].cancel());
 
     // Clean up any active drag operation listeners
     this.resizeController.cleanupActiveDrags();
@@ -781,6 +816,7 @@ class AppController {
             message.payload.id
           )} (${message.payload.shell})`
         );
+        this.applyPendingRestore(message.payload.id);
         break;
 
       case 'session-data':
@@ -797,6 +833,7 @@ class AppController {
           message.payload.sessionId,
           message.payload.data
         );
+        this.scheduleScrollbackSnapshot(message.payload.sessionId);
         break;
 
       case 'session-exited':
@@ -851,6 +888,14 @@ class AppController {
         break;
       case 'renderer-update':
         this.terminalManager.setRendererType(message.payload.rendererType);
+        break;
+      case 'restore-scrollback':
+        // 対応するスロットのセッションが既にあれば今すぐ、無ければ出来たときに書く。
+        this.pendingRestores.set(
+          message.payload.slot,
+          message.payload.snapshot
+        );
+        this.applyPendingRestoreForSlot(message.payload.slot);
         break;
 
       case 'all-sessions-cleared':
@@ -1090,6 +1135,72 @@ class AppController {
     if (paneElement) {
       paneElement.setAttribute('data-pane-visible', visible ? 'true' : 'false');
     }
+  }
+
+  /**
+   * 前回の履歴を、そのスロットのセッションが出来たペインに書き込む。
+   * PTY は復活しないので、これは読める履歴を戻しているだけ。
+   */
+  /** 出力が止まってからスナップショットを取る。バースト中は何度でも先送りされる。 */
+  private scheduleScrollbackSnapshot(sessionId: string): void {
+    const pane = this.uiState.getPaneForSession(sessionId);
+    if (pane) {
+      this.snapshotSchedulers[pane]();
+    }
+  }
+
+  private applyPendingRestore(sessionId: string): void {
+    const slot = this.sessionState.getSessionSlot(sessionId);
+    const snapshot = slot ? this.pendingRestores.get(slot) : undefined;
+    if (!slot || !snapshot) {
+      return;
+    }
+    const pane = this.uiState.getPaneForSession(sessionId);
+    if (!pane) {
+      return;
+    }
+    this.pendingRestores.delete(slot);
+    this.terminalManager.writeRestoredScrollback(pane, snapshot);
+  }
+
+  /** 復元がセッション生成より後に届いた場合の受け口。 */
+  private applyPendingRestoreForSlot(slot: TerminalSlot): void {
+    const sessionId = this.sessionState.sessionIds.find(
+      (id) => this.sessionState.getSessionSlot(id) === slot
+    );
+    if (sessionId) {
+      this.applyPendingRestore(sessionId);
+    }
+  }
+
+  /**
+   * ペインの内容を拡張ホストに預ける。出力のたびではなく、止まってから。
+   *
+   * 大きすぎるスナップショットは行数を減らして取り直し、それでも収まらなければ諦める
+   * （履歴のために毎回 MB 単位のメッセージを流す価値はない）。
+   */
+  private captureScrollback(pane: Pane): void {
+    const {LINES, FALLBACK_LINES, MAX_SNAPSHOT_CHARS} =
+      SHARED_CONSTANTS.SCROLLBACK_RESTORE;
+    const sessionId = this.uiState.paneSessions[pane];
+    const slot = sessionId
+      ? this.sessionState.getSessionSlot(sessionId)
+      : undefined;
+    if (!sessionId || !slot) {
+      return;
+    }
+    let data = this.terminalManager.serializePane(pane, LINES);
+    if (data.length > MAX_SNAPSHOT_CHARS) {
+      data = this.terminalManager.serializePane(pane, FALLBACK_LINES);
+    }
+    if (data.length === 0 || data.length > MAX_SNAPSHOT_CHARS) {
+      return;
+    }
+    const {cols, rows} = this.terminalManager.getPaneDimensions(pane);
+    this.vscode.postMessage<OutboundMessage>({
+      type: 'session-snapshot',
+      payload: {slot, data, cols, rows},
+    });
   }
 
   /** 検索・テーマの対象になるペイン。セッション未割り当てなら primary。 */

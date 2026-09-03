@@ -89,6 +89,27 @@ export function isRendererType(value: unknown): value is RendererType {
 }
 
 // ============================================================================
+// Scrollback Restore Types
+// ============================================================================
+
+/**
+ * 前回のエディタ終了時に保存されたスクロールバック。
+ *
+ * PTY は復活しないので、これは「読める履歴」でしかない。復元先はセッション ID では
+ * なくスロット（Terminal 1 / 2）単位。セッション ID は起動ごとに変わるため。
+ */
+export type ScrollbackSnapshot = {
+  /** xterm の serialize アドオンが出す、再生可能な ANSI 付きテキスト */
+  data: string;
+  cols: number;
+  rows: number;
+  /** 保存時のターミナル名（`Terminal 1` など） */
+  label?: string;
+  /** epoch ミリ秒 */
+  savedAt: number;
+};
+
+// ============================================================================
 // Session Types
 // ============================================================================
 
@@ -125,6 +146,10 @@ export type InboundMessage =
   | {type: 'theme-update'; payload: ThemeUpdatePayload}
   | {type: 'usage-update'; payload: {text: string}}
   | {type: 'renderer-update'; payload: {rendererType: RendererType}}
+  | {
+      type: 'restore-scrollback';
+      payload: {slot: TerminalSlot; snapshot: ScrollbackSnapshot};
+    }
   | {type: 'all-sessions-cleared'};
 
 /**
@@ -144,6 +169,10 @@ export type OutboundMessage =
   | {type: 'theme-select'; payload: {presetKey: string; slot?: number}}
   | {type: 'open-link'; payload: {uri: string}}
   | {type: 'copy-link'; payload: {uri: string}}
+  | {
+      type: 'session-snapshot';
+      payload: {slot: TerminalSlot; data: string; cols: number; rows: number};
+    }
   | {
       type: 'image-drop';
       payload: {

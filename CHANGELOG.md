@@ -38,6 +38,12 @@ Rules:
 
 ### Added
 
+- The scrollback of each terminal now survives an editor restart. A snapshot is written to this
+  window's storage while the terminal is idle and replayed on the next launch, framed by rules that
+  mark it as read-only history — the shell behind it is gone, and a new one starts underneath.
+  Snapshots are per terminal number, deleted by "Clear all sessions" and swept after 7 days, and can
+  be turned off with `aiTerminal.restoreScrollback`.
+
 - A plain click on a terminal link now opens a popover offering **Open in browser** and **Copy URL**,
   instead of doing nothing. Copying helps with CLI sign-in flows, where the printed URL often has to
   go into a browser that is already signed in. `Cmd` / `Ctrl` + click still opens the link directly,

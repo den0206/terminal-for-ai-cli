@@ -303,6 +303,24 @@ describe('AiTerminalViewProvider', () => {
     );
   }
 
+  /**
+   * 呼び出し回数ではなく「その種類のメッセージが届くまで」待つ。
+   * 送信までに挟まる非同期処理（画像やスクロールバックの削除）が増えても壊れない。
+   */
+  async function waitForPostedType(
+    postMessageMock: ReturnType<typeof vi.fn>,
+    type: string,
+    timeout: number = 10000
+  ): Promise<void> {
+    await waitForCondition(
+      () =>
+        postMessageMock.mock.calls.some(
+          (call) => (call[0] as {type?: string} | undefined)?.type === type
+        ),
+      timeout
+    );
+  }
+
   describe('resolveWebviewView', () => {
     it('should set webview HTML', () => {
       const webviewView = createMockWebviewView();
@@ -864,9 +882,9 @@ describe('AiTerminalViewProvider', () => {
       >;
       postMessageMock.mockClear();
 
-      // Dispose all (clearAllImages runs async before postMessage now)
+      // 画像とスクロールバックの削除を挟むため、種別で待つ
       await messageHandler({type: 'dispose-all-sessions'});
-      await waitForPostMessage(postMessageMock, 1);
+      await waitForPostedType(postMessageMock, 'all-sessions-cleared');
 
       // Should have sent all-sessions-cleared message
       expect(postMessageMock).toHaveBeenCalledWith(

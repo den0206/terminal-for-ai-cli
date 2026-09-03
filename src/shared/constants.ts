@@ -54,5 +54,19 @@ export const SHARED_CONSTANTS = {
 
   /** Interval for refreshing the usage readout in the Webview toolbar */
   USAGE_POLL_INTERVAL_MS: 30_000,
+
+  /** Scrollback carried across editor restarts */
+  SCROLLBACK_RESTORE: {
+    /** Quiet period after the last output before a snapshot is taken */
+    SAVE_DEBOUNCE_MS: 3_000,
+    /** Lines serialized into a snapshot */
+    LINES: 3000,
+    /** Retry with fewer lines when the first snapshot is over the cap */
+    FALLBACK_LINES: 1000,
+    /** Snapshots larger than this are dropped rather than written to disk */
+    MAX_SNAPSHOT_CHARS: 2_000_000,
+    /** Snapshots older than this are deleted at startup (7 days) */
+    TTL_MS: 7 * 24 * 60 * 60 * 1000,
+  },
 } as const;
 
