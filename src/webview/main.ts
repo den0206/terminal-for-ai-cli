@@ -244,9 +244,26 @@ class TerminalManager {
     return this.paneContexts[pane].serializeAddon.serialize({scrollback});
   }
 
-  /** 復元した履歴を、生きている出力と混ざらないよう区切り付きで書く。 */
-  writeRestoredScrollback(pane: Pane, snapshot: ScrollbackSnapshot): void {
-    this.paneContexts[pane].terminal.write(formatRestoredScrollback(snapshot));
+  /**
+   * 復元した履歴を書き、書き終わった時点の行位置を返す。
+   * `terminal.write` は非同期なので、行数はコールバックでしか数えられない。
+   */
+  writeRestoredScrollback(
+    pane: Pane,
+    text: string,
+    onWritten: (lineCount: number) => void
+  ): void {
+    const {terminal} = this.paneContexts[pane];
+    terminal.write(text, () => {
+      const buffer = terminal.buffer.active;
+      onWritten(buffer.baseY + buffer.cursorY);
+    });
+  }
+
+  /** これまでに何行書かれたか。復元済みの履歴を数え直さないための目印。 */
+  getLineCount(pane: Pane): number {
+    const buffer = this.paneContexts[pane].terminal.buffer.active;
+    return buffer.baseY + buffer.cursorY;
   }
 
   getPaneDimensions(pane: Pane): {cols: number; rows: number} {
@@ -399,6 +416,19 @@ class AppController {
   >;
   /** 復元待ちの履歴。対応するスロットのセッションが出来た時点で書き込む。 */
   private readonly pendingRestores = new Map<TerminalSlot, ScrollbackSnapshot>();
+  /**
+   * 書き込み済みの復元履歴。`assignPane` はターミナルを作り直して
+   * セッションバッファだけを流し直すので、組み直しのたびに書き戻す。
+   */
+  private readonly restoredHistory = new Map<TerminalSlot, string>();
+  /**
+   * 復元履歴の直後の行位置。次のスナップショットはここから先だけを取る
+   * （履歴を取り直すと、再起動のたびに区切りが入れ子で積み上がる）。
+   */
+  private readonly restoreBoundary: Record<Pane, number> = {
+    primary: 0,
+    secondary: 0,
+  };
   private readonly debouncedResize: CancellableFunction<() => void>;
   /** Window title (OSC 0/1/2) most recently reported by each pane's session. */
   private readonly paneTitles: Record<Pane, string> = {
@@ -902,6 +932,9 @@ class AppController {
         this.uiState.resetClearAllState();
         this.toggleClearAllConfirm(false);
         this.sessionState.clearAll();
+        // 拡張ホスト側は保存済みスナップショットを消しているので、こちらも捨てる
+        this.pendingRestores.clear();
+        this.restoredHistory.clear();
         this.syncPaneAssignments(true);
         this.persistState();
         this.setStatus('All sessions cleared');
@@ -1118,7 +1151,12 @@ class AppController {
     this.uiState.paneSessions[pane] = sessionId;
     this.paneTitles[pane] = '';
     this.terminalManager.resetTerminal(pane);
+    this.restoreBoundary[pane] = 0;
     if (sessionId) {
+      this.writeRestoredHistory(
+        pane,
+        this.sessionState.getSessionSlot(sessionId)
+      );
       const buffer = this.sessionState.getBuffer(sessionId);
       if (buffer) {
         this.terminalManager.writeToTerminal(pane, buffer);
@@ -1137,10 +1175,6 @@ class AppController {
     }
   }
 
-  /**
-   * 前回の履歴を、そのスロットのセッションが出来たペインに書き込む。
-   * PTY は復活しないので、これは読める履歴を戻しているだけ。
-   */
   /** 出力が止まってからスナップショットを取る。バースト中は何度でも先送りされる。 */
   private scheduleScrollbackSnapshot(sessionId: string): void {
     const pane = this.uiState.getPaneForSession(sessionId);
@@ -1149,6 +1183,10 @@ class AppController {
     }
   }
 
+  /**
+   * 前回の履歴を、そのスロットのセッションが出来たペインに書き込む。
+   * PTY は復活しないので、これは読める履歴を戻しているだけ。
+   */
   private applyPendingRestore(sessionId: string): void {
     const slot = this.sessionState.getSessionSlot(sessionId);
     const snapshot = slot ? this.pendingRestores.get(slot) : undefined;
@@ -1160,7 +1198,22 @@ class AppController {
       return;
     }
     this.pendingRestores.delete(slot);
-    this.terminalManager.writeRestoredScrollback(pane, snapshot);
+    this.restoredHistory.set(slot, formatRestoredScrollback(snapshot));
+    this.writeRestoredHistory(pane, slot);
+  }
+
+  /**
+   * 復元履歴をペインの先頭に書き戻す。`assignPane` がターミナルを作り直す経路
+   * （分割の切り替え、セッション終了）でも通るので、履歴はそこで消えない。
+   */
+  private writeRestoredHistory(pane: Pane, slot: TerminalSlot | undefined): void {
+    const history = slot ? this.restoredHistory.get(slot) : undefined;
+    if (!history) {
+      return;
+    }
+    this.terminalManager.writeRestoredScrollback(pane, history, (lineCount) => {
+      this.restoreBoundary[pane] = lineCount;
+    });
   }
 
   /** 復元がセッション生成より後に届いた場合の受け口。 */
@@ -1189,9 +1242,18 @@ class AppController {
     if (!sessionId || !slot) {
       return;
     }
-    let data = this.terminalManager.serializePane(pane, LINES);
+    // 復元した履歴まで保存し直すと、再起動のたびに区切りが入れ子で積み上がる。
+    // 復元直後の行位置から先、つまりこのセッションが実際に出した分だけを取る。
+    // ponytail: 行位置は折り返しで前後するので厳密ではない。ずれても混ざるのは
+    // 高々 1 画面分で、回数を重ねても積み上がらない。
+    const produced = this.terminalManager.getLineCount(pane) - this.restoreBoundary[pane];
+    const lines = Math.max(0, Math.min(LINES, produced));
+    let data = this.terminalManager.serializePane(pane, lines);
     if (data.length > MAX_SNAPSHOT_CHARS) {
-      data = this.terminalManager.serializePane(pane, FALLBACK_LINES);
+      data = this.terminalManager.serializePane(
+        pane,
+        Math.min(FALLBACK_LINES, lines)
+      );
     }
     if (data.length === 0 || data.length > MAX_SNAPSHOT_CHARS) {
       return;
