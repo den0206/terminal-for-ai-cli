@@ -2,10 +2,12 @@
  * Quotes a path so the shell takes it as a single literal argument.
  *
  * POSIX single quotes are literal, so the standard `'\''` break-out is enough
- * for any byte. Windows has no such construct: inside double quotes `cmd.exe`
- * still expands `%VAR%` and (with delayed expansion) `!VAR!`, and a `"` cannot
- * be escaped portably across cmd.exe and PowerShell. Those characters are
- * rejected instead of being escaped wrongly.
+ * for any byte. Windows has no such construct, and the same path has to survive
+ * whichever shell the user picked: inside double quotes `cmd.exe` still expands
+ * `%VAR%` and (with delayed expansion) `!VAR!`, PowerShell still expands `$VAR`
+ * and runs `$(...)` and treats `` ` `` as its escape character, and a `"` cannot
+ * be escaped portably across the two. Those characters are rejected instead of
+ * being escaped wrongly.
  *
  * Rejection used to be unreachable for saved images (our own storage directory
  * plus a sanitized filename), but dropped workspace files are named by the user,
@@ -16,7 +18,7 @@ export function escapeShellPath(
   platform: NodeJS.Platform = process.platform
 ): string {
   if (platform === 'win32') {
-    if (/["%!]/.test(filePath)) {
+    if (/["%!$`]/.test(filePath)) {
       throw new Error(
         `Path contains characters that cannot be quoted safely on Windows: ${filePath}`
       );
