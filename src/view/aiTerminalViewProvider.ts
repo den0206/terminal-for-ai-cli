@@ -20,6 +20,7 @@ import {
 import {resolveWorkingDirectory} from '../utils/workingDirectory';
 import {ThemeSnapshot, buildWebviewHtml} from './htmlTemplate';
 import {ImageManager} from './imageManager';
+import {ScrollbackStore} from './scrollbackStore';
 import {THEME_CONFIG_KEYS, getThemeSnapshot} from './themeSnapshot';
 
 // Extension 視点: 送信 = WebviewInboundMessage (shared), 受信 = WebviewOutboundMessage (shared)
@@ -51,6 +52,12 @@ export class AiTerminalViewProvider
   /** セッション ID → ターミナル番号（Terminal 1 / Terminal 2） */
   private readonly sessionSlots = new Map<string, TerminalSlot>();
   private readonly imageManager: ImageManager;
+  private readonly scrollbackStore: ScrollbackStore;
+  /**
+   * 復元は拡張ホストの 1 起動につき 1 回だけ。Webview の再読み込みでは
+   * 生きているセッションのバッファがそのまま再生されるので、二重に流さない。
+   */
+  private scrollbackRestored = false;
   private usageTimer?: ReturnType<typeof setInterval>;
 
   constructor(
@@ -58,6 +65,9 @@ export class AiTerminalViewProvider
     private readonly sessionManager: SessionManager,
   ) {
     this.imageManager = new ImageManager(context);
+    this.scrollbackStore = new ScrollbackStore(context);
+    // 起動時に期限切れを掃除する（画像の孤児掃除と同じ位置づけ）
+    void this.scrollbackStore.pruneExpired();
     this.disposables.push(
       this.sessionManager.onDidWriteData(({id, data}) => {
         this.postMessage({
@@ -88,6 +98,13 @@ export class AiTerminalViewProvider
         }
         if (event.affectsConfiguration('aiTerminal.rendererType')) {
           this.postRendererUpdate();
+        }
+        if (
+          event.affectsConfiguration('aiTerminal.restoreScrollback') &&
+          !this.isScrollbackRestoreEnabled()
+        ) {
+          // オフにした人は、既に書かれた履歴も消えることを期待する
+          void this.scrollbackStore.clear();
         }
       }),
     );
@@ -162,6 +179,9 @@ export class AiTerminalViewProvider
           this.postThemeUpdate();
           this.startUsagePolling();
           this.postExistingSessions();
+          // ディスク読み取りの完了を待たずに最初のシェルを起こす。復元は届いた時点で
+          // 反映されるので、セッション生成との前後関係に依存しない。
+          void this.restoreScrollback();
           this.ensureInitialSession();
           break;
         case 'request-new-session':
@@ -203,6 +223,9 @@ export class AiTerminalViewProvider
           break;
         case 'copy-link':
           await this.handleCopyLink(message.payload.uri);
+          break;
+        case 'session-snapshot':
+          await this.handleSessionSnapshot(message.payload);
           break;
         case 'image-drop':
           await this.handleImageDrop(message.payload);
@@ -570,6 +593,61 @@ export class AiTerminalViewProvider
   }
 
   /** Creates a session on first webview-ready if none exist. */
+  private isScrollbackRestoreEnabled(): boolean {
+    return vscode.workspace
+      .getConfiguration('aiTerminal')
+      .get<boolean>('restoreScrollback', true);
+  }
+
+  /**
+   * Stores the scrollback of one terminal so it can be read after a restart.
+   * The webview decides when a snapshot is worth taking; this only persists it.
+   */
+  private async handleSessionSnapshot(payload: {
+    slot: TerminalSlot;
+    data: string;
+    cols: number;
+    rows: number;
+  }): Promise<void> {
+    if (!this.isScrollbackRestoreEnabled() || !isTerminalSlot(payload.slot)) {
+      return;
+    }
+    await this.scrollbackStore.save(payload.slot, {
+      data: payload.data,
+      cols: payload.cols,
+      rows: payload.rows,
+      label: labelForSlot(payload.slot),
+      savedAt: Date.now(),
+    });
+  }
+
+  /**
+   * Sends the stored scrollback to the webview, once per activation.
+   *
+   * Skipped when sessions are already running: that means the webview reloaded
+   * while the extension host stayed up, and their live buffers are replayed
+   * instead. The restored text is history only — the PTY behind it is gone.
+   */
+  private async restoreScrollback(): Promise<void> {
+    if (
+      this.scrollbackRestored ||
+      !this.isScrollbackRestoreEnabled() ||
+      this.sessionManager.getSessionCount() > 0
+    ) {
+      return;
+    }
+    this.scrollbackRestored = true;
+    for (const slot of TERMINAL_SLOTS) {
+      const snapshot = await this.scrollbackStore.load(slot);
+      if (snapshot) {
+        this.postMessage({
+          type: 'restore-scrollback',
+          payload: {slot, snapshot},
+        });
+      }
+    }
+  }
+
   private ensureInitialSession() {
     if (this.initialSessionEnsured) {
       return;
@@ -586,6 +664,7 @@ export class AiTerminalViewProvider
     }
     this.sessionSlots.clear();
     await this.imageManager.clearAllImages();
+    await this.scrollbackStore.clear();
     this.postMessage({type: 'all-sessions-cleared'});
     this.postSessionCount();
   }

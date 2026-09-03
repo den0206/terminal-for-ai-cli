@@ -188,6 +188,18 @@ the session dropdown) to retarget it. The selection applies immediately and is w
 survives restarts. `Terminal 2` follows `Terminal 1` until it is given a theme of its own. In split
 view both panes are painted with their own palette, including their borders.
 
+### Reopening after a restart
+
+The scrollback of each terminal is written to this window's storage while it is idle, and read back
+when the editor starts again. What comes back is **history only** — the shell behind it exited with
+the previous process, so the restored text is framed by two dim rules that say so. A new shell
+starts underneath as usual.
+
+Snapshots are per terminal number (`Terminal 1` / `Terminal 2`), like themes, since session ids
+change on every launch. They are deleted by "Clear all sessions", when the setting is turned off, and
+at startup once they are older than 7 days. Set `aiTerminal.restoreScrollback` to `false` to keep
+nothing on disk.
+
 ### Rendering
 
 The terminal is drawn with a **WebGL renderer** when the GPU is available. Two things change
@@ -228,6 +240,7 @@ escalating to `SIGKILL` after 2s) and deletes every saved image.
 | Clickable links | `Cmd` / `Ctrl` + click opens an `http(s)` URL in the default browser; a plain click offers Open / Copy |
 | Image cleanup | Deleted on session exit, on deactivation, and on startup (orphans, 24h TTL) |
 | Usage readout | Saved-image total and extension host RSS, refreshed every 30s while visible |
+| Scrollback restore | The scrollback of each terminal survives an editor restart, as read-only history |
 | Scrollback search | `Cmd` / `Ctrl` + `F` searches the focused terminal, with match count, case and regex toggles |
 | Theme presets | `modern`, `basic`, `clearDark`, `clearLight`, `grass`, `homebrew`, `manPage`, `ocean`, `pro` |
 | Per-terminal themes | `Terminal 1` and `Terminal 2` each hold their own preset; the dropdown targets the focused terminal |
@@ -246,6 +259,7 @@ escalating to `SIGKILL` after 2s) and deletes every saved image.
 | Startup commands | `aiTerminal.startupCommands` | Array of commands sent (in order) right after a session starts. Empty entries are dropped. **Machine scope** — a workspace cannot override it. |
 | Confirm before opening a link | `aiTerminal.confirmOpenLink` | Show a modal with the full URL before a clicked link is opened in the browser. Default `true`. |
 | Resource readout | `aiTerminal.showResourceStats` | Show saved-image size and extension host memory in the toolbar. Default `true`. Turning it off also stops the polling behind it. |
+| Restore scrollback | `aiTerminal.restoreScrollback` | Keep each terminal's scrollback on disk and read it back after a restart. Default `true`. **Machine scope.** |
 | Renderer | `aiTerminal.rendererType` | How the terminal is drawn: `auto` (default), `webgl` or `dom`. See [Rendering](#rendering). |
 | Theme preset (Terminal 1) | `aiTerminal.themePreset` | One of the nine presets. The Webview dropdown writes to the same setting while Terminal 1 is focused. |
 | Theme preset (Terminal 2) | `aiTerminal.themePresetSecondary` | One of the nine presets, or empty to follow Terminal 1. The Webview dropdown writes to it while Terminal 2 is focused. |
@@ -311,6 +325,11 @@ pays a multi-megabyte copy per chunk.
   `terminal.integrated.profiles`.
 - **Working directory validation** — checked for existence before use.
 - **Image validation** — MIME type, 10MB size limit, base64 integrity, and filename sanitization against path traversal.
+- **Stored scrollback** — terminal output is written to this window's storage when
+  `aiTerminal.restoreScrollback` is on, so whatever a CLI printed (tokens included) is on disk until
+  it is cleared. It stays in workspace storage, never leaves the machine, and is deleted by "Clear
+  all sessions", by turning the setting off, and after 7 days. A snapshot read back from disk is
+  validated and capped before it is written into a terminal.
 - **External links** — only `http` / `https` URLs are handed to the OS; anything else is dropped with a warning.
 - **Shell escaping** — dropped image paths are quoted per platform before being written to the shell:
   single quotes on POSIX, double quotes on Windows, and a path containing `"`, `%`, or `!` is
@@ -324,7 +343,7 @@ pays a multi-megabyte copy per chunk.
 | Item | Description |
 |------|-------------|
 | 2 sessions max | By design (`MAX_SESSIONS`), to keep the sidebar usable. |
-| No session restore across restarts | A Webview reload replays the buffer, but restarting the IDE kills the OS processes. |
+| Shells do not survive a restart | The scrollback comes back as read-only history, but the OS processes are gone: a restart always starts a new shell. |
 | Windows PTY quirks | ConPTY/winpty is stable for most work, but full-screen or cursor-heavy TUIs can differ from the OS terminal. |
 | Resize latency | Resize is propagated immediately, though Webview layout recalculation can add a small delay. |
 | Presets only | User-defined palettes are not supported yet. |
