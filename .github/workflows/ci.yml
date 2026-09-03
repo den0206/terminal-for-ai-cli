@@ -140,6 +140,9 @@ jobs:
       - name: Build extension
         run: npm run compile
 
+      # パッケージングが通ることの確認だけで、成果物は残さない。ここで作る VSIX は
+      # ホスト以外の prebuild が揃わず macOS では起動しないため、配布物にはならない。
+      # 試用できる VSIX は Export VSIX ワークフローを手動実行して取る。
       - name: Package VSIX
         run: npm run package
 
@@ -147,11 +150,4 @@ jobs:
       # 本文が空でもフォールバックが効くので、見出しが出ることだけ確かめる。
       - name: Smoke-test release notes generation
         run: bash scripts/gen-release-notes.sh 9.9.9 --stdout | grep -q "## What's Changed"
-
-      - name: Upload VSIX artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: vsix-package
-          path: vsix/*.vsix
-          retention-days: 7
 
