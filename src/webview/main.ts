@@ -1,11 +1,14 @@
 import {FitAddon} from '@xterm/addon-fit';
+import {WebglAddon} from '@xterm/addon-webgl';
 import {WebLinksAddon} from '@xterm/addon-web-links';
 import {Terminal} from '@xterm/xterm';
 
 // Import shared modules
 import {SHARED_CONSTANTS} from '../shared/constants';
+import {isRendererType} from '../shared/types';
 import {DOMElements} from './lib/dom';
 import {DragDropHandler} from './lib/drag-drop-handler';
+import {RendererController} from './lib/renderer-controller';
 import {ResizeController} from './lib/resize-controller';
 import {
   SessionStateManager,
@@ -17,6 +20,7 @@ import {PANES} from './lib/types';
 import type {
   VSCodeApi,
   InboundMessage,
+  RendererType,
   OutboundMessage,
   ViewState,
   ViewMode,
@@ -43,22 +47,48 @@ declare const acquireVsCodeApi: <State = undefined>() => VSCodeApi<State>;
  */
 const IS_MAC = /mac/i.test(navigator.userAgent);
 
+/**
+ * 初期のレンダラ設定は HTML の `data-renderer-type` から読む。
+ * Webview の生成時点で決まっている値なので、メッセージ往復を待たずに
+ * 最初の Terminal からその設定で描ける。
+ */
+function readInitialRendererType(): RendererType {
+  const value = document.body.dataset.rendererType;
+  return isRendererType(value) ? value : 'auto';
+}
+
 // ============================================================================
 // Terminal Manager
 // ============================================================================
 
 class TerminalManager {
   readonly paneContexts: Record<Pane, PaneContext>;
+  private readonly rendererController: RendererController;
 
   constructor(
     private readonly dom: DOMElements,
     private readonly uiState: UIStateManager,
-    private readonly postMessage: (message: OutboundMessage) => void
+    private readonly postMessage: (message: OutboundMessage) => void,
+    rendererType: RendererType = 'auto'
   ) {
     this.paneContexts = {
       primary: this.createPaneContext('primary'),
       secondary: this.createPaneContext('secondary'),
     };
+    // WebGL アドオンは `terminal.open()` の後でないと載せられないので、
+    // 両ペインの Terminal が揃ってから適用する。
+    this.rendererController = new RendererController(
+      {
+        getTerminal: (pane) => this.paneContexts[pane]?.terminal,
+        createWebglAddon: () => new WebglAddon(),
+      },
+      rendererType
+    );
+    PANES.forEach((pane) => this.rendererController.applyToPane(pane));
+  }
+
+  setRendererType(rendererType: RendererType): void {
+    this.rendererController.setRendererType(rendererType);
   }
 
   private createTerminalInstance(): Terminal {
@@ -221,6 +251,9 @@ class TerminalManager {
         'rgba(255,255,255,0.15)'
       ),
     };
+    // WebGL レンダラはグリフを色ごとテクスチャに焼くので、
+    // 配色だけ差し替えても古い色が残る。アトラスを捨てて描き直させる。
+    this.rendererController.refreshTextureAtlas(pane);
   }
 
   refreshTheme(): void {
@@ -331,7 +364,8 @@ class AppController {
     this.terminalManager = new TerminalManager(
       this.dom,
       this.uiState,
-      (msg) => this.vscode.postMessage(msg)
+      (msg) => this.vscode.postMessage(msg),
+      readInitialRendererType()
     );
     // OSC 0/1/2: shells and CLIs report what they are running. Showing it next
     // to the session name is how Ghostty / cmux label their tabs.
@@ -674,6 +708,9 @@ class AppController {
 
       case 'theme-update':
         this.themeController.applyThemeUpdate(message.payload);
+        break;
+      case 'renderer-update':
+        this.terminalManager.setRendererType(message.payload.rendererType);
         break;
 
       case 'all-sessions-cleared':

@@ -3,9 +3,10 @@ import {SHARED_CONSTANTS} from '../shared/constants';
 import type {
   InboundMessage as WebviewInboundMessage,
   OutboundMessage as WebviewOutboundMessage,
+  RendererType,
   TerminalSlot,
 } from '../shared/types';
-import {TERMINAL_SLOTS, isTerminalSlot} from '../shared/types';
+import {TERMINAL_SLOTS, isRendererType, isTerminalSlot} from '../shared/types';
 import {SessionManager} from '../terminal/sessionManager';
 import {isValidPresetKey} from '../theming/themePresets';
 import {Logger} from '../utils/logger';
@@ -84,6 +85,9 @@ export class AiTerminalViewProvider
         }
         if (event.affectsConfiguration('aiTerminal.showResourceStats')) {
           this.startUsagePolling();
+        }
+        if (event.affectsConfiguration('aiTerminal.rendererType')) {
+          this.postRendererUpdate();
         }
       }),
     );
@@ -493,6 +497,25 @@ export class AiTerminalViewProvider
   }
 
   /**
+   * The renderer is chosen in the webview, where the GL context lives. The
+   * setting is only the request - the webview falls back to the DOM renderer
+   * on its own when WebGL is unavailable.
+   */
+  private getRendererType(): RendererType {
+    const value = vscode.workspace
+      .getConfiguration('aiTerminal')
+      .get<string>('rendererType');
+    return isRendererType(value) ? value : 'auto';
+  }
+
+  private postRendererUpdate() {
+    this.postMessage({
+      type: 'renderer-update',
+      payload: {rendererType: this.getRendererType()},
+    });
+  }
+
+  /**
    * Persists the selected preset for one terminal to global settings.
    * Invalid keys are ignored; an unknown slot falls back to Terminal 1.
    */
@@ -706,6 +729,7 @@ export class AiTerminalViewProvider
       iconUri: uri('media', 'icon-bit.png'),
       scriptUri: uri('media', 'webview.js'),
       xtermCssUri: uri('media', 'xterm.css'),
+      rendererType: this.getRendererType(),
     });
   }
 }

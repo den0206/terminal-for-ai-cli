@@ -36,6 +36,14 @@ Rules:
 
 ## [Unreleased]
 
+### Added
+
+- GPU rendering for the terminal. When WebGL is available, box-drawing and block characters are
+  drawn by the terminal itself instead of the font, so borders in AI CLI TUIs connect cleanly, and
+  heavy output costs less CPU. `aiTerminal.rendererType` (`auto` / `webgl` / `dom`) controls it.
+  The renderer falls back to the DOM renderer on its own when the GPU is unavailable or the WebGL
+  context is lost, so nothing has to be configured for it to keep working.
+
 ### Changed
 
 - Sessions now report the host app in `TERM_PROGRAM` (`vscode`, `cursor`, `windsurf`) instead of

@@ -73,6 +73,22 @@ export type ThemeSnapshot = {
 };
 
 // ============================================================================
+// Renderer Types
+// ============================================================================
+
+/**
+ * xterm.js の描画方式。
+ * - `auto`: WebGL を試し、使えなければ DOM レンダラに落とす（既定）
+ * - `webgl`: WebGL を明示的に要求する（失敗時はやはり DOM に落ちる）
+ * - `dom`: 常に DOM レンダラ
+ */
+export type RendererType = 'auto' | 'webgl' | 'dom';
+
+export function isRendererType(value: unknown): value is RendererType {
+  return value === 'auto' || value === 'webgl' || value === 'dom';
+}
+
+// ============================================================================
 // Session Types
 // ============================================================================
 
@@ -108,6 +124,7 @@ export type InboundMessage =
   | {type: 'session-limit-reached'; payload: {max: number}}
   | {type: 'theme-update'; payload: ThemeUpdatePayload}
   | {type: 'usage-update'; payload: {text: string}}
+  | {type: 'renderer-update'; payload: {rendererType: RendererType}}
   | {type: 'all-sessions-cleared'};
 
 /**

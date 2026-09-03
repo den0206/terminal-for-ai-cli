@@ -6,6 +6,7 @@ import {SessionMeta} from '../../shared/types';
 export type {
   InboundMessage,
   OutboundMessage,
+  RendererType,
   SessionMeta,
   TerminalSlot,
   ThemePalette,
