@@ -110,6 +110,8 @@ describe('webview utils', () => {
         altKey: false,
         ctrlKey: false,
         metaKey: false,
+        isComposing: false,
+        keyCode: 13,
         ...overrides,
       }) as unknown as KeyboardEvent;
 
@@ -128,6 +130,15 @@ describe('webview utils', () => {
         false
       );
       expect(isShiftEnter(keyEvent({shiftKey: true, type: 'keyup'}))).toBe(
+        false
+      );
+    });
+
+    it('leaves an Enter the IME is consuming to xterm.js', () => {
+      expect(isShiftEnter(keyEvent({shiftKey: true, isComposing: true}))).toBe(
+        false
+      );
+      expect(isShiftEnter(keyEvent({shiftKey: true, keyCode: 229}))).toBe(
         false
       );
     });
