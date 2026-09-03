@@ -2,12 +2,22 @@ import {SHARED_CONSTANTS} from '../../shared/constants';
 import type {OutboundMessage} from './types';
 import {webviewLog} from './utils';
 
+/** RFC 2483。エディタのエクスプローラからのドラッグはこの形式で実パスを運ぶ。 */
+const URI_LIST_TYPE = 'text/uri-list';
+
 /**
- * Manages image drag-and-drop operations on the webview.
+ * Manages drag-and-drop on the webview: files dragged from the editor's
+ * explorer, and images dragged from the OS.
  *
- * Extracted from AppController to reduce class size and isolate
- * drag-and-drop concerns. Follows the same callback-injection pattern
- * as ResizeController and ThemeController.
+ * Two routes, because they carry different things. A drop from the explorer
+ * comes with `text/uri-list`, which names the file's real path — that path is
+ * what an AI CLI needs. A drop from the OS only gives `File` objects, whose
+ * path a webview cannot read, so the bytes are copied into storage instead and
+ * the copy's path is typed. Copying is fine for a screenshot, but pointless for
+ * a source file, so only images take that route.
+ *
+ * Follows the same callback-injection pattern as ResizeController and
+ * ThemeController.
  */
 export class DragDropHandler {
   constructor(
@@ -25,7 +35,8 @@ export class DragDropHandler {
       if (!event.shiftKey || !event.dataTransfer) {
         return;
       }
-      if (!event.dataTransfer.types.includes('Files')) {
+      const types = event.dataTransfer.types;
+      if (!types.includes('Files') && !types.includes(URI_LIST_TYPE)) {
         return;
       }
       event.preventDefault();
@@ -34,7 +45,20 @@ export class DragDropHandler {
     };
 
     const handleDrop = async (event: DragEvent) => {
-      if (!event.shiftKey || !event.dataTransfer?.files.length) {
+      if (!event.shiftKey || !event.dataTransfer) {
+        return;
+      }
+      const uriList = event.dataTransfer.getData(URI_LIST_TYPE);
+      const sessionId = this.getActiveSessionId();
+      if (uriList) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (sessionId) {
+          this.postMessage({type: 'uri-drop', payload: {uriList, sessionId}});
+        }
+        return;
+      }
+      if (!event.dataTransfer.files.length) {
         return;
       }
       event.preventDefault();
@@ -46,7 +70,6 @@ export class DragDropHandler {
         return;
       }
 
-      const sessionId = this.getActiveSessionId();
       if (!sessionId) {
         return;
       }

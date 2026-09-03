@@ -173,6 +173,7 @@ export type OutboundMessage =
       type: 'session-snapshot';
       payload: {slot: TerminalSlot; data: string; cols: number; rows: number};
     }
+  | {type: 'uri-drop'; payload: {uriList: string; sessionId: string}}
   | {
       type: 'image-drop';
       payload: {

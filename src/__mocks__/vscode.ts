@@ -69,11 +69,18 @@ export const l10n = {
 };
 
 export const Uri = {
-  parse: vi.fn((value: string) => ({
-    toString: () => value,
-    scheme: value.split(':')[0],
-    path: value,
-  })),
+  parse: vi.fn((value: string) => {
+    const scheme = value.split(':')[0];
+    // 本体と同じく file: URI からはパーセントデコードした実パスを取り出す
+    const withoutScheme = value.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '');
+    const path = scheme === 'file' ? decodeURIComponent(withoutScheme) : value;
+    return {
+      toString: () => value,
+      scheme,
+      path,
+      fsPath: path,
+    };
+  }),
   file: vi.fn((path: string) => ({
     fsPath: path,
     scheme: 'file',

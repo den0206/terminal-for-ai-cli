@@ -38,6 +38,11 @@ Rules:
 
 ### Added
 
+- Files dragged from the editor's explorer can now be dropped on the terminal: their own paths are
+  typed into the shell, shell-escaped and space-separated (up to 50 per drop). Dropping from the OS
+  still only accepts images, which are copied into storage as before — a webview cannot read the
+  path of an OS-dropped file, and handing an agent the path of a copy is only useful for images.
+
 - The scrollback of each terminal now survives an editor restart. A snapshot is written to this
   window's storage while the terminal is idle and replayed on the next launch, framed by rules that
   mark it as read-only history — the shell behind it is gone, and a new one starts underneath.

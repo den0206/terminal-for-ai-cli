@@ -5,6 +5,7 @@ import {env as mockEnv, window as mockWindow} from 'vscode';
 import {SHARED_CONSTANTS} from '../shared/constants';
 import {SessionManager} from '../terminal/sessionManager';
 import {Logger} from '../utils/logger';
+import {escapeShellPath} from '../utils/shellPath';
 import {AiTerminalViewProvider} from './aiTerminalViewProvider';
 
 // Mock node-pty for faster tests and CI compatibility
@@ -63,6 +64,7 @@ vi.mock('vscode', async () => {
         readDirectory: vi
           .fn()
           .mockRejectedValue(new Error('Directory not found')),
+        readFile: vi.fn().mockRejectedValue(new Error('File not found')),
         delete: vi.fn().mockResolvedValue(undefined),
         createDirectory: vi.fn().mockResolvedValue(undefined),
         writeFile: vi.fn().mockResolvedValue(undefined),
@@ -74,11 +76,22 @@ vi.mock('vscode', async () => {
       showInformationMessage: vi.fn(),
     },
     Uri: {
-      parse: vi.fn((value: string) => ({
-        scheme: value.split(':')[0],
-        path: value,
-        toString: () => value,
-      })),
+      parse: vi.fn((value: string) => {
+        const scheme = value.split(':')[0];
+        // 本体と同じく file: URI から実パス（パーセントデコード済み）を取り出す
+        const withoutScheme = value.replace(
+          /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//,
+          ''
+        );
+        const path =
+          scheme === 'file' ? decodeURIComponent(withoutScheme) : value;
+        return {
+          scheme,
+          path,
+          fsPath: path,
+          toString: () => value,
+        };
+      }),
       file: vi.fn((path: string) => ({
         scheme: 'file',
         fsPath: path,
@@ -774,6 +787,86 @@ describe('AiTerminalViewProvider', () => {
       });
 
       expect(mockEnv.clipboard.writeText).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handleMessage - uri-drop', () => {
+    const getMessageHandler = (
+      webviewView: ReturnType<typeof createMockWebviewView>
+    ) =>
+      (webviewView.webview.onDidReceiveMessage as ReturnType<typeof vi.fn>).mock
+        .calls[0][0];
+
+    const dropUris = async (uriList: string) => {
+      const webviewView = createMockWebviewView();
+      provider.resolveWebviewView(webviewView);
+      const messageHandler = getMessageHandler(webviewView);
+      await messageHandler({type: 'webview-ready'});
+      const session = sessionManager.createSession();
+      const writeSpy = vi.spyOn(sessionManager, 'write');
+
+      await messageHandler({
+        type: 'uri-drop',
+        payload: {uriList, sessionId: session.id},
+      });
+
+      return {writeSpy, sessionId: session.id};
+    };
+
+    it('types the dropped path into the session', async () => {
+      const {writeSpy, sessionId} = await dropUris('file:///tmp/notes.md');
+
+      expect(writeSpy).toHaveBeenCalledWith(
+        sessionId,
+        `${escapeShellPath('/tmp/notes.md')} `
+      );
+    });
+
+    it('types several dropped paths separated by spaces', async () => {
+      const {writeSpy, sessionId} = await dropUris(
+        'file:///tmp/a.ts\r\nfile:///tmp/b.ts\r\n'
+      );
+
+      expect(writeSpy).toHaveBeenCalledWith(
+        sessionId,
+        `${escapeShellPath('/tmp/a.ts')} ${escapeShellPath('/tmp/b.ts')} `
+      );
+    });
+
+    it('decodes a percent-encoded path', async () => {
+      const {writeSpy, sessionId} = await dropUris('file:///tmp/a%20b.ts');
+
+      expect(writeSpy).toHaveBeenCalledWith(
+        sessionId,
+        `${escapeShellPath('/tmp/a b.ts')} `
+      );
+    });
+
+    it('ignores URIs that do not name a file', async () => {
+      const {writeSpy} = await dropUris(
+        'https://example.com\nuntitled:Untitled-1'
+      );
+
+      expect(writeSpy).not.toHaveBeenCalled();
+    });
+
+    it('writes nothing for an empty list', async () => {
+      const {writeSpy} = await dropUris('# comment only\n');
+
+      expect(writeSpy).not.toHaveBeenCalled();
+    });
+
+    it('caps how many paths a single drop can type', async () => {
+      const cap = SHARED_CONSTANTS.MAX_DROPPED_PATHS;
+      const uriList = Array.from(
+        {length: cap + 10},
+        (_unused, index) => `file:///tmp/file-${index}.ts`
+      ).join('\r\n');
+
+      const {writeSpy} = await dropUris(uriList);
+
+      const written = writeSpy.mock.calls[0][1] as string;
+      expect(written.trimEnd().split(' ')).toHaveLength(cap);
     });
   });
 

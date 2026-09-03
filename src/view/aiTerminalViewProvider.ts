@@ -17,6 +17,7 @@ import {
   validateShellPath,
   validateStartupCommands,
 } from '../utils/validation';
+import {escapeShellPath, parseUriList} from '../utils/shellPath';
 import {resolveWorkingDirectory} from '../utils/workingDirectory';
 import {ThemeSnapshot, buildWebviewHtml} from './htmlTemplate';
 import {ImageManager} from './imageManager';
@@ -226,6 +227,9 @@ export class AiTerminalViewProvider
           break;
         case 'session-snapshot':
           await this.handleSessionSnapshot(message.payload);
+          break;
+        case 'uri-drop':
+          this.handleUriDrop(message.payload);
           break;
         case 'image-drop':
           await this.handleImageDrop(message.payload);
@@ -769,6 +773,46 @@ export class AiTerminalViewProvider
       return;
     }
     await vscode.env.clipboard.writeText(target);
+  }
+
+  /**
+   * Types the paths of files dropped from the explorer into the session.
+   *
+   * Only `file:` URIs are used: a drop can name anything, and the point of this
+   * is to hand an AI CLI a path it can open. Paths that cannot be quoted safely
+   * are skipped rather than sent half-escaped.
+   */
+  private handleUriDrop(payload: {uriList: string; sessionId: string}): void {
+    const paths: string[] = [];
+    for (const raw of parseUriList(payload.uriList)) {
+      if (paths.length >= SHARED_CONSTANTS.MAX_DROPPED_PATHS) {
+        Logger.warn(
+          `Dropped more than ${SHARED_CONSTANTS.MAX_DROPPED_PATHS} files; the rest were ignored`,
+        );
+        break;
+      }
+      let uri: vscode.Uri;
+      try {
+        uri = vscode.Uri.parse(raw, true);
+      } catch {
+        Logger.warn('Ignored a malformed URI in a drop');
+        continue;
+      }
+      if (uri.scheme !== 'file') {
+        Logger.warn(`Ignored a dropped ${uri.scheme}: URI; only files are typed`);
+        continue;
+      }
+      try {
+        paths.push(escapeShellPath(uri.fsPath));
+      } catch (error) {
+        Logger.warn('Skipped a dropped path that cannot be quoted', error);
+      }
+    }
+    if (paths.length === 0) {
+      return;
+    }
+    // 末尾の空白は続けて入力できるようにするため
+    this.sessionManager.write(payload.sessionId, `${paths.join(' ')} `);
   }
 
   /** Stores the dropped image and types its escaped path into the session. */
