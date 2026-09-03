@@ -36,6 +36,15 @@ Rules:
 
 ## [Unreleased]
 
+### Fixed
+
+- Typing Japanese (or any other IME-composed text) into an AI CLI prompt no longer occasionally
+  appends a stale, half-finished copy of what was already typed. Shift+Enter stopped xterm.js just
+  before it empties the hidden textarea an IME composition is read back out of, so across a
+  multi-line prompt that buffer grew until the composition handler re-sent old text. Shift+Enter now
+  clears it, and an Enter the IME is still consuming is left to xterm.js so the composed characters
+  are flushed before the newline.
+
 ## [0.2.1] - 2026-08-29
 
 ### Added

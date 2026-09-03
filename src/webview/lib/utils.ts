@@ -183,9 +183,15 @@ export function isValidViewState(state: unknown): state is ViewState {
 }
 
 /**
- * Shift+Enter, with no other modifier. AI CLIs (Claude Code, Codex) read
- * ESC + CR as "newline inside the prompt"; xterm.js sends a bare CR, which
- * submits instead.
+ * Shift+Enter that this view should turn into ESC + CR itself. AI CLIs (Claude
+ * Code, Codex) read ESC + CR as "newline inside the prompt"; xterm.js sends a
+ * bare CR, which submits instead.
+ *
+ * An Enter that an IME is consuming belongs to the IME, not to us: xterm.js
+ * only flushes the text being composed while it handles the keydown, so
+ * intercepting it would send the newline ahead of the characters it is meant
+ * to follow. `keyCode` 229 is the "composition character" browsers report for
+ * those keydowns, and it is the same check xterm.js makes internally.
  */
 export function isShiftEnter(event: KeyboardEvent): boolean {
   return (
@@ -194,7 +200,9 @@ export function isShiftEnter(event: KeyboardEvent): boolean {
     event.shiftKey &&
     !event.altKey &&
     !event.ctrlKey &&
-    !event.metaKey
+    !event.metaKey &&
+    !event.isComposing &&
+    event.keyCode !== 229
   );
 }
 
