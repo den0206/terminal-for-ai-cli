@@ -36,6 +36,23 @@ Rules:
 
 ## [Unreleased]
 
+### Changed
+
+- Sessions now report the host app in `TERM_PROGRAM` (`vscode`, `cursor`, `windsurf`) instead of
+  `terminal-for-ai-cli`. TERM_PROGRAM is a de-facto registry of known terminal emulators that CLIs
+  branch on, so a name none of them knows put every one on its "unknown terminal" path - Claude Code,
+  for one, reported that Shift+Enter was unavailable and refused to run `/terminal-setup`. Programs
+  that want to detect this view specifically can read the new `TERMINAL_FOR_AI_CLI=1`.
+
+### Fixed
+
+- Typing Japanese (or any other IME-composed text) into an AI CLI prompt no longer occasionally
+  appends a stale, half-finished copy of what was already typed. Shift+Enter stopped xterm.js just
+  before it empties the hidden textarea an IME composition is read back out of, so across a
+  multi-line prompt that buffer grew until the composition handler re-sent old text. Shift+Enter now
+  clears it, and an Enter the IME is still consuming is left to xterm.js so the composed characters
+  are flushed before the newline.
+
 ## [0.2.1] - 2026-08-29
 
 ### Added

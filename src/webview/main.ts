@@ -139,6 +139,14 @@ class TerminalManager {
           payload: {sessionId, data: '\x1b\r'},
         });
       }
+      // Returning false makes xterm.js stop before the point where it empties
+      // its helper textarea for CR. That textarea is cumulative and is what an
+      // IME composition is read back out of, so leaving it to grow across a
+      // multi-line prompt lets a stale offset re-send text that was already
+      // typed. Empty it here, exactly as the path we skipped would have.
+      if (terminal.textarea) {
+        terminal.textarea.value = '';
+      }
       return false;
     });
     const root = this.dom.paneRoots[pane];

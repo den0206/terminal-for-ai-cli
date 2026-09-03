@@ -89,7 +89,9 @@ describe('SessionManager', () => {
       const env = vi.mocked(spawn).mock.calls[0]?.[2]?.env;
       expect(env).toMatchObject({
         COLORTERM: 'truecolor',
-        TERM_PROGRAM: 'terminal-for-ai-cli',
+        // The host app, so CLIs that branch on TERM_PROGRAM recognize it
+        TERM_PROGRAM: 'vscode',
+        TERMINAL_FOR_AI_CLI: '1',
       });
       // The inherited version belongs to another program, not to us
       expect(env).not.toHaveProperty('TERM_PROGRAM_VERSION');
