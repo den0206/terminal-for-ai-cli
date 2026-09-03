@@ -155,6 +155,22 @@ A confirmation modal shows the full URL before the browser is launched. VS Code 
 for links opened by an extension, so this is the extension's own guard — turn it off with
 `aiTerminal.confirmOpenLink` if it gets in the way.
 
+### Finding text
+
+`Cmd` / `Ctrl` + `F` opens a find bar above the terminal. It searches the **focused terminal only**,
+the same rule the theme dropdown follows, and the badge on the left says which one that is.
+
+| Key | Action |
+|-----|--------|
+| `Cmd` / `Ctrl` + `F` | Open the find bar (and select what is already there) |
+| `Enter` | Next match |
+| `Shift` + `Enter` | Previous match |
+| `Esc` | Close the bar and return focus to the terminal |
+
+`Aa` matches case and `.*` treats the query as a regular expression. Every match is highlighted,
+with the count next to the input; closing the bar clears the highlights. `Ctrl` + `F` is taken by
+the find bar before the shell sees it, so it never reaches the CLI as a forward-character key.
+
 ### Height and theme
 
 Drag the handle under the terminal to resize (220–1000px, persisted).
@@ -206,6 +222,7 @@ escalating to `SIGKILL` after 2s) and deletes every saved image.
 | Clickable links | `Cmd` / `Ctrl` + click on an `http(s)` URL opens it in the default browser |
 | Image cleanup | Deleted on session exit, on deactivation, and on startup (orphans, 24h TTL) |
 | Usage readout | Saved-image total and extension host RSS, refreshed every 30s while visible |
+| Scrollback search | `Cmd` / `Ctrl` + `F` searches the focused terminal, with match count, case and regex toggles |
 | Theme presets | `modern`, `basic`, `clearDark`, `clearLight`, `grass`, `homebrew`, `manPage`, `ocean`, `pro` |
 | Per-terminal themes | `Terminal 1` and `Terminal 2` each hold their own preset; the dropdown targets the focused terminal |
 | Height control | Drag handle, 220–1000px, persisted in Webview state |

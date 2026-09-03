@@ -107,6 +107,67 @@ export function buildWebviewHtml({
             opacity: 0.6;
             cursor: default;
           }
+          .search-bar {
+            display: none;
+            flex: 0 0 auto;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.3rem 0.4rem;
+            border: 1px solid color-mix(in srgb, var(--terminal-fg) 25%, transparent);
+            border-radius: 6px;
+            background: color-mix(in srgb, var(--terminal-bg) 60%, transparent);
+          }
+          .search-bar[aria-hidden='false'] {
+            display: flex;
+          }
+          .search-bar__scope {
+            flex: 0 0 auto;
+            padding: 0.05rem 0.4rem;
+            border-radius: 999px;
+            border: 1px solid color-mix(in srgb, var(--terminal-fg) 30%, transparent);
+            font-size: 0.7rem;
+            opacity: 0.85;
+            white-space: nowrap;
+          }
+          .search-bar input {
+            flex: 1 1 auto;
+            min-width: 3rem;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border, transparent);
+            border-radius: 4px;
+            padding: 0.15rem 0.35rem;
+            font-size: 0.8rem;
+          }
+          .search-bar__summary {
+            flex: 0 0 auto;
+            font-size: 0.7rem;
+            opacity: 0.75;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+          }
+          .search-bar__toggle {
+            flex: 0 0 auto;
+            min-width: 24px;
+            height: 22px;
+            padding: 0 0.25rem;
+            border-radius: 4px;
+            border: 1px solid color-mix(in srgb, var(--terminal-fg) 30%, transparent);
+            background: transparent;
+            color: var(--terminal-fg);
+            font-size: 0.7rem;
+            cursor: pointer;
+          }
+          .search-bar__toggle[aria-pressed='true'] {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border-color: var(--vscode-button-border, transparent);
+          }
+          .search-bar .icon-button {
+            width: 22px;
+            height: 22px;
+            font-size: 0.8rem;
+          }
           .terminal-shell {
             flex: 1 1 auto;
             display: flex;
@@ -320,6 +381,38 @@ export function buildWebviewHtml({
           <button class="icon-button" data-session-remove title="Close session">🗑</button>
         </div>
         <div class="terminal-shell" data-terminal-shell>
+          <div class="search-bar" data-search-bar aria-hidden="true">
+            <span class="search-bar__scope" data-search-scope>Terminal 1</span>
+            <input
+              type="text"
+              data-search-input
+              placeholder="Find in terminal"
+              aria-label="Find in terminal"
+              spellcheck="false"
+            />
+            <span class="search-bar__summary" data-search-summary></span>
+            <button
+              class="search-bar__toggle"
+              data-search-case
+              type="button"
+              title="Match case"
+              aria-pressed="false"
+            >
+              Aa
+            </button>
+            <button
+              class="search-bar__toggle"
+              data-search-regex
+              type="button"
+              title="Use regular expression"
+              aria-pressed="false"
+            >
+              .*
+            </button>
+            <button class="icon-button" data-search-prev type="button" title="Previous match">↑</button>
+            <button class="icon-button" data-search-next type="button" title="Next match">↓</button>
+            <button class="icon-button" data-search-close type="button" title="Close (Esc)">✕</button>
+          </div>
           <div class="terminal-stack" data-terminal-stack>
             <div
               class="terminal-pane"
