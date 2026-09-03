@@ -25,7 +25,7 @@
 
 <p align="center">
   <!-- BEGIN:release -->
-  最新リリース: <a href="https://github.com/den0206/terminal-for-ai-cli/releases/tag/Ver_0.2.1"><strong>Ver_0.2.1</strong></a>（2026-08-29）
+  最新リリース: <a href="https://github.com/den0206/terminal-for-ai-cli/releases/tag/Ver_0.3.0"><strong>Ver_0.3.0</strong></a>（2026-09-03）
   <!-- END:release -->
 </p>
 
