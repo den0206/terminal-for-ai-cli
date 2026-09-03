@@ -1,4 +1,5 @@
 import {FitAddon} from '@xterm/addon-fit';
+import {SearchAddon} from '@xterm/addon-search';
 import {WebglAddon} from '@xterm/addon-webgl';
 import {WebLinksAddon} from '@xterm/addon-web-links';
 import {Terminal} from '@xterm/xterm';
@@ -10,6 +11,7 @@ import {DOMElements} from './lib/dom';
 import {DragDropHandler} from './lib/drag-drop-handler';
 import {RendererController} from './lib/renderer-controller';
 import {ResizeController} from './lib/resize-controller';
+import {SearchController, hexColorOr} from './lib/search-controller';
 import {
   SessionStateManager,
   UIStateManager,
@@ -31,6 +33,7 @@ import {
   debounce,
   getComputedVar,
   getComputedVarFrom,
+  isFindShortcut,
   isShiftEnter,
   isValidViewState,
   sanitizeText,
@@ -69,6 +72,8 @@ class TerminalManager {
     private readonly dom: DOMElements,
     private readonly uiState: UIStateManager,
     private readonly postMessage: (message: OutboundMessage) => void,
+    /** Cmd/Ctrl+F。ターミナルにフォーカスがある間は xterm より先に奪う。 */
+    private readonly onFindShortcut: () => void,
     rendererType: RendererType = 'auto'
   ) {
     this.paneContexts = {
@@ -150,6 +155,8 @@ class TerminalManager {
     const terminal = this.createTerminalInstance();
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
+    const searchAddon = new SearchAddon();
+    terminal.loadAddon(searchAddon);
     // Cmd (macOS) / Ctrl (Windows, Linux) + click opens the URL in the default
     // browser, matching VS Code's own terminal. A plain click is ignored so
     // selecting text over a link stays harmless.
@@ -159,6 +166,11 @@ class TerminalManager {
     // AI CLIs take ESC + CR as a newline inside the prompt; xterm.js would
     // send a bare CR, which submits the prompt instead.
     terminal.attachCustomKeyEventHandler((event) => {
+      // Ctrl+F は端末では 0x06 として PTY に流れるので、ここで止める。
+      if (isFindShortcut(event, IS_MAC)) {
+        this.onFindShortcut();
+        return false;
+      }
       if (!isShiftEnter(event)) {
         return true;
       }
@@ -194,7 +206,7 @@ class TerminalManager {
         });
       }
     });
-    return {terminal, fitAddon};
+    return {terminal, fitAddon, searchAddon};
   }
 
   getPaneDimensions(pane: Pane): {cols: number; rows: number} {
@@ -336,6 +348,7 @@ class AppController {
   private readonly resizeController: ResizeController;
   private readonly themeController: ThemeController;
   private readonly dragDropHandler: DragDropHandler;
+  private readonly searchController: SearchController;
   private readonly debouncedResize: CancellableFunction<() => void>;
   /** Window title (OSC 0/1/2) most recently reported by each pane's session. */
   private readonly paneTitles: Record<Pane, string> = {
@@ -365,6 +378,7 @@ class AppController {
       this.dom,
       this.uiState,
       (msg) => this.vscode.postMessage(msg),
+      () => this.searchController.openSearch(),
       readInitialRendererType()
     );
     // OSC 0/1/2: shells and CLIs report what they are running. Showing it next
@@ -395,6 +409,53 @@ class AppController {
         this.sessionState.getSessionSlot(this.uiState.paneSessions[pane]),
       () => this.sessionState.getSessionSlot(this.sessionState.activeSessionId)
     );
+
+    this.searchController = new SearchController({
+      getAddon: (pane) => this.terminalManager.paneContexts[pane]?.searchAddon,
+      getActivePane: () => this.getActivePane(),
+      getScopeLabel: (pane) => {
+        const sessionId = this.uiState.paneSessions[pane];
+        return sessionId
+          ? this.sessionState.getSessionLabel(sessionId)
+          : 'Terminal';
+      },
+      getDecorations: () => this.getSearchDecorations(),
+      view: {
+        setVisible: (visible) => {
+          this.dom.searchBar?.setAttribute(
+            'aria-hidden',
+            visible ? 'false' : 'true'
+          );
+        },
+        setSummary: (text) => {
+          if (this.dom.searchSummary) {
+            this.dom.searchSummary.textContent = text;
+          }
+        },
+        setScopeLabel: (label) => {
+          if (this.dom.searchScope) {
+            this.dom.searchScope.textContent = label;
+          }
+        },
+        setToggleState: (toggle, enabled) => {
+          const button =
+            toggle === 'caseSensitive'
+              ? this.dom.searchCaseToggle
+              : this.dom.searchRegexToggle;
+          button?.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+        },
+        focusQueryInput: () => {
+          this.dom.searchInput?.focus();
+          this.dom.searchInput?.select();
+        },
+        focusTerminal: () => this.focusActivePane(),
+      },
+    });
+    PANES.forEach((pane) => {
+      this.terminalManager.paneContexts[pane].searchAddon.onDidChangeResults(
+        (results) => this.searchController.reportResults(pane, results)
+      );
+    });
 
     this.dragDropHandler = new DragDropHandler(
       () => this.sessionState.activeSessionId,
@@ -473,6 +534,7 @@ class AppController {
   }
 
   private setupEventListeners(): void {
+    this.setupSearchListeners();
     this.addEventListener(
       window,
       'message',
@@ -952,6 +1014,102 @@ class AppController {
     }
   }
 
+  /** 検索・テーマの対象になるペイン。セッション未割り当てなら primary。 */
+  private getActivePane(): Pane {
+    return (
+      this.uiState.getPaneForSession(this.sessionState.activeSessionId) ??
+      'primary'
+    );
+  }
+
+  /**
+   * ハイライト色。テーマを切り替えても追従するよう、検索のたびに読み直す。
+   * アドオンは `#RRGGBB` しか受け付けないので、変数が別形式なら既定色に落とす。
+   */
+  private getSearchDecorations() {
+    const pane = this.dom.paneElements[this.getActivePane()];
+    return {
+      matchBackground: hexColorOr(
+        getComputedVarFrom(pane, '--vscode-editor-findMatchHighlightBackground'),
+        '#613214'
+      ),
+      activeMatchBackground: hexColorOr(
+        getComputedVarFrom(pane, '--vscode-editor-findMatchBackground'),
+        '#9e6a03'
+      ),
+      matchOverviewRuler: hexColorOr(
+        getComputedVarFrom(pane, '--vscode-editorOverviewRuler-findMatchForeground'),
+        '#d18616'
+      ),
+      activeMatchColorOverviewRuler: hexColorOr(
+        getComputedVarFrom(pane, '--vscode-editorOverviewRuler-selectionHighlightForeground'),
+        '#a0a0a0'
+      ),
+    };
+  }
+
+  private setupSearchListeners(): void {
+    // ターミナルの外（ツールバーや検索欄）にフォーカスがあるときの Cmd/Ctrl+F。
+    // ターミナル内は TerminalManager 側で先に奪っている。
+    this.addEventListener(document, 'keydown', (event: Event) => {
+      const keyboardEvent = event as KeyboardEvent;
+      if (!isFindShortcut(keyboardEvent, IS_MAC)) {
+        return;
+      }
+      keyboardEvent.preventDefault();
+      this.searchController.openSearch();
+    });
+
+    if (this.dom.searchInput) {
+      this.addEventListener(this.dom.searchInput, 'input', () => {
+        this.searchController.setQuery(this.dom.searchInput?.value ?? '');
+      });
+      this.addEventListener(this.dom.searchInput, 'keydown', (event: Event) => {
+        const keyboardEvent = event as KeyboardEvent;
+        if (keyboardEvent.key === 'Escape') {
+          keyboardEvent.preventDefault();
+          this.searchController.closeSearch();
+          return;
+        }
+        if (keyboardEvent.key !== 'Enter') {
+          return;
+        }
+        keyboardEvent.preventDefault();
+        if (keyboardEvent.shiftKey) {
+          this.searchController.findPrevious();
+        } else {
+          this.searchController.findNext();
+        }
+      });
+    }
+
+    if (this.dom.searchNextButton) {
+      this.addEventListener(this.dom.searchNextButton, 'click', () => {
+        this.searchController.findNext();
+      });
+    }
+    if (this.dom.searchPrevButton) {
+      this.addEventListener(this.dom.searchPrevButton, 'click', () => {
+        this.searchController.findPrevious();
+      });
+    }
+    if (this.dom.searchCaseToggle) {
+      this.addEventListener(this.dom.searchCaseToggle, 'click', () => {
+        this.searchController.toggleCaseSensitive();
+      });
+    }
+    if (this.dom.searchRegexToggle) {
+      this.addEventListener(this.dom.searchRegexToggle, 'click', () => {
+        this.searchController.toggleRegex();
+      });
+    }
+    if (this.dom.searchCloseButton) {
+      this.addEventListener(this.dom.searchCloseButton, 'click', () => {
+        this.searchController.closeSearch();
+      });
+    }
+  }
+
   private focusActivePane(): void {
     const pane = this.uiState.getPaneForSession(
       this.sessionState.activeSessionId
@@ -974,6 +1132,7 @@ class AppController {
     this.updateSessionControls();
     this.updatePaneActiveStates();
     this.themeController.renderThemeDropdown();
+    this.searchController.retarget();
     this.terminalManager.focusTerminal(pane);
     this.setStatus(`Focused ${this.sessionState.getSessionLabel(sessionId)}`);
   }

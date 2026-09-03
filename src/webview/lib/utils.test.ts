@@ -1,10 +1,11 @@
 import {describe, expect, it} from 'vitest';
 import {
-  validateTerminalHeight,
   clampSplitRatio,
+  isFindShortcut,
   isShiftEnter,
   isValidViewState,
   sanitizeText,
+  validateTerminalHeight,
 } from './utils';
 
 describe('webview utils', () => {
@@ -155,6 +156,59 @@ describe('webview utils', () => {
       const short = sanitizeText('y'.repeat(80), 40);
       expect(short).toHaveLength(40);
       expect(short.endsWith('…')).toBe(true);
+    });
+  });
+
+  describe('isFindShortcut', () => {
+    const keyEvent = (overrides: Record<string, unknown>) =>
+      ({
+        type: 'keydown',
+        key: 'f',
+        shiftKey: false,
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        ...overrides,
+      }) as unknown as KeyboardEvent;
+
+    it('accepts Cmd+F on macOS', () => {
+      expect(isFindShortcut(keyEvent({metaKey: true}), true)).toBe(true);
+    });
+
+    it('accepts Ctrl+F elsewhere', () => {
+      expect(isFindShortcut(keyEvent({ctrlKey: true}), false)).toBe(true);
+    });
+
+    it('accepts an uppercase key value', () => {
+      expect(isFindShortcut(keyEvent({key: 'F', metaKey: true}), true)).toBe(
+        true
+      );
+    });
+
+    it('rejects Ctrl+F on macOS, where it moves the cursor forward', () => {
+      expect(isFindShortcut(keyEvent({ctrlKey: true}), true)).toBe(false);
+    });
+
+    it('rejects Cmd+F on Windows and Linux', () => {
+      expect(isFindShortcut(keyEvent({metaKey: true}), false)).toBe(false);
+    });
+
+    it('rejects other keys and extra modifiers', () => {
+      expect(isFindShortcut(keyEvent({key: 'g', metaKey: true}), true)).toBe(
+        false
+      );
+      expect(
+        isFindShortcut(keyEvent({metaKey: true, altKey: true}), true)
+      ).toBe(false);
+      expect(
+        isFindShortcut(keyEvent({metaKey: true, shiftKey: true}), true)
+      ).toBe(false);
+    });
+
+    it('ignores keyup', () => {
+      expect(
+        isFindShortcut(keyEvent({type: 'keyup', metaKey: true}), true)
+      ).toBe(false);
     });
   });
 });

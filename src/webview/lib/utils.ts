@@ -193,6 +193,24 @@ export function isValidViewState(state: unknown): state is ViewState {
  * to follow. `keyCode` 229 is the "composition character" browsers report for
  * those keydowns, and it is the same check xterm.js makes internally.
  */
+/**
+ * Cmd+F (macOS) / Ctrl+F を検索バーのショートカットとして扱うか。
+ *
+ * ターミナルに送らずここで奪う必要がある: Ctrl+F は素の端末では 0x06 として
+ * PTY に流れてしまい、AI CLI 側が前方移動として解釈する。
+ */
+export function isFindShortcut(event: KeyboardEvent, isMac: boolean): boolean {
+  if (event.type !== 'keydown' || event.key.toLowerCase() !== 'f') {
+    return false;
+  }
+  if (event.altKey || event.shiftKey) {
+    return false;
+  }
+  return isMac
+    ? event.metaKey && !event.ctrlKey
+    : event.ctrlKey && !event.metaKey;
+}
+
 export function isShiftEnter(event: KeyboardEvent): boolean {
   return (
     event.type === 'keydown' &&

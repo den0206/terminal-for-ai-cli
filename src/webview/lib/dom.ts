@@ -27,6 +27,15 @@ export class DOMElements {
   readonly themeSelect = $<HTMLSelectElement>('[data-theme-select]');
   readonly themeScopeLabel = $<HTMLSpanElement>('[data-theme-scope]');
   readonly themePreviewSwatch = $<HTMLSpanElement>('[data-theme-swatch]');
+  readonly searchBar = $<HTMLDivElement>('[data-search-bar]');
+  readonly searchInput = $<HTMLInputElement>('[data-search-input]');
+  readonly searchSummary = $<HTMLSpanElement>('[data-search-summary]');
+  readonly searchScope = $<HTMLSpanElement>('[data-search-scope]');
+  readonly searchCaseToggle = $<HTMLButtonElement>('[data-search-case]');
+  readonly searchRegexToggle = $<HTMLButtonElement>('[data-search-regex]');
+  readonly searchPrevButton = $<HTMLButtonElement>('[data-search-prev]');
+  readonly searchNextButton = $<HTMLButtonElement>('[data-search-next]');
+  readonly searchCloseButton = $<HTMLButtonElement>('[data-search-close]');
   readonly clearAllButton = $<HTMLButtonElement>('[data-session-clear-all]');
   readonly clearAllConfirm = $<HTMLDivElement>('[data-clear-all-confirm]');
   readonly clearAllConfirmAccept = $<HTMLButtonElement>(

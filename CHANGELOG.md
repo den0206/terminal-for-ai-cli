@@ -38,6 +38,10 @@ Rules:
 
 ### Added
 
+- Find in the terminal scrollback. `Cmd` / `Ctrl` + `F` opens a find bar for the focused terminal
+  with a match count, next/previous navigation, and case-sensitive and regular-expression toggles.
+  `Ctrl` + `F` is claimed by the find bar before it can reach the shell as a forward-character key.
+
 - GPU rendering for the terminal. When WebGL is available, box-drawing and block characters are
   drawn by the terminal itself instead of the font, so borders in AI CLI TUIs connect cleanly, and
   heavy output costs less CPU. `aiTerminal.rendererType` (`auto` / `webgl` / `dom`) controls it.
