@@ -26,16 +26,22 @@ describe('escapeShellPath', () => {
     );
   });
 
-  it.each(['C:\\a"b.txt', 'C:\\%PATH%.txt', 'C:\\a!b.txt'])(
-    'refuses %s on Windows rather than quoting it wrongly',
-    (filePath) => {
-      expect(() => escapeShellPath(filePath, 'win32')).toThrow();
-    }
-  );
+  it.each([
+    'C:\\a"b.txt',
+    'C:\\%PATH%.txt',
+    'C:\\a!b.txt',
+    // PowerShell expands these inside double quotes, and it is a shell this
+    // extension supports; a dropped file is named by whoever made it.
+    'C:\\$(calc).txt',
+    'C:\\$env:PATH.txt',
+    'C:\\a`b.txt',
+  ])('refuses %s on Windows rather than quoting it wrongly', (filePath) => {
+    expect(() => escapeShellPath(filePath, 'win32')).toThrow();
+  });
 
   it('quotes those same characters on POSIX, where they are harmless', () => {
-    expect(escapeShellPath('/tmp/a"b%c!d.txt', 'linux')).toBe(
-      '\'/tmp/a"b%c!d.txt\''
+    expect(escapeShellPath('/tmp/a"b%c!d$(e)`f.txt', 'linux')).toBe(
+      '\'/tmp/a"b%c!d$(e)`f.txt\''
     );
   });
 });
