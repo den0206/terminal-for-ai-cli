@@ -41,7 +41,7 @@ Rules:
 - The scrollback of each terminal now survives an editor restart. A snapshot is written to this
   window's storage while the terminal is idle and replayed on the next launch, framed by rules that
   mark it as read-only history — the shell behind it is gone, and a new one starts underneath.
-  Snapshots are per terminal number, deleted by "Clear all sessions" and swept after 7 days, and can
+  Snapshots are per terminal number, deleted by "Clear all sessions" and swept after 24 hours, and can
   be turned off with `aiTerminal.restoreScrollback`.
 
 - A plain click on a terminal link now opens a popover offering **Open in browser** and **Copy URL**,
@@ -60,6 +60,9 @@ Rules:
   context is lost, so nothing has to be configured for it to keep working.
 
 ### Changed
+
+- The toolbar resource readout now covers everything this extension keeps on disk — saved images
+  plus the stored scrollback — instead of images only.
 
 - Sessions now report the host app in `TERM_PROGRAM` (`vscode`, `cursor`, `windsurf`) instead of
   `terminal-for-ai-cli`. TERM_PROGRAM is a de-facto registry of known terminal emulators that CLIs

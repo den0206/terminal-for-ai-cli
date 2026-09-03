@@ -197,7 +197,7 @@ starts underneath as usual.
 
 Snapshots are per terminal number (`Terminal 1` / `Terminal 2`), like themes, since session ids
 change on every launch. They are deleted by "Clear all sessions", when the setting is turned off, and
-at startup once they are older than 7 days. Set `aiTerminal.restoreScrollback` to `false` to keep
+at startup once they are older than 24 hours, the same window as saved images. Set `aiTerminal.restoreScrollback` to `false` to keep
 nothing on disk.
 
 ### Rendering
@@ -258,7 +258,7 @@ escalating to `SIGKILL` after 2s) and deletes every saved image.
 | Default shell | `aiTerminal.defaultShell` | Absolute path to the shell executable. Empty falls back to your login shell. Invalid paths are rejected with a warning and the default is used. **Machine scope** — a workspace cannot override it. |
 | Startup commands | `aiTerminal.startupCommands` | Array of commands sent (in order) right after a session starts. Empty entries are dropped. **Machine scope** — a workspace cannot override it. |
 | Confirm before opening a link | `aiTerminal.confirmOpenLink` | Show a modal with the full URL before a clicked link is opened in the browser. Default `true`. |
-| Resource readout | `aiTerminal.showResourceStats` | Show saved-image size and extension host memory in the toolbar. Default `true`. Turning it off also stops the polling behind it. |
+| Resource readout | `aiTerminal.showResourceStats` | Show the size this extension keeps on disk (saved images plus stored scrollback) and extension host memory in the toolbar. Default `true`. Turning it off also stops the polling behind it. |
 | Restore scrollback | `aiTerminal.restoreScrollback` | Keep each terminal's scrollback on disk and read it back after a restart. Default `true`. **Machine scope.** |
 | Renderer | `aiTerminal.rendererType` | How the terminal is drawn: `auto` (default), `webgl` or `dom`. See [Rendering](#rendering). |
 | Theme preset (Terminal 1) | `aiTerminal.themePreset` | One of the nine presets. The Webview dropdown writes to the same setting while Terminal 1 is focused. |
@@ -277,10 +277,11 @@ Command titles and settings descriptions come from `package.nls*.json`, and runt
 
 ## Storage and Memory
 
-The toolbar readout is `💾 <saved images> · 🧠 <RSS>`, refreshed every 30 seconds while the view is
-visible. Set `aiTerminal.showResourceStats` to `false` to hide it, which also stops the polling
-behind it. The directory scan is cached and only redone after an image is saved or deleted, so a
-steady state costs no I/O.
+The toolbar readout is `💾 <saved images + stored scrollback> · 🧠 <RSS>`, refreshed every 30
+seconds while the view is visible. Set `aiTerminal.showResourceStats` to `false` to hide it, which
+also stops the polling behind it. The image directory scan is cached and only redone after an image
+is saved or deleted, and the scrollback side is two `stat` calls, so a steady state is close to no
+I/O.
 
 **💾 Saved images** — the total size of files under
 `<workspaceStorage>/terminal-for-ai-cli/images/`. These are the images you dropped in. Storage is
@@ -328,7 +329,7 @@ pays a multi-megabyte copy per chunk.
 - **Stored scrollback** — terminal output is written to this window's storage when
   `aiTerminal.restoreScrollback` is on, so whatever a CLI printed (tokens included) is on disk until
   it is cleared. It stays in workspace storage, never leaves the machine, and is deleted by "Clear
-  all sessions", by turning the setting off, and after 7 days. A snapshot read back from disk is
+  all sessions", by turning the setting off, and after 24 hours. A snapshot read back from disk is
   validated and capped before it is written into a terminal.
 - **External links** — only `http` / `https` URLs are handed to the OS; anything else is dropped with a warning.
 - **Shell escaping** — dropped image paths are quoted per platform before being written to the shell:

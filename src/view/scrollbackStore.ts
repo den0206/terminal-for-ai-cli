@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import * as vscode from 'vscode';
 import {SHARED_CONSTANTS} from '../shared/constants';
 import type {ScrollbackSnapshot, TerminalSlot} from '../shared/types';
@@ -50,6 +51,13 @@ export function isExpired(savedAt: number, now: number, ttlMs = TTL_MS): boolean
  * history another window is about to restore.
  */
 export class ScrollbackStore {
+  /**
+   * ダイジェストだけを覚えておき、同じ内容の書き直しを飛ばす。スナップショットは
+   * 出力が止まるたびに届くので、待っているだけの端末を毎回 MB 単位で書き直さない。
+   * 文字列そのものを持つと拡張ホストにスロット分だけ常駐してしまうので持たない。
+   */
+  private readonly lastWritten = new Map<TerminalSlot, string>();
+
   constructor(private readonly context: vscode.ExtensionContext) {}
 
   private get storageRoot(): vscode.Uri {
@@ -71,15 +79,33 @@ export class ScrollbackStore {
       );
       return;
     }
+    const digest = createHash('sha1').update(snapshot.data).digest('hex');
+    if (this.lastWritten.get(slot) === digest) {
+      return;
+    }
     try {
       await vscode.workspace.fs.createDirectory(this.directory);
       await vscode.workspace.fs.writeFile(
         this.fileFor(slot),
         Buffer.from(JSON.stringify(snapshot), 'utf8')
       );
+      this.lastWritten.set(slot, digest);
     } catch (error) {
       Logger.warn(`Failed to save the scrollback for slot ${slot}`, error);
     }
+  }
+
+  /** 保存済みスナップショットの合計バイト数。ツールバーのリソース表示に足す。 */
+  async getStorageBytes(): Promise<number> {
+    let total = 0;
+    for (const slot of TERMINAL_SLOTS) {
+      try {
+        total += (await vscode.workspace.fs.stat(this.fileFor(slot))).size;
+      } catch {
+        // 保存されていないスロット。
+      }
+    }
+    return total;
   }
 
   /** Returns the stored snapshot, or undefined when it is missing, broken or stale. */
@@ -112,6 +138,7 @@ export class ScrollbackStore {
   async clear(slot?: TerminalSlot): Promise<void> {
     const slots = slot ? [slot] : TERMINAL_SLOTS;
     for (const target of slots) {
+      this.lastWritten.delete(target);
       try {
         await vscode.workspace.fs.delete(this.fileFor(target));
       } catch {

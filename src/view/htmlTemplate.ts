@@ -401,7 +401,7 @@ export function buildWebviewHtml({
             data-usage
             title="${escapeAttribute(
               vscode.l10n.t(
-                'Total size of saved images / resident memory of the whole extension host process (RSS), which is shared with every other extension. Turn it off with aiTerminal.showResourceStats.'
+                'Total size this extension keeps on disk (saved images and stored scrollback) / resident memory of the whole extension host process (RSS), which is shared with every other extension. Turn it off with aiTerminal.showResourceStats.'
               )
             )}"
           ></span>
