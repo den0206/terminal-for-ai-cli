@@ -36,6 +36,14 @@ Rules:
 
 ## [Unreleased]
 
+### Changed
+
+- Sessions now report the host app in `TERM_PROGRAM` (`vscode`, `cursor`, `windsurf`) instead of
+  `terminal-for-ai-cli`. TERM_PROGRAM is a de-facto registry of known terminal emulators that CLIs
+  branch on, so a name none of them knows put every one on its "unknown terminal" path - Claude Code,
+  for one, reported that Shift+Enter was unavailable and refused to run `/terminal-setup`. Programs
+  that want to detect this view specifically can read the new `TERMINAL_FOR_AI_CLI=1`.
+
 ### Fixed
 
 - Typing Japanese (or any other IME-composed text) into an AI CLI prompt no longer occasionally

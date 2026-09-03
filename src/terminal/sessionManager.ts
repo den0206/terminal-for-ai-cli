@@ -280,13 +280,23 @@ export class SessionManager implements vscode.Disposable {
       ...process.env,
       ...additionalEnv,
       TERM: additionalEnv?.TERM || process.env.TERM || 'xterm-256color',
-      // xterm.js renders 24-bit color, and CLIs look for TERM_PROGRAM to decide
-      // which terminal features they may use.
+      // xterm.js renders 24-bit color.
       COLORTERM: additionalEnv?.COLORTERM || 'truecolor',
-      TERM_PROGRAM: additionalEnv?.TERM_PROGRAM || 'terminal-for-ai-cli',
-      // The inherited version describes whichever program launched VS Code, so
-      // keeping it next to our own TERM_PROGRAM would just be misleading.
+      // TERM_PROGRAM is a de-facto registry of known terminal emulators that
+      // CLIs branch on, not a free-form name: a value nobody has heard of puts
+      // every one of them on its "unknown terminal" path. Claude Code, for one,
+      // then reports that Shift+Enter is unavailable and refuses to run
+      // /terminal-setup. The host app is the honest answer - this view is its
+      // terminal - and `uriScheme` is exactly the identifier those CLIs match
+      // ('vscode', 'cursor', 'windsurf').
+      TERM_PROGRAM: additionalEnv?.TERM_PROGRAM || vscode.env.uriScheme,
+      // The inherited version describes whichever program launched VS Code, and
+      // ours is not the host's terminal version either, so a program that keys a
+      // workaround off it would apply the wrong one. Leave it unset.
       TERM_PROGRAM_VERSION: additionalEnv?.TERM_PROGRAM_VERSION,
+      // How a program identifies this view specifically, now that TERM_PROGRAM
+      // names the host.
+      TERMINAL_FOR_AI_CLI: '1',
       COLUMNS: String(dimensions.cols),
       LINES: String(dimensions.rows),
     };
