@@ -7,7 +7,7 @@
   "config.defaultShell.description": "新しいセッションに使用するシェルのパス。空の場合はユーザーの既定シェルを使用します。machine スコープのため、ワークスペース設定からは上書きできません。",
   "config.startupCommands.description": "セッション作成時に順番に送信されるコマンドのリスト。machine スコープのため、ワークスペース設定からは上書きできません。",
   "config.confirmOpenLink.description": "ターミナル内のリンクを Cmd / Ctrl + クリックで開く前に確認ダイアログを表示します。",
-  "config.showResourceStats.description": "保存済み画像のサイズと拡張機能ホストのメモリ使用量をツールバーに表示します。メモリの値は拡張機能ホストのプロセス全体（他の拡張機能と共有）の値です。",
+  "config.showResourceStats.description": "この拡張機能がディスクに置いているサイズ（保存済み画像と保存スクロールバック）と拡張機能ホストのメモリ使用量をツールバーに表示します。メモリの値は拡張機能ホストのプロセス全体（他の拡張機能と共有）の値です。",
   "config.restoreScrollback.description": "各ターミナルのスクロールバックをディスクに保存し、エディタの再起動後にも読めるようにします。シェル自体は復元されません。machine スコープのため、ワークスペース設定からは上書きできません。",
   "config.rendererType.description": "ターミナルの描画方式。`auto` は GPU レンダラを試し、使えない場合は DOM レンダラに切り替えます。",
   "renderer.auto": "（おすすめ）GPU レンダラが使えれば使い、駄目なら DOM レンダラ",

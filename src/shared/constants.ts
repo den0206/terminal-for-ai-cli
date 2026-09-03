@@ -65,8 +65,12 @@ export const SHARED_CONSTANTS = {
     FALLBACK_LINES: 1000,
     /** Snapshots larger than this are dropped rather than written to disk */
     MAX_SNAPSHOT_CHARS: 2_000_000,
-    /** Snapshots older than this are deleted at startup (7 days) */
-    TTL_MS: 7 * 24 * 60 * 60 * 1000,
+    /**
+     * Snapshots older than this are deleted at startup. Same 24h as saved
+     * images: this has to outlive a restart, but nothing beyond that, and a
+     * workspace that is never reopened cannot be swept from anywhere else.
+     */
+    TTL_MS: 24 * 60 * 60 * 1000,
   },
 } as const;
 

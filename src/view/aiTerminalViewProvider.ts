@@ -403,18 +403,23 @@ export class AiTerminalViewProvider
   }
 
   /**
-   * Posts "<saved images> / <extension host RSS>".
+   * Posts "<saved images + stored scrollback> / <extension host RSS>".
    * ponytail: RSS covers the whole extension host process (shared with other
    * extensions); per-extension memory would need a separate process to measure.
    * The setting description says so, and the readout carries a tooltip.
    */
   private async postUsage() {
-    const imageBytes = await this.imageManager.getStorageBytes();
+    // 保存済み画像と、再起動用に取ってあるスクロールバック。どちらもこの拡張が
+    // ワークスペースのストレージに置いたもので、放っておくと数 MB になる。
+    const [imageBytes, scrollbackBytes] = await Promise.all([
+      this.imageManager.getStorageBytes(),
+      this.scrollbackStore.getStorageBytes(),
+    ]);
     const mb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)}MB`;
     this.postMessage({
       type: 'usage-update',
       payload: {
-        text: `\u{1F4BE} ${mb(imageBytes)} \u00B7 \u{1F9E0} ${mb(
+        text: `\u{1F4BE} ${mb(imageBytes + scrollbackBytes)} \u00B7 \u{1F9E0} ${mb(
           process.memoryUsage().rss,
         )}`,
       },

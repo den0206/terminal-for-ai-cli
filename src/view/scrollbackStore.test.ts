@@ -164,6 +164,33 @@ describe('ScrollbackStore', () => {
     );
   });
 
+  it('skips a write when the snapshot has not changed', async () => {
+    await store.save(1, validSnapshot);
+    await store.save(1, {...validSnapshot, savedAt: validSnapshot.savedAt + 1});
+
+    expect(fs.writeFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('writes again after the slot was cleared', async () => {
+    await store.save(1, validSnapshot);
+    await store.clear(1);
+    await store.save(1, validSnapshot);
+
+    expect(fs.writeFile).toHaveBeenCalledTimes(2);
+  });
+
+  it('adds up the size of the stored snapshots', async () => {
+    fs.stat.mockResolvedValue({size: 1024});
+
+    await expect(store.getStorageBytes()).resolves.toBe(2048);
+  });
+
+  it('ignores slots with nothing stored when sizing', async () => {
+    fs.stat.mockRejectedValue(new Error('ENOENT'));
+
+    await expect(store.getStorageBytes()).resolves.toBe(0);
+  });
+
   it('sweeps stale snapshots at startup', async () => {
     fs.readFile.mockResolvedValue(fileContents(validSnapshot));
 
