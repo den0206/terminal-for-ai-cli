@@ -137,13 +137,23 @@ Create a second session, then press `▢`. Both panes render at once and the div
 be dragged (the ratio is clamped to 20–80% and persisted). The focused pane is outlined; clicking a
 pane makes it active.
 
-### Dropping an image
+### Dropping files and images
 
-**Hold `Shift`** while dragging an image onto the view, then drop it. Without `Shift` the editor's own
-drop handling wins, so this is deliberate. The file is written to the extension's global storage and
-the **escaped absolute path is written into the shell**, ready for an AI CLI that reads image paths.
+**Hold `Shift`** while dragging onto the view, then drop. Without `Shift` the editor's own drop
+handling wins, so this is deliberate. What gets typed into the shell depends on where the drop came
+from:
 
-Files up to 10MB and `image/*` types only. Non-image files are ignored.
+| Dragged from | What is typed | Why |
+|--------------|---------------|-----|
+| The editor's **explorer** (any file) | The file's own escaped path | The drop carries a `text/uri-list`, which names the real path |
+| The **OS** (Finder / Explorer), images only | The escaped path of a copy in this window's storage | A webview cannot read the path of an OS-dropped file, so the bytes are copied instead |
+
+Copying is the right answer for a screenshot and the wrong one for a source file — an agent editing
+the copy would leave the original untouched — so an OS drop still only accepts `image/*` under 10MB.
+Drag source files out of the explorer instead, where the real path is available.
+
+Up to 50 paths are typed from a single drop, separated by spaces. Only `file:` URIs are used, and a
+path that cannot be quoted safely for the platform's shell is skipped rather than sent half-escaped.
 
 ### Opening a link
 
@@ -236,7 +246,7 @@ escalating to `SIGKILL` after 2s) and deletes every saved image.
 | Split view | Both sessions visible at once with a draggable, persisted split ratio |
 | Session naming | `Terminal N` with reuse of freed numbers |
 | Scrollback | 3000 lines in xterm, plus a 2MB per-session buffer replayed on Webview reload |
-| Image drag & drop | `Shift` + drop → saved to global storage, escaped path typed into the shell |
+| File drag & drop | `Shift` + drop → explorer files type their own path; OS-dropped images are saved and their copy's path is typed |
 | Clickable links | `Cmd` / `Ctrl` + click opens an `http(s)` URL in the default browser; a plain click offers Open / Copy |
 | Image cleanup | Deleted on session exit, on deactivation, and on startup (orphans, 24h TTL) |
 | Usage readout | Saved-image total and extension host RSS, refreshed every 30s while visible |
@@ -358,10 +368,11 @@ Check `aiTerminal.defaultShell`. It must be an **absolute path to an executable*
 is rejected and the extension falls back to your login shell with a warning. Details are in the
 Output panel → "Terminal For AI CLI".
 
-### Dropping an image does nothing
+### Dropping a file does nothing
 
-Hold **`Shift`** while dragging. Also confirm it is an `image/*` file under 10MB and that a session
-is active — drops are routed to the active session.
+Hold **`Shift`** while dragging, and check that a session is active — drops are routed to the active
+session. A drop straight from the OS is only accepted for `image/*` files under 10MB; for anything
+else, drag it out of the editor's explorer instead, which is the route that carries the real path.
 
 ### The split toggle does nothing
 

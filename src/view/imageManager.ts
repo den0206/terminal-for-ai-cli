@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {SHARED_CONSTANTS} from '../shared/constants';
 import {Logger} from '../utils/logger';
+import {escapeShellPath} from '../utils/shellPath';
 
 /**
  * Manages image storage and cleanup for terminal sessions.
@@ -171,7 +172,7 @@ export class ImageManager {
       sessionImageSet.add(imageUri.fsPath);
     }
 
-    return this.escapeShellPath(imageUri.fsPath);
+    return escapeShellPath(imageUri.fsPath);
   }
 
   /**
@@ -306,28 +307,5 @@ export class ImageManager {
   clearTracking(): void {
     this.sessionImages.clear();
     this.cachedBytes = undefined;
-  }
-
-  /**
-   * Quotes a path so the shell takes it as a single literal argument.
-   *
-   * POSIX single quotes are literal, so the standard `'\''` break-out is enough
-   * for any byte. Windows has no such construct: inside double quotes `cmd.exe`
-   * still expands `%VAR%` and (with delayed expansion) `!VAR!`, and a `"` cannot
-   * be escaped portably across cmd.exe and PowerShell. Those characters are
-   * rejected instead of being escaped wrongly - the path is our own storage
-   * directory plus a filename sanitized to `[a-zA-Z0-9._-]`, so this only fires
-   * on an exotic storage location, where failing is the safe outcome.
-   */
-  private escapeShellPath(filePath: string): string {
-    if (process.platform === 'win32') {
-      if (/["%!]/.test(filePath)) {
-        throw new Error(
-          `Image path contains characters that cannot be quoted safely on Windows: ${filePath}`
-        );
-      }
-      return `"${filePath}"`;
-    }
-    return `'${filePath.replace(/'/g, "'\\''")}'`;
   }
 }

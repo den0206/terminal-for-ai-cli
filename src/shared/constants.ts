@@ -13,6 +13,9 @@ export const SHARED_CONSTANTS = {
   /** Maximum size in bytes for image files that can be dropped into the terminal (10MB) */
   MAX_IMAGE_SIZE_BYTES: 10 * 1024 * 1024,
 
+  /** Maximum number of paths inserted from a single drop */
+  MAX_DROPPED_PATHS: 50,
+
   /** Maximum length for image file names to prevent filesystem limits */
   MAX_IMAGE_FILENAME_LENGTH: 255,
 
