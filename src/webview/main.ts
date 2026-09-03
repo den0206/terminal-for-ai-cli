@@ -167,7 +167,11 @@ class TerminalManager {
     // send a bare CR, which submits the prompt instead.
     terminal.attachCustomKeyEventHandler((event) => {
       // Ctrl+F は端末では 0x06 として PTY に流れるので、ここで止める。
+      // xterm.js は false を返しても伝播を止めないので、ここで止めないと
+      // document 側の同じショートカットにも届いて二重に開いてしまう。
       if (isFindShortcut(event, IS_MAC)) {
+        event.preventDefault();
+        event.stopPropagation();
         this.onFindShortcut();
         return false;
       }
