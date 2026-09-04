@@ -16,6 +16,7 @@ src/**
 scripts/**
 vitest.config.mts
 tsconfig.json
+tsconfig.webview.json
 
 # Source maps (not needed in production)
 **/*.map

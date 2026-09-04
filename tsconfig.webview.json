@@ -1,0 +1,26 @@
+{
+  // Webview バンドル用の型チェック設定。
+  //
+  // 拡張ホスト側 (tsconfig.json) は Node の型で `lib: ["es2020"]`、こちらは
+  // ブラウザなので DOM が要る。同じ設定では両立しないため tsconfig.json は
+  // src/webview/** を exclude しているが、それだけだと esbuild が型を見ない
+  // まま束ねるので、Webview のコードが一切型チェックされないまま出荷される。
+  // その穴を塞ぐのがこのファイルで、`npm run typecheck` から呼ばれる。
+  //
+  // 出力は esbuild が受け持つので、ここは noEmit の検査専用。
+  "compilerOptions": {
+    "target": "es2020",
+    "lib": ["es2020", "dom", "dom.iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "types": []
+  },
+  "include": ["src/webview/**/*.ts", "src/shared/**/*.ts"]
+}
