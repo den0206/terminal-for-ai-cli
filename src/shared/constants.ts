@@ -16,6 +16,18 @@ export const SHARED_CONSTANTS = {
   /** Maximum number of paths inserted from a single drop */
   MAX_DROPPED_PATHS: 50,
 
+  /** Maximum number of images saved from a single drop */
+  MAX_DROPPED_IMAGES: 10,
+
+  /**
+   * Ceiling for the saved-images directory (100MB).
+   *
+   * Images are only reclaimed when the session ends, so without a ceiling a
+   * long-running session can keep writing 10MB files into workspace storage
+   * for as long as it lives. The toolbar readout shows this total.
+   */
+  MAX_IMAGE_STORAGE_BYTES: 100 * 1024 * 1024,
+
   /** Maximum length for image file names to prevent filesystem limits */
   MAX_IMAGE_FILENAME_LENGTH: 255,
 

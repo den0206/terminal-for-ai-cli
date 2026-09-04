@@ -184,7 +184,8 @@ function createMockContext(): vscode.ExtensionContext {
  */
 function createMockWebview(): vscode.Webview {
   const onDidReceiveMessageEmitter = {
-    event: vi.fn(),
+    // 本体と同じく IDisposable を返す（購読の解除をテストから確認できるように）
+    event: vi.fn(() => ({dispose: vi.fn()})),
     fire: vi.fn(),
     dispose: vi.fn(),
   };
@@ -213,9 +214,25 @@ function createMockWebviewView(): vscode.WebviewView {
     title: 'Terminal For AI',
     description: undefined,
     badge: undefined,
-    onDidDispose: vi.fn(),
-    onDidChangeVisibility: vi.fn(),
+    onDidDispose: vi.fn(() => ({dispose: vi.fn()})),
+    onDidChangeVisibility: vi.fn(() => ({dispose: vi.fn()})),
   } as unknown as vscode.WebviewView;
+}
+
+/** Runs the `onDidDispose` handler the provider registered on the view. */
+function fireViewDisposed(webviewView: vscode.WebviewView): void {
+  const handler = (webviewView.onDidDispose as ReturnType<typeof vi.fn>).mock
+    .calls[0][0];
+  handler();
+}
+
+/** Returns the message handler the provider registered on the webview. */
+function getMessageHandler(
+  webviewView: vscode.WebviewView
+): (message: unknown) => Promise<void> {
+  return (
+    webviewView.webview.onDidReceiveMessage as ReturnType<typeof vi.fn>
+  ).mock.calls[0][0];
 }
 
 describe('AiTerminalViewProvider', () => {
@@ -474,6 +491,93 @@ describe('AiTerminalViewProvider', () => {
     it('should handle errors gracefully', async () => {
       // Should not throw even if there are errors
       await expect(provider.cleanupOrphanedImages()).resolves.toBeDefined();
+    });
+  });
+
+  describe('webview disposal', () => {
+    it('should queue session output instead of posting to a disposed webview', async () => {
+      const webviewView = createMockWebviewView();
+      provider.resolveWebviewView(webviewView);
+      await getMessageHandler(webviewView)({type: 'webview-ready'});
+      await waitForSessionCreation(sessionManager, 1);
+
+      const postMessage = webviewView.webview.postMessage as ReturnType<
+        typeof vi.fn
+      >;
+      fireViewDisposed(webviewView);
+      postMessage.mockClear();
+
+      sessionManager['onDataEmitter'].fire({
+        id: 'session-after-dispose',
+        data: 'output produced while the view was gone',
+      });
+
+      // 破棄済みの Webview へは送らない
+      expect(postMessage).not.toHaveBeenCalled();
+      // 捨てずにキューへ積む
+      expect(
+        provider['messageQueue'].some(
+          (message) =>
+            message.type === 'session-data' &&
+            message.payload.data ===
+              'output produced while the view was gone'
+        )
+      ).toBe(true);
+    });
+
+    it('should flush output produced while disposed once the view comes back', async () => {
+      const first = createMockWebviewView();
+      provider.resolveWebviewView(first);
+      await getMessageHandler(first)({type: 'webview-ready'});
+      await waitForSessionCreation(sessionManager, 1);
+
+      fireViewDisposed(first);
+      sessionManager['onDataEmitter'].fire({
+        id: 'session-1',
+        data: 'missed output',
+      });
+
+      // ビューが作り直され、新しい Webview が ready になる
+      const second = createMockWebviewView();
+      provider.resolveWebviewView(second);
+      await getMessageHandler(second)({type: 'webview-ready'});
+
+      const postMessage = second.webview.postMessage as ReturnType<
+        typeof vi.fn
+      >;
+      expect(
+        postMessage.mock.calls.some(
+          ([message]) =>
+            message.type === 'session-data' &&
+            message.payload.data === 'missed output'
+        )
+      ).toBe(true);
+      expect(provider['messageQueue']).toHaveLength(0);
+    });
+
+    it('should keep sessions alive when the view is disposed', async () => {
+      const webviewView = createMockWebviewView();
+      provider.resolveWebviewView(webviewView);
+      await getMessageHandler(webviewView)({type: 'webview-ready'});
+      await waitForSessionCreation(sessionManager, 1);
+      const countBefore = sessionManager.getSessionCount();
+
+      fireViewDisposed(webviewView);
+
+      // Webview は使い捨てでも PTY は拡張ホスト側で生き続ける
+      expect(sessionManager.getSessionCount()).toBe(countBefore);
+    });
+
+    it('should stop handling messages from a disposed webview', async () => {
+      const webviewView = createMockWebviewView();
+      provider.resolveWebviewView(webviewView);
+      const messageDisposable = (
+        webviewView.webview.onDidReceiveMessage as ReturnType<typeof vi.fn>
+      ).mock.results[0].value;
+
+      fireViewDisposed(webviewView);
+
+      expect(messageDisposable.dispose).toHaveBeenCalled();
     });
   });
 

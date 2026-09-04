@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import {SHARED_CONSTANTS} from '../shared/constants';
 import {Logger} from '../utils/logger';
 import {escapeShellPath} from '../utils/shellPath';
+import {resolveStorageRoot} from './storageRoot';
 
 /**
  * Manages image storage and cleanup for terminal sessions.
@@ -18,15 +19,10 @@ export class ImageManager {
   constructor(private readonly context: vscode.ExtensionContext) {}
 
   /**
-   * Root for saved images.
-   *
-   * Workspace storage, not global storage: every window runs its own extension
-   * host, so a shared directory means one window's startup cleanup (or its
-   * `deactivate`) deletes images another window is still using. `storageUri` is
-   * undefined when no folder is open, and only then do we fall back.
+   * Root for saved images. Per window - see {@link resolveStorageRoot}.
    */
   private get storageRoot(): vscode.Uri {
-    return this.context.storageUri ?? this.context.globalStorageUri;
+    return resolveStorageRoot(this.context);
   }
 
   private get imagesDir(): vscode.Uri {
@@ -113,6 +109,24 @@ export class ImageManager {
       ).toFixed(0);
       throw new Error(
         `Image file too large: ${sizeMB}MB (maximum: ${maxMB}MB)`
+      );
+    }
+
+    // Check the ceiling for the directory as a whole. Per-file limits alone
+    // bound one drop, not a session that keeps dropping: saved images are only
+    // reclaimed when the session ends.
+    const storedBytes = await this.getStorageBytes();
+    if (
+      storedBytes + buffer.length >
+      SHARED_CONSTANTS.MAX_IMAGE_STORAGE_BYTES
+    ) {
+      const maxMB = (
+        SHARED_CONSTANTS.MAX_IMAGE_STORAGE_BYTES /
+        (1024 * 1024)
+      ).toFixed(0);
+      throw new Error(
+        `Image storage is full: ${maxMB}MB already saved. ` +
+          'Run "Terminal For AI CLI: Delete saved images" to free space.'
       );
     }
 
