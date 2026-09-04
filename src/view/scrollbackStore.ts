@@ -4,6 +4,7 @@ import {SHARED_CONSTANTS} from '../shared/constants';
 import type {ScrollbackSnapshot, TerminalSlot} from '../shared/types';
 import {TERMINAL_SLOTS} from '../shared/types';
 import {Logger} from '../utils/logger';
+import {resolveStorageRoot} from './storageRoot';
 
 const {MAX_SNAPSHOT_CHARS, TTL_MS} = SHARED_CONSTANTS.SCROLLBACK_RESTORE;
 
@@ -46,9 +47,9 @@ export function isExpired(savedAt: number, now: number, ttlMs = TTL_MS): boolean
  * Keeps the last scrollback of each terminal slot on disk so it can be read
  * again after the editor restarts.
  *
- * Storage is per window (per workspace), like saved images: every window runs
- * its own extension host, so a shared file would let one window overwrite the
- * history another window is about to restore.
+ * Storage is per window, like saved images: every window runs its own extension
+ * host, so a shared file would let one window overwrite the history another
+ * window is about to restore.
  */
 export class ScrollbackStore {
   /**
@@ -61,7 +62,7 @@ export class ScrollbackStore {
   constructor(private readonly context: vscode.ExtensionContext) {}
 
   private get storageRoot(): vscode.Uri {
-    return this.context.storageUri ?? this.context.globalStorageUri;
+    return resolveStorageRoot(this.context);
   }
 
   private get directory(): vscode.Uri {

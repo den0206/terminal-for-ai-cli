@@ -52,6 +52,8 @@ export const commands = {
 export const env = {
   openExternal: vi.fn(),
   uriScheme: 'vscode',
+  // 本体と同じくウィンドウごとに一意な ID
+  sessionId: 'test-session-id',
   clipboard: {
     writeText: vi.fn(),
     readText: vi.fn(),

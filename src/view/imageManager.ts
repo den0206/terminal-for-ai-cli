@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import {SHARED_CONSTANTS} from '../shared/constants';
 import {Logger} from '../utils/logger';
 import {escapeShellPath} from '../utils/shellPath';
+import {resolveStorageRoot} from './storageRoot';
 
 /**
  * Manages image storage and cleanup for terminal sessions.
@@ -18,15 +19,10 @@ export class ImageManager {
   constructor(private readonly context: vscode.ExtensionContext) {}
 
   /**
-   * Root for saved images.
-   *
-   * Workspace storage, not global storage: every window runs its own extension
-   * host, so a shared directory means one window's startup cleanup (or its
-   * `deactivate`) deletes images another window is still using. `storageUri` is
-   * undefined when no folder is open, and only then do we fall back.
+   * Root for saved images. Per window - see {@link resolveStorageRoot}.
    */
   private get storageRoot(): vscode.Uri {
-    return this.context.storageUri ?? this.context.globalStorageUri;
+    return resolveStorageRoot(this.context);
   }
 
   private get imagesDir(): vscode.Uri {
