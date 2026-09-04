@@ -22,6 +22,7 @@ import {resolveWorkingDirectory} from '../utils/workingDirectory';
 import {ThemeSnapshot, buildWebviewHtml} from './htmlTemplate';
 import {ImageManager} from './imageManager';
 import {ScrollbackStore} from './scrollbackStore';
+import {pruneOrphanedWindowStorage} from './storageRoot';
 import {THEME_CONFIG_KEYS, getThemeSnapshot} from './themeSnapshot';
 
 // Extension 視点: 送信 = WebviewInboundMessage (shared), 受信 = WebviewOutboundMessage (shared)
@@ -718,6 +719,15 @@ export class AiTerminalViewProvider
   /** Deletes all saved images. Called on extension deactivation. */
   async clearAllStoredImages(): Promise<void> {
     return this.imageManager.clearAllImages();
+  }
+
+  /**
+   * Deletes the storage of folderless windows that are no longer running.
+   * Called on activation, like the image and scrollback sweeps.
+   * @returns The number of deleted directories
+   */
+  async cleanupOrphanedWindowStorage(): Promise<number> {
+    return pruneOrphanedWindowStorage(this.context);
   }
 
   private getThemeValues(): ThemeSnapshot {

@@ -151,7 +151,7 @@ describe('ScrollbackStore', () => {
     ).toEqual(['/storage/scrollback/1.json', '/storage/scrollback/2.json']);
   });
 
-  it('falls back to global storage when no folder is open', async () => {
+  it('falls back to a per-window directory when no folder is open', async () => {
     const store2 = new ScrollbackStore({
       storageUri: undefined,
       globalStorageUri: {fsPath: '/global', scheme: 'file', path: '/global'},
@@ -159,8 +159,10 @@ describe('ScrollbackStore', () => {
 
     await store2.save(2, validSnapshot);
 
+    // グローバルストレージ直下だと、フォルダ未オープンのウィンドウ同士が
+    // 同じ scrollback/2.json を奪い合って上書きし合う。
     expect((fs.writeFile.mock.calls[0][0] as {fsPath: string}).fsPath).toBe(
-      '/global/scrollback/2.json'
+      `/global/windows/${vscode.env.sessionId}/scrollback/2.json`
     );
   });
 

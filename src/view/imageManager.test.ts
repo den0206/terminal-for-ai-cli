@@ -1,6 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import type * as vscodeTypes from 'vscode';
-import {FileType, workspace as mockWorkspace} from 'vscode';
+import {FileType, env as mockEnv, workspace as mockWorkspace} from 'vscode';
 import {SHARED_CONSTANTS} from '../shared/constants';
 import {ImageManager} from './imageManager';
 
@@ -28,9 +28,11 @@ const PNG = Buffer.from('fake png bytes').toString('base64');
 
 describe('ImageManager', () => {
   let originalPlatform: PropertyDescriptor | undefined;
+  const originalSessionId = mockEnv.sessionId;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockEnv.sessionId = originalSessionId;
     fs.createDirectory.mockResolvedValue(undefined);
     fs.writeFile.mockResolvedValue(undefined);
     fs.delete.mockResolvedValue(undefined);
@@ -43,6 +45,7 @@ describe('ImageManager', () => {
     if (originalPlatform) {
       Object.defineProperty(process, 'platform', originalPlatform);
     }
+    mockEnv.sessionId = originalSessionId;
   });
 
   const setPlatform = (value: string) => {
@@ -59,15 +62,48 @@ describe('ImageManager', () => {
       expect(target.fsPath).toMatch(/^\/ws\/images\//);
     });
 
-    it('falls back to global storage when no folder is open', async () => {
+    it('falls back to a per-window directory when no folder is open', async () => {
       const manager = new ImageManager(
         createContext({storageUri: undefined, globalStorageUri: {fsPath: '/global'}})
       );
 
       await manager.handleImageDrop('shot.png', 'image/png', PNG, 'session-1');
 
+      // グローバルストレージ直下ではなく、ウィンドウ固有のサブディレクトリ。
+      // 直下だと、フォルダ未オープンのウィンドウ同士が同じ images/ を共有して
+      // しまい、片方の起動時掃除がもう片方の使用中の画像を消す。
       const [target] = fs.writeFile.mock.calls[0];
-      expect(target.fsPath).toMatch(/^\/global\/images\//);
+      expect(target.fsPath).toMatch(
+        new RegExp(`^/global/windows/${mockEnv.sessionId}/images/`)
+      );
+      expect(target.fsPath).not.toMatch(/^\/global\/images\//);
+    });
+
+    it('gives two folderless windows separate directories', async () => {
+      const context = createContext({
+        storageUri: undefined,
+        globalStorageUri: {fsPath: '/global'},
+      });
+
+      await new ImageManager(context).handleImageDrop(
+        'shot.png',
+        'image/png',
+        PNG,
+        'session-1'
+      );
+      const first = fs.writeFile.mock.calls[0][0].fsPath;
+
+      mockEnv.sessionId = 'another-window';
+      await new ImageManager(context).handleImageDrop(
+        'shot.png',
+        'image/png',
+        PNG,
+        'session-1'
+      );
+      const second = fs.writeFile.mock.calls[1][0].fsPath;
+
+      expect(first).not.toBe(second);
+      expect(second).toMatch(/^\/global\/windows\/another-window\/images\//);
     });
   });
 

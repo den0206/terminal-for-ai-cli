@@ -21,6 +21,12 @@ export function activate(context: vscode.ExtensionContext) {
     Logger.error('Failed to cleanup orphaned images on startup', error);
   });
 
+  // フォルダを開いていないウィンドウはグローバルストレージ配下に自分専用の
+  // ディレクトリを持つ。終了したウィンドウの分はここで回収する。
+  provider.cleanupOrphanedWindowStorage().catch((error) => {
+    Logger.error('Failed to cleanup orphaned window storage on startup', error);
+  });
+
   context.subscriptions.push(
     sessionManager,
     provider,
