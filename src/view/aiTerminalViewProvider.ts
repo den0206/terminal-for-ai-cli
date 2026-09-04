@@ -149,9 +149,9 @@ export class AiTerminalViewProvider
     this.disposeViewSubscriptions();
 
     this.viewDisposables.push(
-      webview.onDidReceiveMessage((message) => {
-        this.handleMessage(message);
-      }),
+      // `handleMessage` の Promise はそのまま返す。VS Code は戻り値を見ないが、
+      // 捨てると呼び出し側（テストを含む）が処理の完了を待てなくなる。
+      webview.onDidReceiveMessage((message) => this.handleMessage(message)),
       // ビューを別コンテナへ移す・Webview を再読み込みすると、この View は破棄されて
       // 作り直される。検知しないと `webviewReady` が立ったままになり、破棄済みの
       // Webview へ post し続けて、その間の出力がキューにも載らずに失われる
@@ -876,6 +876,14 @@ export class AiTerminalViewProvider
         const errorMessage = error.message.toLowerCase();
         if (errorMessage.includes('too large')) {
           userMessage = error.message;
+        } else if (errorMessage.includes('storage is full')) {
+          userMessage = vscode.l10n.t(
+            'Saved images have reached {0}MB. Run "Terminal For AI CLI: Delete saved images" to free space.',
+            (
+              SHARED_CONSTANTS.MAX_IMAGE_STORAGE_BYTES /
+              (1024 * 1024)
+            ).toFixed(0),
+          );
         } else if (errorMessage.includes('invalid file type')) {
           userMessage = vscode.l10n.t('Only image files are supported.');
         } else if (errorMessage.includes('invalid base64')) {

@@ -112,6 +112,24 @@ export class ImageManager {
       );
     }
 
+    // Check the ceiling for the directory as a whole. Per-file limits alone
+    // bound one drop, not a session that keeps dropping: saved images are only
+    // reclaimed when the session ends.
+    const storedBytes = await this.getStorageBytes();
+    if (
+      storedBytes + buffer.length >
+      SHARED_CONSTANTS.MAX_IMAGE_STORAGE_BYTES
+    ) {
+      const maxMB = (
+        SHARED_CONSTANTS.MAX_IMAGE_STORAGE_BYTES /
+        (1024 * 1024)
+      ).toFixed(0);
+      throw new Error(
+        `Image storage is full: ${maxMB}MB already saved. ` +
+          'Run "Terminal For AI CLI: Delete saved images" to free space.'
+      );
+    }
+
     // Validate filename
     if (
       !fileName ||
