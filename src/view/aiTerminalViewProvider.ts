@@ -49,7 +49,11 @@ export class AiTerminalViewProvider
   /** Characters of `session-data` currently held in `messageQueue`. */
   private queuedDataChars = 0;
   private readonly disposables: vscode.Disposable[] = [];
-  private messageDisposable?: vscode.Disposable;
+  /**
+   * 現在の Webview に紐づく購読。ビューは作り直されるので、拡張本体の
+   * `disposables` とは分けて、`resolveWebviewView` のたびに張り替える。
+   */
+  private viewDisposables: vscode.Disposable[] = [];
   /** セッション ID → ターミナル番号（Terminal 1 / Terminal 2） */
   private readonly sessionSlots = new Map<string, TerminalSlot>();
   private readonly imageManager: ImageManager;
@@ -113,11 +117,8 @@ export class AiTerminalViewProvider
 
   /** Disposes listeners, labels, tracked images and queued messages. Idempotent. */
   dispose() {
-    // Dispose message listener separately as it's managed outside disposables array
-    if (this.messageDisposable) {
-      this.messageDisposable.dispose();
-      this.messageDisposable = undefined;
-    }
+    // Webview 側の購読は resolveWebviewView のたびに張り替わるので別管理
+    this.disposeViewSubscriptions();
     clearInterval(this.usageTimer);
     this.usageTimer = undefined;
     vscode.Disposable.from(...this.disposables).dispose();
@@ -143,15 +144,42 @@ export class AiTerminalViewProvider
 
     webview.html = this.getHtml(webview);
 
-    // Clean up previous message listener if webview is re-resolved
-    if (this.messageDisposable) {
-      this.messageDisposable.dispose();
-      this.messageDisposable = undefined;
-    }
+    // Clean up previous subscriptions if the webview is re-resolved
+    this.disposeViewSubscriptions();
 
-    this.messageDisposable = webview.onDidReceiveMessage((message) => {
-      this.handleMessage(message);
-    });
+    this.viewDisposables.push(
+      webview.onDidReceiveMessage((message) => {
+        this.handleMessage(message);
+      }),
+      // ビューを別コンテナへ移す・Webview を再読み込みすると、この View は破棄されて
+      // 作り直される。検知しないと `webviewReady` が立ったままになり、破棄済みの
+      // Webview へ post し続けて、その間の出力がキューにも載らずに失われる
+      // （Webview 側のバッファは再読み込みで消えるので、取り戻す先が無い）。
+      webviewView.onDidDispose(() => {
+        this.handleViewDisposed();
+      }),
+    );
+  }
+
+  /** Drops the subscriptions tied to the current webview. Safe to call twice. */
+  private disposeViewSubscriptions() {
+    for (const disposable of this.viewDisposables) {
+      disposable?.dispose();
+    }
+    this.viewDisposables = [];
+  }
+
+  /**
+   * Webview が破棄されたときの後始末。
+   *
+   * セッションは拡張ホスト側で生き続けるので落とさない。以降の出力は
+   * `postMessage` がキューに積み、次の `webview-ready` でまとめて流し込む。
+   */
+  private handleViewDisposed() {
+    this.disposeViewSubscriptions();
+    this.webviewView = undefined;
+    this.webviewReady = false;
+    this.initialSessionEnsured = false;
   }
 
   /** Brings the view into focus (command: terminal-for-ai-cli.focus). */
