@@ -123,6 +123,33 @@ describe('ImageManager', () => {
       ).rejects.toThrow('Invalid base64 data');
     });
 
+    it('rejects a write that would push storage past the ceiling', async () => {
+      const manager = new ImageManager(createContext({}));
+      // ディレクトリが既に上限ぎりぎりまで埋まっている状態
+      fs.readDirectory.mockResolvedValue([['old.png', FileType.File]]);
+      fs.stat.mockResolvedValue({
+        size: SHARED_CONSTANTS.MAX_IMAGE_STORAGE_BYTES,
+      });
+
+      await expect(
+        manager.handleImageDrop('shot.png', 'image/png', PNG, 's1')
+      ).rejects.toThrow('Image storage is full');
+      expect(fs.writeFile).not.toHaveBeenCalled();
+    });
+
+    it('allows a write that still fits under the ceiling', async () => {
+      const manager = new ImageManager(createContext({}));
+      fs.readDirectory.mockResolvedValue([['old.png', FileType.File]]);
+      fs.stat.mockResolvedValue({
+        size: SHARED_CONSTANTS.MAX_IMAGE_STORAGE_BYTES - 1024 * 1024,
+      });
+
+      await expect(
+        manager.handleImageDrop('shot.png', 'image/png', PNG, 's1')
+      ).resolves.toBeDefined();
+      expect(fs.writeFile).toHaveBeenCalled();
+    });
+
     it('rejects images above the size limit', async () => {
       const manager = new ImageManager(createContext({}));
       const oversized = Buffer.alloc(

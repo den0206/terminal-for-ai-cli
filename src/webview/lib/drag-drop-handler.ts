@@ -65,13 +65,26 @@ export class DragDropHandler {
       event.stopPropagation();
 
       const files = Array.from(event.dataTransfer.files);
-      const imageFiles = files.filter((file) => file.type.startsWith('image/'));
-      if (imageFiles.length === 0) {
+      const allImages = files.filter((file) => file.type.startsWith('image/'));
+      if (allImages.length === 0) {
         return;
       }
 
       if (!sessionId) {
         return;
+      }
+
+      // 1 回のドロップで保存する枚数を絞る。パスの挿入側 (uri-drop) と違って
+      // こちらは実際にディスクへ書くので、上限が無いと 1 回のドロップで数百 MB
+      // をワークスペースストレージへ流し込める。
+      const imageFiles = allImages.slice(
+        0,
+        SHARED_CONSTANTS.MAX_DROPPED_IMAGES
+      );
+      if (allImages.length > imageFiles.length) {
+        webviewLog.warn(
+          `Dropped more than ${SHARED_CONSTANTS.MAX_DROPPED_IMAGES} images; the rest were ignored`
+        );
       }
 
       for (const file of imageFiles) {
