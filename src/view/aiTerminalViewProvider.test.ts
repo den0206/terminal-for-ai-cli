@@ -1,7 +1,7 @@
 import type {IPty} from 'node-pty';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import type * as vscode from 'vscode';
-import {env as mockEnv, window as mockWindow} from 'vscode';
+import {env as mockEnv, Uri as mockUri, window as mockWindow} from 'vscode';
 import {SHARED_CONSTANTS} from '../shared/constants';
 import {SessionManager} from '../terminal/sessionManager';
 import {Logger} from '../utils/logger';
@@ -74,6 +74,7 @@ vi.mock('vscode', async () => {
       showErrorMessage: vi.fn(),
       showWarningMessage: vi.fn(),
       showInformationMessage: vi.fn(),
+      showOpenDialog: vi.fn(),
     },
     Uri: {
       parse: vi.fn((value: string) => {
@@ -359,6 +360,8 @@ describe('AiTerminalViewProvider', () => {
 
       expect(webviewView.webview.html).toBeTruthy();
       expect(webviewView.webview.html.length).toBeGreaterThan(0);
+      expect(webviewView.webview.html).toContain('data-file-select="primary"');
+      expect(webviewView.webview.html).toContain('data-file-select="secondary"');
     });
 
     it('should enable scripts in webview options', () => {
@@ -971,6 +974,163 @@ describe('AiTerminalViewProvider', () => {
 
       const written = writeSpy.mock.calls[0][1] as string;
       expect(written.trimEnd().split(' ')).toHaveLength(cap);
+    });
+  });
+
+  describe('handleMessage - request-file-selection', () => {
+    const setupFileSelection = async () => {
+      const webviewView = createMockWebviewView();
+      provider.resolveWebviewView(webviewView);
+      const messageHandler = (
+        webviewView.webview.onDidReceiveMessage as ReturnType<typeof vi.fn>
+      ).mock.calls[0][0];
+      const session = sessionManager.createSession();
+      await messageHandler({type: 'webview-ready'});
+      const postMessageMock = webviewView.webview.postMessage as ReturnType<
+        typeof vi.fn
+      >;
+      postMessageMock.mockClear();
+      return {
+        messageHandler,
+        postMessageMock,
+        sessionId: session.id,
+        writeSpy: vi.spyOn(sessionManager, 'write'),
+      };
+    };
+
+    it('opens a media-only multi-select dialog and types paths in order', async () => {
+      const {messageHandler, postMessageMock, sessionId, writeSpy} =
+        await setupFileSelection();
+      vi.mocked(mockWindow.showOpenDialog).mockResolvedValue([
+        mockUri.file('/tmp/first image.png'),
+        mockUri.file('/tmp/second.MOV'),
+      ]);
+
+      await messageHandler({
+        type: 'request-file-selection',
+        payload: {sessionId},
+      });
+
+      expect(mockWindow.showOpenDialog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          canSelectFiles: true,
+          canSelectFolders: false,
+          canSelectMany: true,
+          filters: {
+            'Images and videos': expect.arrayContaining([
+              'png',
+              'jpg',
+              'heic',
+              'svg',
+              'mp4',
+              'mov',
+              'webm',
+              'mkv',
+            ]),
+          },
+        })
+      );
+      expect(writeSpy).toHaveBeenCalledWith(
+        sessionId,
+        `${escapeShellPath('/tmp/first image.png')} ${escapeShellPath(
+          '/tmp/second.MOV'
+        )} `
+      );
+      expect(postMessageMock).toHaveBeenCalledWith({
+        type: 'file-selection-complete',
+        payload: {sessionId},
+      });
+      expect(mockWindow.showInformationMessage).not.toHaveBeenCalled();
+    });
+
+    it('does not write when the picker is cancelled, but restores focus', async () => {
+      const {messageHandler, postMessageMock, sessionId, writeSpy} =
+        await setupFileSelection();
+      vi.mocked(mockWindow.showOpenDialog).mockResolvedValue(undefined);
+
+      await messageHandler({
+        type: 'request-file-selection',
+        payload: {sessionId},
+      });
+
+      expect(writeSpy).not.toHaveBeenCalled();
+      expect(postMessageMock).toHaveBeenCalledWith({
+        type: 'file-selection-complete',
+        payload: {sessionId},
+      });
+    });
+
+    it('rejects the entire selection above the 64 KiB input limit', async () => {
+      const {messageHandler, sessionId, writeSpy} = await setupFileSelection();
+      const longPath = `/${'a'.repeat(
+        SHARED_CONSTANTS.MAX_FILE_SELECTION_INPUT_BYTES
+      )}.png`;
+      vi.mocked(mockWindow.showOpenDialog).mockResolvedValue([
+        mockUri.file(longPath),
+      ]);
+
+      await messageHandler({
+        type: 'request-file-selection',
+        payload: {sessionId},
+      });
+
+      expect(writeSpy).not.toHaveBeenCalled();
+      expect(mockWindow.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('64 KiB')
+      );
+    });
+
+    it('does not apply the drag-and-drop file-count limit', async () => {
+      const {messageHandler, sessionId, writeSpy} = await setupFileSelection();
+      const selected = Array.from({length: 60}, (_unused, index) =>
+        mockUri.file(`/tmp/image-${index}.png`)
+      );
+      vi.mocked(mockWindow.showOpenDialog).mockResolvedValue(selected);
+
+      await messageHandler({
+        type: 'request-file-selection',
+        payload: {sessionId},
+      });
+
+      expect(writeSpy).toHaveBeenCalledWith(
+        sessionId,
+        `${selected.map((uri) => escapeShellPath(uri.fsPath)).join(' ')} `
+      );
+    });
+
+    it('rejects unsupported files even if a forged picker result includes one', async () => {
+      const {messageHandler, sessionId, writeSpy} = await setupFileSelection();
+      vi.mocked(mockWindow.showOpenDialog).mockResolvedValue([
+        mockUri.file('/tmp/notes.txt'),
+      ]);
+
+      await messageHandler({
+        type: 'request-file-selection',
+        payload: {sessionId},
+      });
+
+      expect(writeSpy).not.toHaveBeenCalled();
+      expect(mockWindow.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Only supported image and video')
+      );
+    });
+
+    it('does not retarget the selection if its originating session closed', async () => {
+      const {messageHandler, sessionId, writeSpy} = await setupFileSelection();
+      vi.mocked(mockWindow.showOpenDialog).mockResolvedValue([
+        mockUri.file('/tmp/image.png'),
+      ]);
+      sessionManager.disposeSession(sessionId);
+
+      await messageHandler({
+        type: 'request-file-selection',
+        payload: {sessionId},
+      });
+
+      expect(writeSpy).not.toHaveBeenCalled();
+      expect(mockWindow.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('target terminal is no longer available')
+      );
     });
   });
 

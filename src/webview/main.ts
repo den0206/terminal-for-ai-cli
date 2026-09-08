@@ -693,6 +693,24 @@ class AppController {
       });
     }
 
+    PANES.forEach((pane) => {
+      const button = this.dom.fileSelectButtons[pane];
+      if (!button) {
+        return;
+      }
+      this.addEventListener(button, 'click', () => {
+        const sessionId = this.uiState.paneSessions[pane];
+        if (!sessionId || button.disabled) {
+          return;
+        }
+        this.handlePaneFocus(pane);
+        this.vscode.postMessage<OutboundMessage>({
+          type: 'request-file-selection',
+          payload: {sessionId},
+        });
+      });
+    });
+
     if (this.dom.viewToggleButton) {
       this.addEventListener(this.dom.viewToggleButton, 'click', () => {
         if (this.dom.viewToggleButton?.disabled) {
@@ -918,6 +936,9 @@ class AppController {
         break;
       case 'renderer-update':
         this.terminalManager.setRendererType(message.payload.rendererType);
+        break;
+      case 'file-selection-complete':
+        this.focusSession(message.payload.sessionId);
         break;
       case 'restore-scrollback':
         // 対応するスロットのセッションが既にあれば今すぐ、無ければ出来たときに書く。
@@ -1172,6 +1193,10 @@ class AppController {
     const paneElement = this.dom.paneElements[pane];
     if (paneElement) {
       paneElement.setAttribute('data-pane-visible', visible ? 'true' : 'false');
+    }
+    const fileSelectButton = this.dom.fileSelectButtons[pane];
+    if (fileSelectButton) {
+      fileSelectButton.disabled = !visible || !this.uiState.paneSessions[pane];
     }
   }
 
@@ -1436,6 +1461,27 @@ class AppController {
     }
     this.terminalManager.focusTerminal(pane);
     this.updatePaneActiveStates();
+  }
+
+  private focusSession(sessionId: string): void {
+    if (!this.sessionState.sessionIds.includes(sessionId)) {
+      return;
+    }
+    const pane = this.uiState.getPaneForSession(sessionId);
+    if (pane) {
+      this.sessionState.activeSessionId = sessionId;
+      this.persistState();
+      this.updateSessionControls();
+      this.updatePaneActiveStates();
+      this.refreshThemeUi();
+      this.terminalManager.focusTerminal(pane);
+      return;
+    }
+    this.sessionState.activeSessionId = sessionId;
+    this.persistState();
+    this.syncPaneAssignments();
+    this.updateSessionControls();
+    this.focusActivePane();
   }
 
   private handlePaneFocus(pane: Pane): void {

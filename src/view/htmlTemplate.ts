@@ -252,6 +252,30 @@ export function buildWebviewHtml({
             text-overflow: ellipsis;
             white-space: nowrap;
           }
+          .terminal-pane__attach {
+            flex: 0 0 auto;
+            width: 24px;
+            height: 24px;
+            border: 0;
+            border-radius: 4px;
+            padding: 0;
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+            font-size: 0.9rem;
+            line-height: 1;
+          }
+          .terminal-pane__attach:hover:enabled {
+            background: color-mix(in srgb, var(--terminal-fg) 15%, transparent);
+          }
+          .terminal-pane__attach:focus-visible {
+            outline: 1px solid var(--vscode-focusBorder);
+            outline-offset: 1px;
+          }
+          .terminal-pane__attach:disabled {
+            opacity: 0.4;
+            cursor: default;
+          }
           .terminal-root {
             flex: 1 1 auto;
             padding: 0.25rem;
@@ -458,6 +482,14 @@ export function buildWebviewHtml({
             >
               <div class="terminal-pane__label">
                 <span data-pane-label="primary">Terminal</span>
+                <button
+                  class="terminal-pane__attach"
+                  data-file-select="primary"
+                  type="button"
+                  title="${escapeAttribute(vscode.l10n.t('Attach image or video'))}"
+                  aria-label="${escapeAttribute(vscode.l10n.t('Attach image or video'))}"
+                  disabled
+                >📎</button>
               </div>
               <div
                 class="terminal-root"
@@ -479,6 +511,14 @@ export function buildWebviewHtml({
             >
               <div class="terminal-pane__label">
                 <span data-pane-label="secondary">Terminal</span>
+                <button
+                  class="terminal-pane__attach"
+                  data-file-select="secondary"
+                  type="button"
+                  title="${escapeAttribute(vscode.l10n.t('Attach image or video'))}"
+                  aria-label="${escapeAttribute(vscode.l10n.t('Attach image or video'))}"
+                  disabled
+                >📎</button>
               </div>
               <div
                 class="terminal-root"

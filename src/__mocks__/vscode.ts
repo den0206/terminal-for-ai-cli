@@ -16,6 +16,7 @@ export const window = {
   showWarningMessage: vi.fn(),
   showErrorMessage: vi.fn(),
   showInformationMessage: vi.fn(),
+  showOpenDialog: vi.fn(),
 };
 
 type WorkspaceFolder = {uri: {scheme: string; fsPath: string}};

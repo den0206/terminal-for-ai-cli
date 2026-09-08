@@ -1,3 +1,4 @@
+import {extname} from 'node:path';
 import * as vscode from 'vscode';
 import {SHARED_CONSTANTS} from '../shared/constants';
 import type {
@@ -28,6 +29,30 @@ import {THEME_CONFIG_KEYS, getThemeSnapshot} from './themeSnapshot';
 // Extension 視点: 送信 = WebviewInboundMessage (shared), 受信 = WebviewOutboundMessage (shared)
 type OutboundMessage = WebviewInboundMessage;
 type InboundMessage = WebviewOutboundMessage;
+
+const MEDIA_FILE_EXTENSIONS = [
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'webp',
+  'bmp',
+  'tif',
+  'tiff',
+  'heic',
+  'svg',
+  'mp4',
+  'mov',
+  'm4v',
+  'webm',
+  'avi',
+  'mkv',
+] as const;
+
+function isSupportedMediaPath(filePath: string): boolean {
+  const extension = extname(filePath).slice(1).toLowerCase();
+  return (MEDIA_FILE_EXTENSIONS as readonly string[]).includes(extension);
+}
 
 function labelForSlot(slot: TerminalSlot): string {
   return `Terminal ${slot}`;
@@ -259,6 +284,9 @@ export class AiTerminalViewProvider
           break;
         case 'uri-drop':
           this.handleUriDrop(message.payload);
+          break;
+        case 'request-file-selection':
+          await this.handleFileSelection(message.payload.sessionId);
           break;
         case 'image-drop':
           await this.handleImageDrop(message.payload);
@@ -851,6 +879,72 @@ export class AiTerminalViewProvider
     }
     // 末尾の空白は続けて入力できるようにするため
     this.sessionManager.write(payload.sessionId, `${paths.join(' ')} `);
+  }
+
+  /**
+   * Opens the native picker and types selected media paths into the session
+   * whose pane button opened it.
+   */
+  private async handleFileSelection(sessionId: string): Promise<void> {
+    try {
+      const selected = await vscode.window.showOpenDialog({
+        canSelectFiles: true,
+        canSelectFolders: false,
+        canSelectMany: true,
+        openLabel: vscode.l10n.t('Attach'),
+        title: vscode.l10n.t('Select images or videos to attach'),
+        filters: {
+          [vscode.l10n.t('Images and videos')]: [...MEDIA_FILE_EXTENSIONS],
+        },
+      });
+      if (!selected || selected.length === 0) {
+        return;
+      }
+      const sessionExists = this.sessionManager
+        .getActiveSessions()
+        .some(({id}) => id === sessionId);
+      if (!sessionExists) {
+        vscode.window.showErrorMessage(
+          vscode.l10n.t(
+            'Terminal For AI CLI: The target terminal is no longer available.',
+          ),
+        );
+        return;
+      }
+      if (selected.some((uri) => !isSupportedMediaPath(uri.fsPath))) {
+        vscode.window.showErrorMessage(
+          vscode.l10n.t(
+            'Terminal For AI CLI: Only supported image and video files can be attached.',
+          ),
+        );
+        return;
+      }
+
+      const paths = selected.map((uri) => escapeShellPath(uri.fsPath));
+      const input = `${paths.join(' ')} `;
+      if (
+        Buffer.byteLength(input, 'utf8') >
+        SHARED_CONSTANTS.MAX_FILE_SELECTION_INPUT_BYTES
+      ) {
+        vscode.window.showErrorMessage(
+          vscode.l10n.t(
+            'Terminal For AI CLI: The selected paths exceed the 64 KiB terminal input limit.',
+          ),
+        );
+        return;
+      }
+      this.sessionManager.write(sessionId, input);
+    } catch (error) {
+      Logger.error('Failed to select files', error);
+      vscode.window.showErrorMessage(
+        vscode.l10n.t('Terminal For AI CLI: Failed to select files.'),
+      );
+    } finally {
+      this.postMessage({
+        type: 'file-selection-complete',
+        payload: {sessionId},
+      });
+    }
   }
 
   /** Stores the dropped image and types its escaped path into the session. */
