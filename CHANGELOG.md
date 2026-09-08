@@ -36,6 +36,13 @@ Rules:
 
 ## [Unreleased]
 
+### Added
+
+- Each terminal pane now has an attachment button that opens the native picker for images and
+  videos. It types the selected files' original shell-escaped paths into that pane, supports
+  multiple selection and remote workspaces, and rejects the whole selection if its escaped input
+  exceeds 64 KiB.
+
 ## [0.3.0] - 2026-09-03
 
 ### Added

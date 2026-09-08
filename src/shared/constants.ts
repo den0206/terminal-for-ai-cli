@@ -16,6 +16,9 @@ export const SHARED_CONSTANTS = {
   /** Maximum number of paths inserted from a single drop */
   MAX_DROPPED_PATHS: 50,
 
+  /** Maximum UTF-8 size of paths inserted from the file picker (64 KiB) */
+  MAX_FILE_SELECTION_INPUT_BYTES: 64 * 1024,
+
   /** Maximum number of images saved from a single drop */
   MAX_DROPPED_IMAGES: 10,
 
@@ -88,4 +91,3 @@ export const SHARED_CONSTANTS = {
     TTL_MS: 24 * 60 * 60 * 1000,
   },
 } as const;
-

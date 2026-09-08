@@ -74,6 +74,7 @@ height and theme.
 - **Split view** — show both sessions at once, with a draggable divider between them.
 - **Scrollback survives reloads** — output is buffered per session and replayed when the Webview reloads.
 - **Stable names** — `Terminal 1`, `Terminal 2`, … and freed numbers get reused.
+- **Pick images and videos** — each pane's `📎` button types selected files' real paths into that terminal.
 - **Drag an image in** — hold `Shift` and drop; the file is saved and its shell-escaped path is typed into the shell for you.
 - **Usage readout** — saved-image size and extension host memory, right in the toolbar.
 - **Theme presets** — nine palettes (Modern, Basic, Homebrew, …), applied instantly.
@@ -136,6 +137,18 @@ The header on the right shows status messages ("Registered sessions: 2", errors,
 Create a second session, then press `▢`. Both panes render at once and the divider between them can
 be dragged (the ratio is clamped to 20–80% and persisted). The focused pane is outlined; clicking a
 pane makes it active.
+
+### Selecting images and videos
+
+Press the `📎` button in a terminal pane's title bar to select one or more images or videos with the
+native file picker. The selected files stay in place; their shell-escaped paths are typed into the
+terminal whose button you pressed, in selection order and separated by spaces. The picker supports
+PNG, JPEG, GIF, WebP, BMP, TIFF, HEIC, SVG, MP4, MOV, M4V, WebM, AVI, and MKV.
+
+There is no file-size or file-count limit because the extension only types paths. As a safety bound,
+the complete escaped input must fit within 64 KiB; an oversized selection is rejected in full. The
+button works with the file system used by the terminal, including remote workspaces, and returns
+focus to the originating terminal after selection or cancellation.
 
 ### Dropping files and images
 
@@ -246,6 +259,7 @@ escalating to `SIGKILL` after 2s) and deletes every saved image.
 | Split view | Both sessions visible at once with a draggable, persisted split ratio |
 | Session naming | `Terminal N` with reuse of freed numbers |
 | Scrollback | 3000 lines in xterm, plus a 2MB per-session buffer replayed on Webview reload |
+| Image/video picker | Each pane's `📎` button selects media and types shell-escaped real paths into that terminal |
 | File drag & drop | `Shift` + drop → explorer files type their own path; OS-dropped images are saved and their copy's path is typed |
 | Clickable links | `Cmd` / `Ctrl` + click opens an `http(s)` URL in the default browser; a plain click offers Open / Copy |
 | Image cleanup | Deleted on session exit, on deactivation, and on startup (orphans, 24h TTL) |

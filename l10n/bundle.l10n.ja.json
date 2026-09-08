@@ -1,4 +1,12 @@
 {
+  "Attach image or video": "画像または動画を添付",
+  "Attach": "添付",
+  "Select images or videos to attach": "添付する画像または動画を選択",
+  "Images and videos": "画像と動画",
+  "Terminal For AI CLI: The target terminal is no longer available.": "Terminal For AI CLI: 対象のターミナルは既に終了しています。",
+  "Terminal For AI CLI: Only supported image and video files can be attached.": "Terminal For AI CLI: 対応している画像・動画ファイルのみ添付できます。",
+  "Terminal For AI CLI: The selected paths exceed the 64 KiB terminal input limit.": "Terminal For AI CLI: 選択したパスがターミナル入力の上限（64 KiB）を超えています。",
+  "Terminal For AI CLI: Failed to select files.": "Terminal For AI CLI: ファイルを選択できませんでした。",
   "Delete": "削除",
   "Delete every saved image?": "すべての保存済み画像を削除しますか？",
   "Deleted {0} image(s)": "{0} 個の画像を削除しました",

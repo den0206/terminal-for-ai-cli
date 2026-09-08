@@ -44,6 +44,15 @@ describe('escapeShellPath', () => {
       '\'/tmp/a"b%c!d$(e)`f.txt\''
     );
   });
+
+  it.each(['\n', '\r', '\t', '\x1b', '\x7f'])(
+    'refuses terminal control character %j',
+    (character) => {
+      expect(() => escapeShellPath(`/tmp/a${character}b.png`, 'linux')).toThrow(
+        /control characters/
+      );
+    }
+  );
 });
 
 describe('parseUriList', () => {

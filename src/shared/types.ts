@@ -146,6 +146,7 @@ export type InboundMessage =
   | {type: 'theme-update'; payload: ThemeUpdatePayload}
   | {type: 'usage-update'; payload: {text: string}}
   | {type: 'renderer-update'; payload: {rendererType: RendererType}}
+  | {type: 'file-selection-complete'; payload: {sessionId: string}}
   | {
       type: 'restore-scrollback';
       payload: {slot: TerminalSlot; snapshot: ScrollbackSnapshot};
@@ -174,6 +175,7 @@ export type OutboundMessage =
       payload: {slot: TerminalSlot; data: string; cols: number; rows: number};
     }
   | {type: 'uri-drop'; payload: {uriList: string; sessionId: string}}
+  | {type: 'request-file-selection'; payload: {sessionId: string}}
   | {
       type: 'image-drop';
       payload: {

@@ -17,6 +17,12 @@ export function escapeShellPath(
   filePath: string,
   platform: NodeJS.Platform = process.platform
 ): string {
+  // This string is typed into an interactive terminal. Control characters are
+  // data inside shell quotes, but the terminal can act on them before the shell
+  // parses the path (a newline, for example, can submit the prompt).
+  if (/[\x00-\x1f\x7f]/.test(filePath)) {
+    throw new Error(`Path contains terminal control characters: ${filePath}`);
+  }
   if (platform === 'win32') {
     if (/["%!$`]/.test(filePath)) {
       throw new Error(
