@@ -35,10 +35,6 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install build toolchain (container)
-        if: ${{ matrix.container }}
-        run: apt-get update && apt-get install -y python3 make g++
-
       # --ignore-scripts + rebuild で node-pty だけをソースビルドする。
       # --build-from-source は node-pty の install スクリプトに同梱 prebuilds を無視させる。
       - name: Build node-pty
