@@ -1115,6 +1115,23 @@ describe('AiTerminalViewProvider', () => {
       );
     });
 
+    it('rejects paths that are not on the terminal\'s own file system', async () => {
+      const {messageHandler, sessionId, writeSpy} = await setupFileSelection();
+      vi.mocked(mockWindow.showOpenDialog).mockResolvedValue([
+        mockUri.parse('vscode-vfs://github/owner/repo/image.png'),
+      ]);
+
+      await messageHandler({
+        type: 'request-file-selection',
+        payload: {sessionId},
+      });
+
+      expect(writeSpy).not.toHaveBeenCalled();
+      expect(mockWindow.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining("terminal's own file system")
+      );
+    });
+
     it('does not retarget the selection if its originating session closed', async () => {
       const {messageHandler, sessionId, writeSpy} = await setupFileSelection();
       vi.mocked(mockWindow.showOpenDialog).mockResolvedValue([

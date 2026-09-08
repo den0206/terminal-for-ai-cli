@@ -911,6 +911,21 @@ export class AiTerminalViewProvider
         );
         return;
       }
+      // ドロップ側と同じ判定。仮想ファイルシステム上のワークスペースでは
+      // `fsPath` がターミナルのファイルシステムに存在しないパスになるので、
+      // そのまま入力しても解決できない。
+      const foreign = selected.find((uri) => uri.scheme !== 'file');
+      if (foreign) {
+        Logger.warn(
+          `Ignored a picked ${foreign.scheme}: URI; only local files are typed`,
+        );
+        vscode.window.showErrorMessage(
+          vscode.l10n.t(
+            'Terminal For AI CLI: Only files on the terminal\'s own file system can be attached.',
+          ),
+        );
+        return;
+      }
       if (selected.some((uri) => !isSupportedMediaPath(uri.fsPath))) {
         vscode.window.showErrorMessage(
           vscode.l10n.t(
