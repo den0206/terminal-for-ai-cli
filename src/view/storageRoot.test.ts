@@ -51,6 +51,38 @@ describe('resolveStorageRoot', () => {
 });
 
 describe('pruneOrphanedWindowStorage', () => {
+  type Node = {mtime: number; children?: Record<string, Node>};
+
+  /** パスをキーにした最小のファイルシステム。`/global/windows` が起点。 */
+  function mountWindows(children: Record<string, Node>) {
+    const root: Node = {mtime: NOW, children};
+    const find = (fsPath: string): Node | undefined => {
+      const rest = fsPath.replace('/global/windows', '').split('/').filter(Boolean);
+      let node: Node | undefined = root;
+      for (const name of rest) {
+        node = node?.children?.[name];
+      }
+      return node;
+    };
+    fs.stat.mockImplementation(async (uri: unknown) => {
+      const node = find((uri as {fsPath: string}).fsPath);
+      if (!node) {
+        throw new Error('ENOENT');
+      }
+      return {mtime: node.mtime};
+    });
+    fs.readDirectory.mockImplementation(async (uri: unknown) => {
+      const node = find((uri as {fsPath: string}).fsPath);
+      if (!node?.children) {
+        throw new Error('ENOTDIR');
+      }
+      return Object.entries(node.children).map(([name, child]) => [
+        name,
+        child.children ? vscode.FileType.Directory : vscode.FileType.File,
+      ]);
+    });
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     vscode.env.sessionId = 'window-a';
@@ -65,49 +97,66 @@ describe('pruneOrphanedWindowStorage', () => {
   });
 
   it('deletes directories left by windows that are no longer running', async () => {
-    fs.readDirectory.mockResolvedValue([
-      ['window-old', vscode.FileType.Directory],
-    ]);
-    fs.stat.mockResolvedValue({mtime: NOW - TTL - 1});
+    mountWindows({
+      'window-old': {
+        mtime: NOW - TTL - 1,
+        children: {
+          images: {
+            mtime: NOW - TTL - 1,
+            children: {'1.png': {mtime: NOW - TTL - 1}},
+          },
+        },
+      },
+    });
 
     expect(await pruneOrphanedWindowStorage(createContext(), NOW)).toBe(1);
     expect(deletedPaths()).toEqual(['/global/windows/window-old']);
   });
 
   it('never deletes the directory of the window doing the sweep', async () => {
-    fs.readDirectory.mockResolvedValue([
-      ['window-a', vscode.FileType.Directory],
-    ]);
-    // 自分のディレクトリは mtime を見るまでもなく対象外
-    fs.stat.mockResolvedValue({mtime: 0});
+    mountWindows({'window-a': {mtime: 0, children: {}}});
 
     expect(await pruneOrphanedWindowStorage(createContext(), NOW)).toBe(0);
     expect(fs.delete).not.toHaveBeenCalled();
   });
 
   it('keeps a directory another window is still writing to', async () => {
-    fs.readDirectory.mockResolvedValue([
-      ['window-live', vscode.FileType.Directory],
-    ]);
-    fs.stat.mockResolvedValue({mtime: NOW - 1_000});
+    // ディレクトリの mtime は直下のエントリが増減したときにしか動かない。
+    // images/ へ書き続けているウィンドウは、自分のディレクトリを古いまま
+    // 残すので、中のファイルを見ないと生きているのに掃除される。
+    mountWindows({
+      'window-live': {
+        mtime: NOW - TTL - 1,
+        children: {
+          images: {
+            mtime: NOW - TTL - 1,
+            children: {'fresh.png': {mtime: NOW - 1_000}},
+          },
+        },
+      },
+    });
+
+    expect(await pruneOrphanedWindowStorage(createContext(), NOW)).toBe(0);
+    expect(fs.delete).not.toHaveBeenCalled();
+  });
+
+  it('keeps a window directory that was just created and is still empty', async () => {
+    mountWindows({'window-new': {mtime: NOW - 1_000, children: {}}});
 
     expect(await pruneOrphanedWindowStorage(createContext(), NOW)).toBe(0);
     expect(fs.delete).not.toHaveBeenCalled();
   });
 
   it('ignores stray files next to the window directories', async () => {
-    fs.readDirectory.mockResolvedValue([['notes.txt', vscode.FileType.File]]);
+    mountWindows({'notes.txt': {mtime: 0}});
 
     expect(await pruneOrphanedWindowStorage(createContext(), NOW)).toBe(0);
     expect(fs.delete).not.toHaveBeenCalled();
   });
 
   it('keeps sweeping after one directory fails to delete', async () => {
-    fs.readDirectory.mockResolvedValue([
-      ['window-locked', vscode.FileType.Directory],
-      ['window-old', vscode.FileType.Directory],
-    ]);
-    fs.stat.mockResolvedValue({mtime: NOW - TTL - 1});
+    const stale = {mtime: NOW - TTL - 1, children: {}};
+    mountWindows({'window-locked': {...stale}, 'window-old': {...stale}});
     fs.delete
       .mockRejectedValueOnce(new Error('EPERM'))
       .mockResolvedValueOnce(undefined);

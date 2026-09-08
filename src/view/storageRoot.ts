@@ -52,6 +52,36 @@ function windowStorageId(): string {
 }
 
 /**
+ * Newest write anywhere under `directory`, as an epoch milliseconds value.
+ *
+ * The directory's own `mtime` is not enough: it only moves when an entry is
+ * added or removed directly inside it, so a window that keeps writing images
+ * into `images/` - or overwriting `scrollback/1.json` in place - never touches
+ * it and would look abandoned after {@link WINDOW_TTL_MS}. The files
+ * themselves do move, so the sweep reads those instead. The directory's own
+ * timestamp is still taken into account, which is what keeps a freshly created
+ * (still empty) window directory from being swept.
+ */
+async function lastWriteAt(directory: vscode.Uri): Promise<number> {
+  let latest = (await vscode.workspace.fs.stat(directory)).mtime;
+  let entries: [string, vscode.FileType][];
+  try {
+    entries = await vscode.workspace.fs.readDirectory(directory);
+  } catch {
+    return latest;
+  }
+  for (const [name, type] of entries) {
+    const child = vscode.Uri.joinPath(directory, name);
+    const at =
+      type === vscode.FileType.Directory
+        ? await lastWriteAt(child)
+        : (await vscode.workspace.fs.stat(child)).mtime;
+    latest = Math.max(latest, at);
+  }
+  return latest;
+}
+
+/**
  * Deletes fallback directories left behind by windows that are no longer
  * running. Called at startup, like the image and scrollback sweeps.
  *
@@ -83,8 +113,7 @@ export async function pruneOrphanedWindowStorage(
     }
     const directory = vscode.Uri.joinPath(root, name);
     try {
-      const stat = await vscode.workspace.fs.stat(directory);
-      if (now - stat.mtime < WINDOW_TTL_MS) {
+      if (now - (await lastWriteAt(directory)) < WINDOW_TTL_MS) {
         continue;
       }
       await vscode.workspace.fs.delete(directory, {
