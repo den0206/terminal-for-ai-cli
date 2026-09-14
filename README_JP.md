@@ -542,7 +542,7 @@ node scripts/release-changelog.mjs 0.0.3             # [Unreleased] を手動で
 
 | ワークフロー | トリガー | 内容 |
 |--------------|----------|------|
-| `ci.yml` | `feature/**`, `fix/**`, `main`, `develop` への push | 型チェック、コンパイル、Vitest、カバレッジ（Node 20.x）。`package.json` が最新の `Ver_*` タグより古い場合も失敗し、main への同期漏れを検知します |
+| `ci.yml` | `feature/**`, `fix/**`, `main`, `develop` への push | 型チェック、コンパイル、Vitest、カバレッジ（Node 24.x）。`package.json` が最新の `Ver_*` タグより古い場合も失敗し、main への同期漏れを検知します |
 | `pr-check.yml` | すべての PR | フル検証、カバレッジコメント、バンドルサイズ、`npm audit`、TruffleHog |
 | `export-vsix.yml` | `release/**` への push、手動実行 | 全プラットフォームの `node-pty` ビルド + VSIX artifact。`release/Ver_X.Y.Z` なら GitHub Release も公開 → [リリース手順](#リリース手順) |
 
