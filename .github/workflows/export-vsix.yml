@@ -23,17 +23,17 @@ jobs:
           - {os: macos-14, target: darwin-arm64, container: ''}
           - {os: macos-14, target: darwin-x64, arch: x64, container: ''}
           # VS Code の glibc 下限 (2.28) に合わせて bullseye (2.31) でビルドする
-          - {os: ubuntu-latest, target: linux-x64, container: 'node:20-bullseye'}
-          - {os: ubuntu-24.04-arm, target: linux-arm64, container: 'node:20-bullseye'}
+          - {os: ubuntu-latest, target: linux-x64, container: 'node:24-bullseye'}
+          - {os: ubuntu-24.04-arm, target: linux-arm64, container: 'node:24-bullseye'}
           - {os: windows-2022, target: win32-x64, container: ''}
           - {os: windows-2022, target: win32-arm64, arch: arm64, container: ''}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: ${{ !matrix.container }}
         with:
-          node-version: 20
+          node-version: 24
 
       # --ignore-scripts + rebuild で node-pty だけをソースビルドする。
       # --build-from-source は node-pty の install スクリプトに同梱 prebuilds を無視させる。
@@ -54,7 +54,7 @@ jobs:
           cp "$src"/winpty.dll "$src"/winpty-agent.exe "$out"/ 2>/dev/null || true
           ls -l "$out"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: prebuild-${{ matrix.target }}
           path: prebuilds/${{ matrix.target }}
@@ -67,15 +67,15 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # リリースノートは前版(祖先 Ver_* タグ)との差分から生成するため、
           # 全履歴とタグが要る(既定の fetch-depth:1 では生成できない)。
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - run: npm ci
@@ -150,7 +150,7 @@ jobs:
         run: npm prune --omit=dev
 
       - name: Download prebuilds
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: prebuild-*
           path: prebuilds
@@ -174,7 +174,7 @@ jobs:
       - name: Package VSIX
         run: npm run package
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: terminal-for-ai-cli-${{ github.run_number }}
           path: vsix/*.vsix
