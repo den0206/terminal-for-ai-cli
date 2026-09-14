@@ -560,7 +560,7 @@ workflow artifact without creating a release.
 
 | Workflow | Trigger | Checks |
 |----------|---------|--------|
-| `ci.yml` | push to `feature/**`, `fix/**`, `main`, `develop` | Type check, compile, Vitest, coverage (Node 20.x); also fails if `package.json` fell behind the latest `Ver_*` tag, which catches a broken sync to `main` |
+| `ci.yml` | push to `feature/**`, `fix/**`, `main`, `develop` | Type check, compile, Vitest, coverage (Node 24.x); also fails if `package.json` fell behind the latest `Ver_*` tag, which catches a broken sync to `main` |
 | `pr-check.yml` | all pull requests | Full validation, coverage comment, bundle size, `npm audit`, TruffleHog secret scan |
 | `export-vsix.yml` | push to `release/**`, manual | Cross-platform `node-pty` build + VSIX artifact; on `release/Ver_X.Y.Z` it also publishes the GitHub Release — see [Releasing](#releasing) |
 
