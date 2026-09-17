@@ -1,7 +1,6 @@
 .env
 /dist
 /node_modules
-/.vscode
 /media/webview.js
 /media/webview.js.map
 /vsix
