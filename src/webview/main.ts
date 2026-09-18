@@ -1131,11 +1131,11 @@ class AppController {
     if (this.dom.viewToggleIcon) {
       this.dom.viewToggleIcon.innerHTML = splitEnabled
         ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4">
-             <rect x="2" y="2" width="12" height="5.25" rx="1" />
-             <rect x="2" y="8.75" width="12" height="5.25" rx="1" />
+             <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" />
+             <line x1="2.5" y1="8" x2="13.5" y2="8" />
            </svg>`
         : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4">
-             <rect x="2" y="2" width="12" height="12" rx="1.5" />
+             <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" />
            </svg>`;
     }
     if (this.dom.viewToggleButton.disabled) {
