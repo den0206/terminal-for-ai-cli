@@ -228,6 +228,22 @@ class TerminalManager {
     if (root) {
       terminal.open(root);
     }
+    // xterm.js の CompositionHelper は compositionend の setTimeout(0) で
+    // helper textarea の内容を substring(start) で読んで PTY に送るが、
+    // textarea 自体は CR を受けたときの `_keyDown` でしかクリアされない。
+    // IME 中心の入力（Claude Code / Codex のプロンプトなど）で確定 Enter が
+    // xterm 側では CR にならないケースが続くと textarea が伸び続け、
+    // `_isSendingComposition` と `_handleAnyTextareaChanges` の setTimeout が
+    // 競合したときに古い start オフセットから読まれて既送信文字列が丸ごと
+    // 再送される。xterm がその tick で読み終えた後にクリアしておけば蓄積しない。
+    if (terminal.textarea) {
+      const textarea = terminal.textarea;
+      textarea.addEventListener('compositionend', () => {
+        setTimeout(() => {
+          textarea.value = '';
+        }, 0);
+      });
+    }
     // Note: terminal.onData() returns IDisposable, but Terminal.dispose()
     // automatically cleans up all event listeners, so we don't need to track it
     terminal.onData((data) => {
