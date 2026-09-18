@@ -1505,6 +1505,11 @@ class AppController {
         this.searchController.closeSearch();
       });
     }
+    if (this.dom.searchOpenButton) {
+      this.addEventListener(this.dom.searchOpenButton, 'click', () => {
+        this.searchController.openSearch();
+      });
+    }
   }
 
   private focusActivePane(): void {

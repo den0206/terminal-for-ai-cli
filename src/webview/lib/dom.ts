@@ -36,6 +36,7 @@ export class DOMElements {
   readonly searchPrevButton = $<HTMLButtonElement>('[data-search-prev]');
   readonly searchNextButton = $<HTMLButtonElement>('[data-search-next]');
   readonly searchCloseButton = $<HTMLButtonElement>('[data-search-close]');
+  readonly searchOpenButton = $<HTMLButtonElement>('[data-search-open]');
   readonly linkPopover = $<HTMLDivElement>('[data-link-popover]');
   readonly linkPopoverUrl = $<HTMLSpanElement>('[data-link-popover-url]');
   readonly linkPopoverOpen = $<HTMLButtonElement>('[data-link-popover-open]');
