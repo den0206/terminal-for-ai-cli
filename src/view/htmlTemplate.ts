@@ -601,6 +601,7 @@ export function buildWebviewHtml({
                 </svg>
               </span>
             </button>
+            <button class="icon-button" data-search-open type="button" title="${escapeAttribute(vscode.l10n.t('Find in terminal'))}" aria-label="${escapeAttribute(vscode.l10n.t('Find in terminal'))}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4"/><line x1="10" y1="10" x2="13.5" y2="13.5"/></svg></button>
             <button class="icon-button" data-session-remove type="button" title="Close session" aria-label="Close session"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3,4 5,4 13,4"/><path d="M5 4 v9 a1 1 0 0 0 1 1 h4 a1 1 0 0 0 1 -1 v-9"/><line x1="7" y1="6.5" x2="7" y2="11.5"/><line x1="9" y1="6.5" x2="9" y2="11.5"/></svg></button>
           </div>
         </div>
