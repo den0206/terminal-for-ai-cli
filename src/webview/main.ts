@@ -848,7 +848,8 @@ class AppController {
         this.updateSessionControls();
         break;
 
-      case 'session-created':
+      case 'session-created': {
+        const wasUserRequested = this.uiState.pendingSessionRequest;
         this.uiState.pendingSessionRequest = false;
         this.updateAddButtonState(false);
         this.sessionState.addSession(
@@ -865,7 +866,15 @@ class AppController {
           )} (${message.payload.shell})`
         );
         this.applyPendingRestore(message.payload.id);
+        if (
+          wasUserRequested &&
+          this.sessionState.sessionIds.length === 2 &&
+          this.uiState.viewMode === 'single'
+        ) {
+          this.setViewMode('split');
+        }
         break;
+      }
 
       case 'session-data':
         if (!this.sessionState.activeSessionId) {
