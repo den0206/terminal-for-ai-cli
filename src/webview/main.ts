@@ -1,8 +1,8 @@
 import {FitAddon} from '@xterm/addon-fit';
 import {SearchAddon} from '@xterm/addon-search';
 import {SerializeAddon} from '@xterm/addon-serialize';
-import {WebglAddon} from '@xterm/addon-webgl';
 import {WebLinksAddon} from '@xterm/addon-web-links';
+import {WebglAddon} from '@xterm/addon-webgl';
 import {Terminal} from '@xterm/xterm';
 
 // Import shared modules
@@ -10,34 +10,34 @@ import {SHARED_CONSTANTS} from '../shared/constants';
 import {isRendererType} from '../shared/types';
 import {DOMElements} from './lib/dom';
 import {DragDropHandler} from './lib/drag-drop-handler';
-import {RendererController} from './lib/renderer-controller';
-import {ResizeController} from './lib/resize-controller';
 import {
   LinkPopoverController,
   distanceBetween,
   isPlainClickActivation,
 } from './lib/link-popover';
+import {RendererController} from './lib/renderer-controller';
+import {ResizeController} from './lib/resize-controller';
 import {formatRestoredScrollback} from './lib/scrollback-restore';
 import {SearchController, hexColorOr} from './lib/search-controller';
 import {
   SessionStateManager,
-  UIStateManager,
   ThemeStateManager,
+  UIStateManager,
 } from './lib/state-managers';
 import {ThemeController} from './lib/theme-controller';
-import {PANES} from './lib/types';
 import type {
-  VSCodeApi,
   InboundMessage,
+  OutboundMessage,
+  Pane,
+  PaneContext,
   RendererType,
   ScrollbackSnapshot,
   TerminalSlot,
-  OutboundMessage,
-  ViewState,
+  VSCodeApi,
   ViewMode,
-  Pane,
-  PaneContext,
+  ViewState,
 } from './lib/types';
+import {PANES} from './lib/types';
 import {
   debounce,
   getComputedVar,
@@ -92,7 +92,7 @@ class TerminalManager {
     private readonly uiState: UIStateManager,
     private readonly postMessage: (message: OutboundMessage) => void,
     private readonly handlers: TerminalHandlers,
-    rendererType: RendererType = 'auto'
+    rendererType: RendererType = 'auto',
   ) {
     this.paneContexts = {
       primary: this.createPaneContext('primary'),
@@ -105,7 +105,7 @@ class TerminalManager {
         getTerminal: (pane) => this.paneContexts[pane]?.terminal,
         createWebglAddon: () => new WebglAddon(),
       },
-      rendererType
+      rendererType,
     );
     PANES.forEach((pane) => this.rendererController.applyToPane(pane));
   }
@@ -117,6 +117,9 @@ class TerminalManager {
   private createTerminalInstance(): Terminal {
     return new Terminal({
       allowTransparency: true,
+      // SearchAddon が結果ハイライトを付けるのに使う registerDecoration が
+      // proposed API 扱いなので、明示的に許可しないと findNext が例外で落ちる。
+      allowProposedApi: true,
       convertEol: true,
       // OSC 8 hyperlinks (emitted by gh, npm, ...). Plain-text URLs are handled
       // by WebLinksAddon below; both go through the same modifier check.
@@ -131,33 +134,33 @@ class TerminalManager {
       fontFamily: getComputedVar(
         '--vscode-editor-font-family',
         'var(--monaco-monospace-font)',
-        'monospace'
+        'monospace',
       ),
       fontSize:
         Number.parseInt(
           getComputedVar('--vscode-editor-font-size', undefined, '13'),
-          10
+          10,
         ) || 13,
       theme: {
         background: getComputedVar(
           '--vscode-editor-background',
           undefined,
-          '#1e1e1e'
+          '#1e1e1e',
         ),
         foreground: getComputedVar(
           '--vscode-editor-foreground',
           undefined,
-          '#cccccc'
+          '#cccccc',
         ),
         cursor: getComputedVar(
           '--vscode-terminalCursor-foreground',
           undefined,
-          '#ffffff'
+          '#ffffff',
         ),
         selectionBackground: getComputedVar(
           '--vscode-editor-selectionBackground',
           undefined,
-          'rgba(255,255,255,0.15)'
+          'rgba(255,255,255,0.15)',
         ),
       },
     });
@@ -179,7 +182,7 @@ class TerminalManager {
     // browser, matching VS Code's own terminal. A plain click is ignored so
     // selecting text over a link stays harmless.
     terminal.loadAddon(
-      new WebLinksAddon((event, uri) => this.openLink(event, uri))
+      new WebLinksAddon((event, uri) => this.openLink(event, uri)),
     );
     // AI CLIs take ESC + CR as a newline inside the prompt; xterm.js would
     // send a bare CR, which submits the prompt instead.
@@ -251,7 +254,7 @@ class TerminalManager {
   writeRestoredScrollback(
     pane: Pane,
     text: string,
-    onWritten: (lineCount: number) => void
+    onWritten: (lineCount: number) => void,
   ): void {
     const {terminal} = this.paneContexts[pane];
     terminal.write(text, () => {
@@ -299,25 +302,25 @@ class TerminalManager {
         element,
         '--terminal-bg',
         '--vscode-editor-background',
-        '#1e1e1e'
+        '#1e1e1e',
       ),
       foreground: getComputedVarFrom(
         element,
         '--terminal-fg',
         '--vscode-editor-foreground',
-        '#cccccc'
+        '#cccccc',
       ),
       cursor: getComputedVarFrom(
         element,
         '--terminal-cursor',
         '--vscode-terminalCursor-foreground',
-        '#ffffff'
+        '#ffffff',
       ),
       selectionBackground: getComputedVarFrom(
         element,
         '--terminal-selection',
         '--vscode-editor-selectionBackground',
-        'rgba(255,255,255,0.15)'
+        'rgba(255,255,255,0.15)',
       ),
     };
     // WebGL レンダラはグリフを色ごとテクスチャに焼くので、
@@ -415,7 +418,10 @@ class AppController {
     CancellableFunction<() => void>
   >;
   /** 復元待ちの履歴。対応するスロットのセッションが出来た時点で書き込む。 */
-  private readonly pendingRestores = new Map<TerminalSlot, ScrollbackSnapshot>();
+  private readonly pendingRestores = new Map<
+    TerminalSlot,
+    ScrollbackSnapshot
+  >();
   /**
    * 書き込み済みの復元履歴。`assignPane` はターミナルを作り直して
    * セッションバッファだけを流し直すので、組み直しのたびに書き戻す。
@@ -469,15 +475,17 @@ class AppController {
           return false;
         },
       },
-      readInitialRendererType()
+      readInitialRendererType(),
     );
     // OSC 0/1/2: shells and CLIs report what they are running. Showing it next
     // to the session name is how Ghostty / cmux label their tabs.
     PANES.forEach((pane) => {
-      this.terminalManager.paneContexts[pane].terminal.onTitleChange((title) => {
-        this.paneTitles[pane] = sanitizeText(title, 40);
-        this.updatePaneLabel(pane, this.uiState.paneSessions[pane]);
-      });
+      this.terminalManager.paneContexts[pane].terminal.onTitleChange(
+        (title) => {
+          this.paneTitles[pane] = sanitizeText(title, 40);
+          this.updatePaneLabel(pane, this.uiState.paneSessions[pane]);
+        },
+      );
     });
 
     this.resizeController = new ResizeController(
@@ -486,7 +494,7 @@ class AppController {
       () => this.terminalManager.fitVisibleTerminals(),
       (target, event, handler) => this.addEventListener(target, event, handler),
       () => this.persistState(),
-      () => this.notifyResize()
+      () => this.notifyResize(),
     );
 
     this.themeController = new ThemeController(
@@ -497,7 +505,7 @@ class AppController {
       (target, event, handler) => this.addEventListener(target, event, handler),
       (pane) =>
         this.sessionState.getSessionSlot(this.uiState.paneSessions[pane]),
-      () => this.sessionState.getSessionSlot(this.sessionState.activeSessionId)
+      () => this.sessionState.getSessionSlot(this.sessionState.activeSessionId),
     );
 
     this.searchController = new SearchController({
@@ -514,7 +522,7 @@ class AppController {
         setVisible: (visible) => {
           this.dom.searchBar?.setAttribute(
             'aria-hidden',
-            visible ? 'false' : 'true'
+            visible ? 'false' : 'true',
           );
         },
         setSummary: (text) => {
@@ -543,7 +551,7 @@ class AppController {
     });
     PANES.forEach((pane) => {
       this.terminalManager.paneContexts[pane].searchAddon.onDidChangeResults(
-        (results) => this.searchController.reportResults(pane, results)
+        (results) => this.searchController.reportResults(pane, results),
       );
     });
 
@@ -590,17 +598,17 @@ class AppController {
     this.dragDropHandler = new DragDropHandler(
       () => this.sessionState.activeSessionId,
       (msg) => this.vscode.postMessage(msg),
-      (target, event, handler) => this.addEventListener(target, event, handler)
+      (target, event, handler) => this.addEventListener(target, event, handler),
     );
 
     this.snapshotSchedulers = {
       primary: debounce(
         () => this.captureScrollback('primary'),
-        SHARED_CONSTANTS.SCROLLBACK_RESTORE.SAVE_DEBOUNCE_MS
+        SHARED_CONSTANTS.SCROLLBACK_RESTORE.SAVE_DEBOUNCE_MS,
       ),
       secondary: debounce(
         () => this.captureScrollback('secondary'),
-        SHARED_CONSTANTS.SCROLLBACK_RESTORE.SAVE_DEBOUNCE_MS
+        SHARED_CONSTANTS.SCROLLBACK_RESTORE.SAVE_DEBOUNCE_MS,
       ),
     };
 
@@ -650,7 +658,7 @@ class AppController {
   private addEventListener(
     target: EventTarget,
     event: string,
-    handler: EventListener
+    handler: EventListener,
   ): void {
     target.addEventListener(event, handler);
     this._eventListeners.push({target, event, handler});
@@ -658,7 +666,10 @@ class AppController {
 
   private initialize(): void {
     this.setupEventListeners();
-    this.resizeController.applyTerminalHeight(this.uiState.terminalHeight, false);
+    this.resizeController.applyTerminalHeight(
+      this.uiState.terminalHeight,
+      false,
+    );
     this.terminalManager.refreshTheme();
     this.syncPaneAssignments(true);
     this.focusActivePane();
@@ -666,7 +677,7 @@ class AppController {
     this.vscode.postMessage<OutboundMessage>({type: 'webview-ready'});
     if (this.sessionState.activeSessionId) {
       this.setStatus(
-        `Restoring session ${this.sessionState.activeSessionId}...`
+        `Restoring session ${this.sessionState.activeSessionId}...`,
       );
       this.notifyResize();
     } else {
@@ -678,14 +689,10 @@ class AppController {
   private setupEventListeners(): void {
     this.setupSearchListeners();
     this.setupLinkPopoverListeners();
-    this.addEventListener(
-      window,
-      'message',
-      (event: Event) => {
-        const messageEvent = event as MessageEvent<InboundMessage>;
-        this.handleMessage(messageEvent.data);
-      }
-    );
+    this.addEventListener(window, 'message', (event: Event) => {
+      const messageEvent = event as MessageEvent<InboundMessage>;
+      this.handleMessage(messageEvent.data);
+    });
 
     if (this.dom.addSessionButton) {
       this.addEventListener(this.dom.addSessionButton, 'click', () => {
@@ -724,7 +731,7 @@ class AppController {
           return;
         }
         this.setViewMode(
-          this.uiState.viewMode === 'single' ? 'split' : 'single'
+          this.uiState.viewMode === 'single' ? 'split' : 'single',
         );
       });
     }
@@ -776,7 +783,9 @@ class AppController {
         this.uiState.clearingAll = true;
         this.setStatus('Clearing all sessions...');
         this.updateSessionControls();
-        this.vscode.postMessage<OutboundMessage>({type: 'dispose-all-sessions'});
+        this.vscode.postMessage<OutboundMessage>({
+          type: 'dispose-all-sessions',
+        });
       });
     }
 
@@ -790,12 +799,15 @@ class AppController {
     if (this.dom.sessionSelect) {
       this.addEventListener(this.dom.sessionSelect, 'change', () => {
         const nextSessionId = this.dom.sessionSelect?.value;
-        if (!nextSessionId || nextSessionId === this.sessionState.activeSessionId) {
+        if (
+          !nextSessionId ||
+          nextSessionId === this.sessionState.activeSessionId
+        ) {
           return;
         }
         this.switchActiveSession(
           nextSessionId,
-          `Switched to ${this.sessionState.getSessionLabel(nextSessionId)}`
+          `Switched to ${this.sessionState.getSessionLabel(nextSessionId)}`,
         );
       });
     }
@@ -818,10 +830,10 @@ class AppController {
       const root = this.dom.paneRoots[pane];
       if (root) {
         this.addEventListener(root, 'pointerdown', () =>
-          this.handlePaneFocus(pane)
+          this.handlePaneFocus(pane),
         );
         this.addEventListener(root, 'focusin', () =>
-          this.handlePaneFocus(pane)
+          this.handlePaneFocus(pane),
         );
       }
     });
@@ -841,7 +853,7 @@ class AppController {
           this.setStatus('No sessions available');
         } else {
           this.setStatus(
-            `Registered sessions: ${this.sessionState.totalSessions}`
+            `Registered sessions: ${this.sessionState.totalSessions}`,
           );
         }
         this.persistState();
@@ -856,14 +868,14 @@ class AppController {
           message.payload.id,
           message.payload.shell,
           message.payload.label,
-          message.payload.slot
+          message.payload.slot,
         );
         this.persistState();
         this.switchActiveSession(
           message.payload.id,
           `Connected to ${this.sessionState.getSessionLabel(
-            message.payload.id
-          )} (${message.payload.shell})`
+            message.payload.id,
+          )} (${message.payload.shell})`,
         );
         this.applyPendingRestore(message.payload.id);
         if (
@@ -884,11 +896,11 @@ class AppController {
         }
         this.sessionState.appendToBuffer(
           message.payload.sessionId,
-          message.payload.data
+          message.payload.data,
         );
         this.terminalManager.deliverDataToPanes(
           message.payload.sessionId,
-          message.payload.data
+          message.payload.data,
         );
         this.scheduleScrollbackSnapshot(message.payload.sessionId);
         break;
@@ -904,7 +916,7 @@ class AppController {
           if (fallbackId) {
             this.switchActiveSession(
               fallbackId,
-              `Switched to session ${fallbackId}`
+              `Switched to session ${fallbackId}`,
             );
           } else {
             this.sessionState.activeSessionId = undefined;
@@ -929,7 +941,7 @@ class AppController {
         this.uiState.pendingSessionRequest = false;
         this.updateAddButtonState(false);
         this.setStatus(
-          `Maximum of ${message.payload.max} terminals are supported.`
+          `Maximum of ${message.payload.max} terminals are supported.`,
         );
         this.updateSessionControls();
         break;
@@ -953,7 +965,7 @@ class AppController {
         // 対応するスロットのセッションが既にあれば今すぐ、無ければ出来たときに書く。
         this.pendingRestores.set(
           message.payload.slot,
-          message.payload.snapshot
+          message.payload.snapshot,
         );
         this.applyPendingRestoreForSlot(message.payload.slot);
         break;
@@ -978,7 +990,9 @@ class AppController {
       return;
     }
     if (this.sessionState.sessionIds.length >= SHARED_CONSTANTS.MAX_SESSIONS) {
-      this.setStatus(`Maximum of ${SHARED_CONSTANTS.MAX_SESSIONS} sessions reached.`);
+      this.setStatus(
+        `Maximum of ${SHARED_CONSTANTS.MAX_SESSIONS} sessions reached.`,
+      );
       this.updateAddButtonState(false);
       return;
     }
@@ -1051,10 +1065,7 @@ class AppController {
         this.uiState.clearingAll ||
         this.uiState.pendingSessionRequest ||
         this.sessionState.sessionIds.length === 0;
-      if (
-        this.dom.clearAllButton.disabled &&
-        this.uiState.confirmingClearAll
-      ) {
+      if (this.dom.clearAllButton.disabled && this.uiState.confirmingClearAll) {
         this.uiState.confirmingClearAll = false;
         this.toggleClearAllConfirm(false);
       }
@@ -1099,7 +1110,7 @@ class AppController {
       this.sessionState.sessionIds.length >= 2;
     this.dom.viewToggleButton.setAttribute(
       'aria-pressed',
-      splitEnabled ? 'true' : 'false'
+      splitEnabled ? 'true' : 'false',
     );
     if (this.dom.viewToggleIcon) {
       this.dom.viewToggleIcon.innerHTML = splitEnabled
@@ -1135,8 +1146,7 @@ class AppController {
     if (this.sessionState.activeSessionId) {
       this.dom.sessionSelect.value = this.sessionState.activeSessionId;
     }
-    this.dom.sessionSelect.disabled =
-      this.sessionState.sessionIds.length === 0;
+    this.dom.sessionSelect.disabled = this.sessionState.sessionIds.length === 0;
   }
 
   private persistState(): void {
@@ -1158,7 +1168,7 @@ class AppController {
         this.uiState.viewMode === 'split' && Boolean(secondarySession);
       this.dom.terminalStack.setAttribute(
         'data-view-mode',
-        splitActive ? 'split' : 'single'
+        splitActive ? 'split' : 'single',
       );
     }
     this.resizeController.applySplitSizing();
@@ -1177,7 +1187,7 @@ class AppController {
   private assignPane(
     pane: Pane,
     sessionId: string | undefined,
-    force = false
+    force = false,
   ): void {
     const current = this.uiState.paneSessions[pane];
     if (!force && current === sessionId) {
@@ -1192,7 +1202,7 @@ class AppController {
     if (sessionId) {
       this.writeRestoredHistory(
         pane,
-        this.sessionState.getSessionSlot(sessionId)
+        this.sessionState.getSessionSlot(sessionId),
       );
       const buffer = this.sessionState.getBuffer(sessionId);
       if (buffer) {
@@ -1247,7 +1257,10 @@ class AppController {
    * 復元履歴をペインの先頭に書き戻す。`assignPane` がターミナルを作り直す経路
    * （分割の切り替え、セッション終了）でも通るので、履歴はそこで消えない。
    */
-  private writeRestoredHistory(pane: Pane, slot: TerminalSlot | undefined): void {
+  private writeRestoredHistory(
+    pane: Pane,
+    slot: TerminalSlot | undefined,
+  ): void {
     const history = slot ? this.restoredHistory.get(slot) : undefined;
     if (!history) {
       return;
@@ -1260,7 +1273,7 @@ class AppController {
   /** 復元がセッション生成より後に届いた場合の受け口。 */
   private applyPendingRestoreForSlot(slot: TerminalSlot): void {
     const sessionId = this.sessionState.sessionIds.find(
-      (id) => this.sessionState.getSessionSlot(id) === slot
+      (id) => this.sessionState.getSessionSlot(id) === slot,
     );
     if (sessionId) {
       this.applyPendingRestore(sessionId);
@@ -1287,13 +1300,14 @@ class AppController {
     // 復元直後の行位置から先、つまりこのセッションが実際に出した分だけを取る。
     // ponytail: 行位置は折り返しで前後するので厳密ではない。ずれても混ざるのは
     // 高々 1 画面分で、回数を重ねても積み上がらない。
-    const produced = this.terminalManager.getLineCount(pane) - this.restoreBoundary[pane];
+    const produced =
+      this.terminalManager.getLineCount(pane) - this.restoreBoundary[pane];
     const lines = Math.max(0, Math.min(LINES, produced));
     let data = this.terminalManager.serializePane(pane, lines);
     if (data.length > MAX_SNAPSHOT_CHARS) {
       data = this.terminalManager.serializePane(
         pane,
-        Math.min(FALLBACK_LINES, lines)
+        Math.min(FALLBACK_LINES, lines),
       );
     }
     if (data.length === 0 || data.length > MAX_SNAPSHOT_CHARS) {
@@ -1322,20 +1336,29 @@ class AppController {
     const pane = this.dom.paneElements[this.getActivePane()];
     return {
       matchBackground: hexColorOr(
-        getComputedVarFrom(pane, '--vscode-editor-findMatchHighlightBackground'),
-        '#613214'
+        getComputedVarFrom(
+          pane,
+          '--vscode-editor-findMatchHighlightBackground',
+        ),
+        '#613214',
       ),
       activeMatchBackground: hexColorOr(
         getComputedVarFrom(pane, '--vscode-editor-findMatchBackground'),
-        '#9e6a03'
+        '#9e6a03',
       ),
       matchOverviewRuler: hexColorOr(
-        getComputedVarFrom(pane, '--vscode-editorOverviewRuler-findMatchForeground'),
-        '#d18616'
+        getComputedVarFrom(
+          pane,
+          '--vscode-editorOverviewRuler-findMatchForeground',
+        ),
+        '#d18616',
       ),
       activeMatchColorOverviewRuler: hexColorOr(
-        getComputedVarFrom(pane, '--vscode-editorOverviewRuler-selectionHighlightForeground'),
-        '#a0a0a0'
+        getComputedVarFrom(
+          pane,
+          '--vscode-editorOverviewRuler-selectionHighlightForeground',
+        ),
+        '#a0a0a0',
       ),
     };
   }
@@ -1470,7 +1493,7 @@ class AppController {
 
   private focusActivePane(): void {
     const pane = this.uiState.getPaneForSession(
-      this.sessionState.activeSessionId
+      this.sessionState.activeSessionId,
     );
     if (!pane) {
       return;
@@ -1564,7 +1587,7 @@ class AppController {
     }
     this.dom.clearAllConfirm.setAttribute(
       'aria-hidden',
-      visible ? 'false' : 'true'
+      visible ? 'false' : 'true',
     );
   }
 }
