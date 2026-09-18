@@ -437,7 +437,11 @@ export function buildWebviewHtml({
             aria-pressed="false"
             type="button"
           >
-            <span data-view-toggle-icon>▢</span>
+            <span class="view-toggle-icon" data-view-toggle-icon aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4">
+                <rect x="2" y="2" width="12" height="12" rx="1.5" />
+              </svg>
+            </span>
           </button>
           <button class="icon-button" data-session-remove title="Close session">🗑</button>
         </div>

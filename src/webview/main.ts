@@ -1093,7 +1093,14 @@ class AppController {
       splitEnabled ? 'true' : 'false'
     );
     if (this.dom.viewToggleIcon) {
-      this.dom.viewToggleIcon.textContent = splitEnabled ? '▦' : '▢';
+      this.dom.viewToggleIcon.innerHTML = splitEnabled
+        ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4">
+             <rect x="2" y="2" width="12" height="5.25" rx="1" />
+             <rect x="2" y="8.75" width="12" height="5.25" rx="1" />
+           </svg>`
+        : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4">
+             <rect x="2" y="2" width="12" height="12" rx="1.5" />
+           </svg>`;
     }
     if (this.dom.viewToggleButton.disabled) {
       this.dom.viewToggleButton.title =
