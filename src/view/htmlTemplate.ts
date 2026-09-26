@@ -413,6 +413,8 @@ export function buildWebviewHtml({
             align-items: center;
             flex: 0 0 auto;
             color: var(--pane-accent);
+            /* マークの視覚的な重心が文字より高いので、1px 下げて行に揃える */
+            transform: translateY(1px);
           }
           .terminal-pane__agent[hidden] {
             display: none;
