@@ -54,6 +54,8 @@ export class DOMElements {
     byPane<HTMLDivElement>('data-terminal-pane');
   readonly paneLabels: Record<Pane, HTMLSpanElement | null> =
     byPane<HTMLSpanElement>('data-pane-label');
+  readonly paneAgents: Record<Pane, HTMLSpanElement | null> =
+    byPane<HTMLSpanElement>('data-pane-agent');
   readonly fileSelectButtons: Record<Pane, HTMLButtonElement | null> =
     byPane<HTMLButtonElement>('data-file-select');
   readonly paneRoots: Record<Pane, HTMLDivElement | null> =
