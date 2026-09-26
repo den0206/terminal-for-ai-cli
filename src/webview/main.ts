@@ -8,6 +8,7 @@ import {Terminal} from '@xterm/xterm';
 // Import shared modules
 import {SHARED_CONSTANTS} from '../shared/constants';
 import {isRendererType} from '../shared/types';
+import {agentIconMarkup} from './lib/agent-icons';
 import {DOMElements} from './lib/dom';
 import {DragDropHandler} from './lib/drag-drop-handler';
 import {
@@ -452,6 +453,8 @@ class AppController {
     secondary: 0,
   };
   private readonly debouncedResize: CancellableFunction<() => void>;
+  /** セッション ID → 前面で動いている AI Agent CLI 名（拡張ホストが検知） */
+  private readonly sessionAgents = new Map<string, string>();
   /** Window title (OSC 0/1/2) most recently reported by each pane's session. */
   private readonly paneTitles: Record<Pane, string> = {
     primary: '',
@@ -923,6 +926,7 @@ class AppController {
 
       case 'session-exited':
         this.sessionState.removeSession(message.payload.sessionId);
+        this.sessionAgents.delete(message.payload.sessionId);
         this.persistState();
         if (message.payload.sessionId === this.sessionState.activeSessionId) {
           const fallbackId =
@@ -968,6 +972,21 @@ class AppController {
         }
         break;
 
+      case 'agent-update': {
+        const {sessionId, agent} = message.payload;
+        if (agent) {
+          this.sessionAgents.set(sessionId, agent);
+        } else {
+          this.sessionAgents.delete(sessionId);
+        }
+        PANES.forEach((pane) => {
+          if (this.uiState.paneSessions[pane] === sessionId) {
+            this.updatePaneLabel(pane, sessionId);
+          }
+        });
+        break;
+      }
+
       case 'theme-update':
         this.themeController.applyThemeUpdate(message.payload);
         break;
@@ -993,6 +1012,7 @@ class AppController {
         // 拡張ホスト側は保存済みスナップショットを消しているので、こちらも捨てる
         this.pendingRestores.clear();
         this.restoredHistory.clear();
+        this.sessionAgents.clear();
         this.syncPaneAssignments(true);
         this.persistState();
         this.setStatus('All sessions cleared');
@@ -1570,6 +1590,19 @@ class AppController {
       : 'No session';
     const title = sessionId ? this.paneTitles[pane] : '';
     label.textContent = title ? `${name} — ${title}` : name;
+
+    const badge = this.dom.paneAgents[pane];
+    if (badge) {
+      const agent = sessionId ? this.sessionAgents.get(sessionId) : undefined;
+      badge.hidden = !agent;
+      badge.setAttribute('aria-label', agent ? `${agent} is running` : '');
+      badge.title = agent ? `${agent} is running` : '';
+      const icon = badge.firstElementChild;
+      if (agent && icon && badge.dataset.agent !== agent) {
+        badge.dataset.agent = agent;
+        icon.innerHTML = agentIconMarkup(agent);
+      }
+    }
   }
 
   private updatePaneActiveStates(): void {

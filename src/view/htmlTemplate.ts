@@ -408,6 +408,15 @@ export function buildWebviewHtml({
             background: var(--pane-accent);
             flex: 0 0 auto;
           }
+          .terminal-pane__agent {
+            display: inline-flex;
+            align-items: center;
+            flex: 0 0 auto;
+            color: var(--pane-accent);
+          }
+          .terminal-pane__agent[hidden] {
+            display: none;
+          }
           .terminal-pane__label span[data-pane-label] {
             overflow: hidden;
             text-overflow: ellipsis;
@@ -648,6 +657,12 @@ export function buildWebviewHtml({
                 <div class="terminal-pane__label-name">
                   <span class="terminal-pane__dot" aria-hidden="true"></span>
                   <span data-pane-label="primary">Terminal</span>
+                  <span
+                    class="terminal-pane__agent"
+                    data-pane-agent="primary"
+                    role="img"
+                    hidden
+                  ><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"></svg></span>
                 </div>
                 <button
                   class="terminal-pane__attach"
@@ -680,6 +695,12 @@ export function buildWebviewHtml({
                 <div class="terminal-pane__label-name">
                   <span class="terminal-pane__dot" aria-hidden="true"></span>
                   <span data-pane-label="secondary">Terminal</span>
+                  <span
+                    class="terminal-pane__agent"
+                    data-pane-agent="secondary"
+                    role="img"
+                    hidden
+                  ><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"></svg></span>
                 </div>
                 <button
                   class="terminal-pane__attach"
