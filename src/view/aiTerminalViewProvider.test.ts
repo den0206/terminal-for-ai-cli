@@ -2080,7 +2080,7 @@ describe('AiTerminalViewProvider', () => {
         typeof vi.fn
       >;
       postMessageMock.mockClear();
-      return {postMessageMock, sessionId: session.id};
+      return {postMessageMock, sessionId: session.id, webviewView};
     };
 
     /** `ps` の代わりに、シェル統合のラッパーを挟んだプロセス表を返す */
@@ -2131,6 +2131,15 @@ describe('AiTerminalViewProvider', () => {
       await provider['postAgentUpdates']();
 
       expect(postMessageMock).not.toHaveBeenCalled();
+    });
+
+    it('stops polling once the view is gone', async () => {
+      const {webviewView} = await setupAgentPolling();
+      expect(provider['agentTimer']).toBeDefined();
+
+      fireViewDisposed(webviewView);
+
+      expect(provider['agentTimer']).toBeUndefined();
     });
   });
 });

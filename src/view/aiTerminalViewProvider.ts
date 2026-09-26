@@ -156,10 +156,7 @@ export class AiTerminalViewProvider
   dispose() {
     // Webview 側の購読は resolveWebviewView のたびに張り替わるので別管理
     this.disposeViewSubscriptions();
-    clearInterval(this.usageTimer);
-    this.usageTimer = undefined;
-    clearInterval(this.agentTimer);
-    this.agentTimer = undefined;
+    this.stopPolling();
     this.sessionAgents.clear();
     vscode.Disposable.from(...this.disposables).dispose();
     this.sessionSlots.clear();
@@ -217,9 +214,20 @@ export class AiTerminalViewProvider
    */
   private handleViewDisposed() {
     this.disposeViewSubscriptions();
+    // 宛先が無い間はポーリングも止める。`webview-ready` で張り直されるので、
+    // 回しておく意味は無い（`agent-update` がキューを食うのも防げる）。
+    this.stopPolling();
     this.webviewView = undefined;
     this.webviewReady = false;
     this.initialSessionEnsured = false;
+  }
+
+  /** Stops the toolbar readout and the agent badge polling. Idempotent. */
+  private stopPolling() {
+    clearInterval(this.usageTimer);
+    this.usageTimer = undefined;
+    clearInterval(this.agentTimer);
+    this.agentTimer = undefined;
   }
 
   /** Brings the view into focus (command: terminal-for-ai-cli.focus). */
