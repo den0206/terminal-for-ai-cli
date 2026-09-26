@@ -145,6 +145,11 @@ export type InboundMessage =
   | {type: 'session-limit-reached'; payload: {max: number}}
   | {type: 'theme-update'; payload: ThemeUpdatePayload}
   | {type: 'usage-update'; payload: {text: string}}
+  | {
+      /** そのセッションで動いている AI Agent CLI 名。動いていなければ null */
+      type: 'agent-update';
+      payload: {sessionId: string; agent: string | null};
+    }
   | {type: 'renderer-update'; payload: {rendererType: RendererType}}
   | {type: 'file-selection-complete'; payload: {sessionId: string}}
   | {
