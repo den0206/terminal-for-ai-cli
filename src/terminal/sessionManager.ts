@@ -57,6 +57,10 @@ class ShellSession implements vscode.Disposable {
 
   constructor(public readonly id: string, private readonly pty: IPty) {}
 
+  get pid(): number | undefined {
+    return this.pty.pid;
+  }
+
   write(data: string) {
     if (!this.disposed) {
       try {
@@ -216,6 +220,11 @@ export class SessionManager implements vscode.Disposable {
 
   resize(id: string, cols: number, rows: number) {
     this.sessions.get(id)?.resize(Math.max(cols, 2), Math.max(rows, 1));
+  }
+
+  /** セッションのシェルの PID。終了済みなら undefined。 */
+  getPid(id: string): number | undefined {
+    return this.sessions.get(id)?.pid;
   }
 
   getSessionCount() {

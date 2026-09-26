@@ -2065,4 +2065,72 @@ describe('AiTerminalViewProvider', () => {
       ).toBeLessThanOrEqual(SHARED_CONSTANTS.MESSAGE_QUEUE_MAX_SIZE);
     });
   });
+
+  describe('agent detection', () => {
+    const setupAgentPolling = async () => {
+      const webviewView = createMockWebviewView();
+      provider.resolveWebviewView(webviewView);
+      const messageHandler = getMessageHandler(webviewView);
+      const session = sessionManager.createSession();
+      await messageHandler({type: 'webview-ready'});
+      // webview-ready が走らせた最初の `ps` が返るまで待つ（重複実行のガードに
+      // 引っかかって、このあとの明示的な呼び出しが空振りするのを避ける）
+      await waitForCondition(() => provider['agentPollInFlight'] === false);
+      const postMessageMock = webviewView.webview.postMessage as ReturnType<
+        typeof vi.fn
+      >;
+      postMessageMock.mockClear();
+      return {postMessageMock, sessionId: session.id};
+    };
+
+    /** `ps` の代わりに、シェル統合のラッパーを挟んだプロセス表を返す */
+    const withProcessTable = (agentCommand?: string) => {
+      const shellPid = mockPty.pid;
+      const table = [
+        `  ${shellPid}     1 /bin/zsh`,
+        `  9001  ${shellPid} zsh (kiro-cli-term)`,
+        agentCommand ? `  9002  9001 ${agentCommand}` : '  9002  9001 /bin/zsh',
+      ].join('\n');
+      return vi
+        .spyOn(
+          provider as unknown as {
+            readProcessTable: () => Promise<string | undefined>;
+          },
+          'readProcessTable'
+        )
+        .mockResolvedValue(table);
+    };
+
+    it('reports an agent nested under a shell integration wrapper', async () => {
+      const {postMessageMock, sessionId} = await setupAgentPolling();
+
+      withProcessTable('/opt/homebrew/bin/claude');
+      await provider['postAgentUpdates']();
+
+      expect(postMessageMock).toHaveBeenCalledWith({
+        type: 'agent-update',
+        payload: {sessionId, agent: 'claude'},
+      });
+
+      postMessageMock.mockClear();
+      withProcessTable();
+      await provider['postAgentUpdates']();
+
+      expect(postMessageMock).toHaveBeenCalledWith({
+        type: 'agent-update',
+        payload: {sessionId, agent: null},
+      });
+    });
+
+    it('stays quiet while the agent is unchanged', async () => {
+      const {postMessageMock} = await setupAgentPolling();
+
+      withProcessTable('claude');
+      await provider['postAgentUpdates']();
+      postMessageMock.mockClear();
+      await provider['postAgentUpdates']();
+
+      expect(postMessageMock).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -1,4 +1,6 @@
+import {execFile} from 'node:child_process';
 import {extname} from 'node:path';
+import {promisify} from 'node:util';
 import * as vscode from 'vscode';
 import {SHARED_CONSTANTS} from '../shared/constants';
 import type {
@@ -8,6 +10,7 @@ import type {
   TerminalSlot,
 } from '../shared/types';
 import {TERMINAL_SLOTS, isRendererType, isTerminalSlot} from '../shared/types';
+import {findAgentInTree} from '../terminal/agentDetect';
 import {SessionManager} from '../terminal/sessionManager';
 import {isValidPresetKey} from '../theming/themePresets';
 import {Logger} from '../utils/logger';
@@ -25,6 +28,8 @@ import {ImageManager} from './imageManager';
 import {ScrollbackStore} from './scrollbackStore';
 import {pruneOrphanedWindowStorage} from './storageRoot';
 import {THEME_CONFIG_KEYS, getThemeSnapshot} from './themeSnapshot';
+
+const execFileAsync = promisify(execFile);
 
 // Extension 視点: 送信 = WebviewInboundMessage (shared), 受信 = WebviewOutboundMessage (shared)
 type OutboundMessage = WebviewInboundMessage;
@@ -90,6 +95,11 @@ export class AiTerminalViewProvider
    */
   private scrollbackRestored = false;
   private usageTimer?: ReturnType<typeof setInterval>;
+  private agentTimer?: ReturnType<typeof setInterval>;
+  /** セッション ID → 直近に通知した Agent 名（変化したときだけ送る） */
+  private readonly sessionAgents = new Map<string, string>();
+  /** `ps` の実行が重なるのを防ぐ（前の呼び出しが返るまで次を出さない） */
+  private agentPollInFlight = false;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -112,6 +122,7 @@ export class AiTerminalViewProvider
           payload: {sessionId: id, code, signal},
         });
         this.sessionSlots.delete(id);
+        this.sessionAgents.delete(id);
         this.imageManager.deleteSessionImages(id).catch((error) => {
           Logger.error(`Failed to delete images for session ${id}`, error);
         });
@@ -147,6 +158,9 @@ export class AiTerminalViewProvider
     this.disposeViewSubscriptions();
     clearInterval(this.usageTimer);
     this.usageTimer = undefined;
+    clearInterval(this.agentTimer);
+    this.agentTimer = undefined;
+    this.sessionAgents.clear();
     vscode.Disposable.from(...this.disposables).dispose();
     this.sessionSlots.clear();
     this.imageManager.clearTracking();
@@ -233,6 +247,7 @@ export class AiTerminalViewProvider
           this.postSessionCount();
           this.postThemeUpdate();
           this.startUsagePolling();
+          this.startAgentPolling();
           this.postExistingSessions();
           // ディスク読み取りの完了を待たずに最初のシェルを起こす。復元は届いた時点で
           // 反映されるので、セッション生成との前後関係に依存しない。
@@ -260,6 +275,7 @@ export class AiTerminalViewProvider
             message.payload.sessionId,
           );
           this.sessionSlots.delete(message.payload.sessionId);
+          this.sessionAgents.delete(message.payload.sessionId);
           this.removeSessionFromQueue(message.payload.sessionId);
           this.sessionManager.disposeSession(message.payload.sessionId);
           this.postSessionCount();
@@ -485,6 +501,72 @@ export class AiTerminalViewProvider
         )}`,
       },
     });
+  }
+
+  /**
+   * Tracks which session is running an AI Agent CLI, so the pane label can
+   * badge it. The foreground process of a PTY is the only thing that says so:
+   * the shell prompt and the OSC title are both whatever the user set them to.
+   */
+  private startAgentPolling() {
+    clearInterval(this.agentTimer);
+    // Webview を作り直した直後は向こうに何も無いので、全部送り直す
+    this.sessionAgents.clear();
+    void this.postAgentUpdates();
+    this.agentTimer = setInterval(() => {
+      if (this.webviewView?.visible) {
+        void this.postAgentUpdates();
+      }
+    }, SHARED_CONSTANTS.AGENT_POLL_INTERVAL_MS);
+  }
+
+  private async postAgentUpdates() {
+    const sessions = this.sessionManager.getActiveSessions();
+    if (sessions.length === 0 || this.agentPollInFlight) {
+      return;
+    }
+    const processTable = await this.readProcessTable();
+    if (processTable === undefined) {
+      return;
+    }
+    for (const {id} of sessions) {
+      const pid = this.sessionManager.getPid(id);
+      const agent = pid ? findAgentInTree(processTable, pid) : undefined;
+      if (this.sessionAgents.get(id) === agent) {
+        continue;
+      }
+      if (agent) {
+        this.sessionAgents.set(id, agent);
+      } else {
+        this.sessionAgents.delete(id);
+      }
+      Logger.debug(`Agent in session ${id}: ${agent ?? 'none'}`);
+      this.postMessage({
+        type: 'agent-update',
+        payload: {sessionId: id, agent: agent ?? null},
+      });
+    }
+  }
+
+  /**
+   * プロセス表を 1 回の `ps` で読む。セッションごとに引くと `ps` を人数分
+   * 起動することになるので、まとめて取って木を辿る。
+   */
+  private async readProcessTable(): Promise<string | undefined> {
+    if (process.platform === 'win32') {
+      // ponytail: Windows は `wmic` / PowerShell が要る。要望が出たら足す。
+      return undefined;
+    }
+    this.agentPollInFlight = true;
+    try {
+      const {stdout} = await execFileAsync('ps', ['-axo', 'pid=,ppid=,comm=']);
+      return stdout;
+    } catch (error) {
+      Logger.warn('Failed to read the process table', error);
+      return undefined;
+    } finally {
+      this.agentPollInFlight = false;
+    }
   }
 
   private postSessionCount() {
@@ -729,6 +811,7 @@ export class AiTerminalViewProvider
       this.sessionManager.disposeSession(session.id);
     }
     this.sessionSlots.clear();
+    this.sessionAgents.clear();
     await this.imageManager.clearAllImages();
     await this.scrollbackStore.clear();
     this.postMessage({type: 'all-sessions-cleared'});

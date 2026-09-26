@@ -73,6 +73,13 @@ export const SHARED_CONSTANTS = {
   /** Interval for refreshing the usage readout in the Webview toolbar */
   USAGE_POLL_INTERVAL_MS: 30_000,
 
+  /**
+   * Interval for checking which session is running an AI Agent CLI.
+   * ponytail: one `ps` per tick, so this is a badge-latency / CPU trade.
+   * Gate it behind a setting if anyone minds the wakeups.
+   */
+  AGENT_POLL_INTERVAL_MS: 4_000,
+
   /** Scrollback carried across editor restarts */
   SCROLLBACK_RESTORE: {
     /** Quiet period after the last output before a snapshot is taken */
