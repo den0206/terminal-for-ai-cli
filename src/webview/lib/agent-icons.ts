@@ -49,6 +49,11 @@ const ICONS: Record<string, AgentIcon> = {
 const SPARKLE =
   'M12 0q0 3 1.2 5.7a12.3 12.3 0 0 0 5.1 5.1Q21 12 24 12q-3 0-5.7 1.2a12.3 12.3 0 0 0-5.1 5.1Q12 21 12 24q0-3-1.2-5.7a12.3 12.3 0 0 0-5.1-5.1Q3 12 0 12q3 0 5.7-1.2a12.3 12.3 0 0 0 5.1-5.1Q12 3 12 0';
 
+/** ヘッダーの塗りに使う基調色。色を持たないマークは文字色に従う。 */
+export function agentColor(agent: string): string {
+  return ICONS[agent]?.color ?? 'currentColor';
+}
+
 /**
  * `<svg viewBox="0 0 24 24">` の中身。未知の Agent はきらめきを返す。
  * 色は `style` で渡す（presentation attribute の `fill` は `var()` を解決しない）。

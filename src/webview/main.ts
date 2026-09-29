@@ -8,7 +8,7 @@ import {Terminal} from '@xterm/xterm';
 // Import shared modules
 import {SHARED_CONSTANTS} from '../shared/constants';
 import {isRendererType} from '../shared/types';
-import {agentIconMarkup} from './lib/agent-icons';
+import {agentColor, agentIconMarkup} from './lib/agent-icons';
 import {DOMElements} from './lib/dom';
 import {DragDropHandler} from './lib/drag-drop-handler';
 import {
@@ -1601,6 +1601,13 @@ class AppController {
       if (agent && icon && badge.dataset.agent !== agent) {
         badge.dataset.agent = agent;
         icon.innerHTML = agentIconMarkup(agent);
+      }
+      const paneElement = this.dom.paneElements[pane];
+      if (agent) {
+        paneElement?.style.setProperty('--agent-color', agentColor(agent));
+        paneElement?.setAttribute('data-agent', agent);
+      } else {
+        paneElement?.removeAttribute('data-agent');
       }
     }
   }
