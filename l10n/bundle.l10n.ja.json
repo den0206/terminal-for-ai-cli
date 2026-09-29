@@ -1,4 +1,7 @@
 {
+  "Select code in the editor first.": "先にエディターでコードを選択してください。",
+  "Open the AI terminal before sending selected code.": "選択したコードを送る前に AI ターミナルを開いてください。",
+  "Select an active Codex or Claude Code terminal before sending code.": "送信先として Codex または Claude Code が動作中のターミナルを選択してください。",
   "Attach image or video": "画像または動画を添付",
   "Attach": "添付",
   "Select images or videos to attach": "添付する画像または動画を選択",

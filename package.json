@@ -72,11 +72,24 @@
         "title": "%command.newSession.title%"
       },
       {
+        "command": "terminal-for-ai-cli.sendSelection",
+        "category": "%command.category%",
+        "title": "%command.sendSelection.title%"
+      },
+      {
         "command": "terminal-for-ai-cli.cleanupImages",
         "category": "%command.category%",
         "title": "%command.cleanupImages.title%"
       }
     ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "terminal-for-ai-cli.sendSelection",
+          "when": "editorHasSelection"
+        }
+      ]
+    },
     "configuration": {
       "title": "Terminal For AI CLI",
       "properties": {

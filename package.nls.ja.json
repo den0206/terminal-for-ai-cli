@@ -3,6 +3,7 @@
   "command.category": "Terminal For AI CLI",
   "command.focus.title": "フォーカス",
   "command.newSession.title": "新しいセッション",
+  "command.sendSelection.title": "選択範囲を Terminal For AI CLI に送る",
   "command.cleanupImages.title": "画像をクリーンアップ",
   "config.defaultShell.description": "新しいセッションに使用するシェルのパス。空の場合はユーザーの既定シェルを使用します。machine スコープのため、ワークスペース設定からは上書きできません。",
   "config.startupCommands.description": "セッション作成時に順番に送信されるコマンドのリスト。machine スコープのため、ワークスペース設定からは上書きできません。",

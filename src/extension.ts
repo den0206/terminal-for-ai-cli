@@ -1,10 +1,23 @@
 import * as vscode from 'vscode';
+import {basename, relative} from 'node:path';
 import {SessionManager} from './terminal/sessionManager';
 import {Logger} from './utils/logger';
+import {formatSelection} from './utils/selectionText';
 import {AiTerminalViewProvider} from './view/aiTerminalViewProvider';
 
 const VIEW_ID = 'terminal-for-ai-cli-view';
 const CONTAINER_COMMAND = 'workbench.view.extension.terminal-for-ai-cli';
+const SEND_SELECTION_COMMAND = 'terminal-for-ai-cli.sendSelection';
+
+function selectionText(document: vscode.TextDocument, range: vscode.Range): string {
+  if (range.isEmpty) return '';
+  const selected = document.getText(range);
+  const folder = vscode.workspace.getWorkspaceFolder(document.uri);
+  const path = folder
+    ? relative(folder.uri.fsPath, document.uri.fsPath)
+    : basename(document.fileName);
+  return formatSelection(path, range.start.line + 1, document.languageId, selected);
+}
 
 let providerRef: AiTerminalViewProvider | undefined;
 
@@ -39,6 +52,18 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('terminal-for-ai-cli.newSession', () => {
       provider.newSession();
+    }),
+    vscode.commands.registerCommand(SEND_SELECTION_COMMAND, () => {
+      const editor = vscode.window.activeTextEditor;
+      const selection = editor?.selection;
+      const value = editor && selection && selectionText(editor.document, selection);
+      if (value) {
+        provider.pasteSelection(value);
+      } else {
+        vscode.window.showErrorMessage(
+          vscode.l10n.t('Select code in the editor first.'),
+        );
+      }
     }),
     vscode.commands.registerCommand(
       'terminal-for-ai-cli.cleanupImages',

@@ -240,6 +240,31 @@ export class AiTerminalViewProvider
     this.handleSessionRequest();
   }
 
+  /** Pastes into the last active supported agent, if the view is ready. */
+  pasteSelection(text: string) {
+    if (!this.webviewReady || !this.webviewView) {
+      void vscode.window.showErrorMessage(
+        vscode.l10n.t('Open the AI terminal before sending selected code.'),
+      );
+      return;
+    }
+    void this.webviewView.webview.postMessage({
+      type: 'paste-selection',
+      payload: {text},
+    } satisfies OutboundMessage).then(
+      (delivered) => {
+        if (!delivered) this.showPasteRejected();
+      },
+      () => this.showPasteRejected(),
+    );
+  }
+
+  private showPasteRejected() {
+    void vscode.window.showErrorMessage(
+      vscode.l10n.t('Select an active Codex or Claude Code terminal before sending code.'),
+    );
+  }
+
   private async handleMessage(message: InboundMessage): Promise<void> {
     try {
       switch (message.type) {
@@ -266,10 +291,15 @@ export class AiTerminalViewProvider
           this.handleSessionRequest(message.payload);
           break;
         case 'terminal-input':
-          this.sessionManager.write(
+          if (!this.sessionManager.write(
             message.payload.sessionId,
             message.payload.data,
-          );
+          ) && message.payload.selectionPaste) {
+            this.showPasteRejected();
+          }
+          break;
+        case 'paste-selection-rejected':
+          this.showPasteRejected();
           break;
         case 'terminal-resize':
           this.sessionManager.resize(

@@ -3,6 +3,7 @@
   "command.category": "Terminal For AI CLI",
   "command.focus.title": "Focus",
   "command.newSession.title": "New Session",
+  "command.sendSelection.title": "Send Selection to Terminal For AI CLI",
   "command.cleanupImages.title": "Clean Up Images",
   "config.defaultShell.description": "Path to the shell used for new sessions. Leave empty to use your login shell. Machine scope: a workspace cannot override it.",
   "config.startupCommands.description": "Commands sent to the shell in order right after a session is created. Machine scope: a workspace cannot override it.",

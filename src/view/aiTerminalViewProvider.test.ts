@@ -289,6 +289,16 @@ describe('AiTerminalViewProvider', () => {
     });
   });
 
+  it('reports when selected code has no terminal destination', async () => {
+    provider.pasteSelection('code');
+    expect(mockWindow.showErrorMessage).toHaveBeenCalled();
+
+    const view = createMockWebviewView();
+    provider.resolveWebviewView(view);
+    await getMessageHandler(view)({type: 'paste-selection-rejected'});
+    expect(mockWindow.showErrorMessage).toHaveBeenCalledTimes(2);
+  });
+
   /**
    * Helper function to wait for a condition with retries
    */

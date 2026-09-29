@@ -143,6 +143,7 @@ export type InboundMessage =
     }
   | {type: 'session-error'; payload: {message: string}}
   | {type: 'session-limit-reached'; payload: {max: number}}
+  | {type: 'paste-selection'; payload: {text: string}}
   | {type: 'theme-update'; payload: ThemeUpdatePayload}
   | {type: 'usage-update'; payload: {text: string}}
   | {
@@ -165,7 +166,8 @@ export type InboundMessage =
 export type OutboundMessage =
   | {type: 'webview-ready'}
   | {type: 'request-new-session'; payload?: {cols: number; rows: number}}
-  | {type: 'terminal-input'; payload: {sessionId: string; data: string}}
+  | {type: 'terminal-input'; payload: {sessionId: string; data: string; selectionPaste?: boolean}}
+  | {type: 'paste-selection-rejected'}
   | {
       type: 'terminal-resize';
       payload: {sessionId: string; cols: number; rows: number};

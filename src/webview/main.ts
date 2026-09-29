@@ -87,6 +87,7 @@ type TerminalHandlers = {
 class TerminalManager {
   readonly paneContexts: Record<Pane, PaneContext>;
   private readonly rendererController: RendererController;
+  private selectionPastePane?: Pane;
 
   constructor(
     private readonly dom: DOMElements,
@@ -113,6 +114,15 @@ class TerminalManager {
 
   setRendererType(rendererType: RendererType): void {
     this.rendererController.setRendererType(rendererType);
+  }
+
+  pasteIntoPane(pane: Pane, text: string): void {
+    this.selectionPastePane = pane;
+    try {
+      this.paneContexts[pane].terminal.paste(text);
+    } finally {
+      this.selectionPastePane = undefined;
+    }
   }
 
   private createTerminalInstance(): Terminal {
@@ -252,7 +262,7 @@ class TerminalManager {
       if (sessionId) {
         this.postMessage({
           type: 'terminal-input',
-          payload: {sessionId, data},
+          payload: {sessionId, data, selectionPaste: this.selectionPastePane === pane},
         });
       }
     });
@@ -984,6 +994,22 @@ class AppController {
             this.updatePaneLabel(pane, sessionId);
           }
         });
+        break;
+      }
+
+      case 'paste-selection': {
+        const sessionId = this.sessionState.activeSessionId;
+        const agent = sessionId && this.sessionAgents.get(sessionId);
+        const pane = this.uiState.getPaneForSession(sessionId);
+        if (pane && (agent === 'codex' || agent === 'claude')) {
+          try {
+            this.terminalManager.pasteIntoPane(pane, message.payload.text);
+          } catch {
+            this.vscode.postMessage<OutboundMessage>({type: 'paste-selection-rejected'});
+          }
+        } else {
+          this.vscode.postMessage<OutboundMessage>({type: 'paste-selection-rejected'});
+        }
         break;
       }
 
