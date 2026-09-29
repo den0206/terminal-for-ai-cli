@@ -62,13 +62,13 @@ class ShellSession implements vscode.Disposable {
   }
 
   write(data: string) {
-    if (!this.disposed) {
-      try {
-        this.pty.write(data);
-      } catch (error) {
-        // Log write failures but don't throw - the session may be in the process of closing
-        Logger.warn(`Failed to write to PTY (session ${this.id})`, error);
-      }
+    if (this.disposed) return false;
+    try {
+      this.pty.write(data);
+      return true;
+    } catch (error) {
+      Logger.warn(`Failed to write to PTY (session ${this.id})`, error);
+      return false;
     }
   }
 
@@ -215,7 +215,7 @@ export class SessionManager implements vscode.Disposable {
   }
 
   write(id: string, data: string) {
-    this.sessions.get(id)?.write(data);
+    return this.sessions.get(id)?.write(data) ?? false;
   }
 
   resize(id: string, cols: number, rows: number) {

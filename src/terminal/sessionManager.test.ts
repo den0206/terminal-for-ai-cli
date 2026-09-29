@@ -155,15 +155,19 @@ describe('SessionManager', () => {
       const info = sessionManager.createSession();
       const testData = 'test data\n';
 
-      sessionManager.write(info.id, testData);
+      expect(sessionManager.write(info.id, testData)).toBe(true);
 
       expect(mockPty.write).toHaveBeenCalledWith(testData);
     });
 
     it('should not throw when writing to non-existent session', () => {
-      expect(() => {
-        sessionManager.write('non-existent-id', 'data');
-      }).not.toThrow();
+      expect(sessionManager.write('non-existent-id', 'data')).toBe(false);
+    });
+
+    it('reports a PTY write failure', () => {
+      const info = sessionManager.createSession();
+      vi.mocked(mockPty.write).mockImplementationOnce(() => { throw new Error('closed'); });
+      expect(sessionManager.write(info.id, 'data')).toBe(false);
     });
   });
 
