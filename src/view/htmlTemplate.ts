@@ -419,17 +419,9 @@ export function buildWebviewHtml({
           .terminal-pane__agent[hidden] {
             display: none;
           }
-          /* Agent 稼働中は、アイコンから添付ボタンまでを Agent の基調色で塗る */
-          .terminal-pane[data-agent] .terminal-pane__label-name {
-            flex: 1 1 auto;
-          }
-          .terminal-pane[data-agent] .terminal-pane__label-name::after {
-            content: '';
-            flex: 1 1 auto;
-            align-self: stretch;
-            min-height: 20px;
-            border-radius: 6px;
-            background: color-mix(in srgb, var(--agent-color) 22%, transparent);
+          /* Agent 稼働中は、ヘッダー全体を Agent の基調色で薄く塗る */
+          .terminal-pane[data-agent] .terminal-pane__label {
+            background: color-mix(in srgb, var(--agent-color) 12%, transparent);
           }
           .terminal-pane__label span[data-pane-label] {
             overflow: hidden;
