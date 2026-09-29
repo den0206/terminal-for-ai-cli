@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {agentIconMarkup} from './agent-icons';
+import {agentColor, agentIconMarkup} from './agent-icons';
 
 describe('agentIconMarkup', () => {
   it('gives each known agent its own mark', () => {
@@ -12,9 +12,9 @@ describe('agentIconMarkup', () => {
 
   it('keeps the brand colour where it has one, else follows the pane', () => {
     expect(agentIconMarkup('claude')).toContain('fill:#D97757');
-    // 公式色が黒のマーク: OpenAI はターミナルの文字色、他はアクセント色
-    expect(agentIconMarkup('codex')).toContain('fill:var(--terminal-fg)');
+    expect(agentIconMarkup('codex')).toContain('fill:#0BA47F');
     expect(agentIconMarkup('copilot')).toContain('fill:currentColor');
+    expect(agentColor('codex')).toBe('#0BA47F');
   });
 
   it('falls back to the sparkle for an unknown agent', () => {
