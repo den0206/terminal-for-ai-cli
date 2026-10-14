@@ -38,6 +38,10 @@ Rules:
 
 ### Fixed
 
+- IME candidate-selection keys no longer prematurely flush an unfinished composition.
+  Cleanup of the hidden input now waits for composition delivery and is cancelled
+  when another composition starts, preserving rapid consecutive Japanese input.
+
 - Copying selected terminal text now preserves the selection during right-clicks in
   mouse-aware CLIs and writes through the editor clipboard API. Cmd/Ctrl+C copies
   selected text; Ctrl+C without a selection still interrupts the running command.
