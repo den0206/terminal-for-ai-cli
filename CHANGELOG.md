@@ -36,6 +36,13 @@ Rules:
 
 ## [Unreleased]
 
+### Fixed
+
+- Copying selected terminal text now preserves the selection during right-clicks in
+  mouse-aware CLIs and writes through the editor clipboard API. Cmd/Ctrl+C copies
+  selected text; Ctrl+C without a selection still interrupts the running command.
+- Option-drag can select terminal text on macOS even when a CLI captures mouse input.
+
 ## [0.4.0] - 2026-09-08
 
 ### Added
@@ -224,3 +231,4 @@ Covers 0.0.3 through 0.1.0 (0.0.3 and 0.0.4 were never tagged; 0.0.5 shipped the
 [0.2.1]: https://github.com/den0206/terminal-for-ai-cli/compare/Ver_0.2.0...Ver_0.2.1
 [0.2.0]: https://github.com/den0206/terminal-for-ai-cli/compare/Ver_0.1.0...Ver_0.2.0
 [0.1.0]: https://github.com/den0206/terminal-for-ai-cli/releases/tag/Ver_0.1.0
+

@@ -333,6 +333,17 @@ export class AiTerminalViewProvider
         case 'copy-link':
           await this.handleCopyLink(message.payload.uri);
           break;
+        case 'copy-selection': {
+          const text = message.payload?.text;
+          if (typeof text !== 'string' || !text || text.length > 2_000_000) break;
+          try {
+            await vscode.env.clipboard.writeText(text);
+          } catch (error) {
+            Logger.error('Failed to copy terminal selection', error);
+            void vscode.window.showErrorMessage(vscode.l10n.t('Could not copy terminal selection. Please try again.'));
+          }
+          break;
+        }
         case 'session-snapshot':
           await this.handleSessionSnapshot(message.payload);
           break;
@@ -1154,3 +1165,4 @@ export class AiTerminalViewProvider
     });
   }
 }
+

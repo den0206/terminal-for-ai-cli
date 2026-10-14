@@ -894,6 +894,21 @@ describe('AiTerminalViewProvider', () => {
       );
     });
 
+    it('copies selected Japanese text verbatim through the host clipboard', async () => {
+      const webviewView = createMockWebviewView();
+      provider.resolveWebviewView(webviewView);
+      await getMessageHandler(webviewView)({type: 'copy-selection', payload: {text: '日本語\nsecond line'}});
+      expect(mockEnv.clipboard.writeText).toHaveBeenCalledWith('日本語\nsecond line');
+    });
+
+    it('reports clipboard failures instead of silently leaving stale content', async () => {
+      const webviewView = createMockWebviewView();
+      provider.resolveWebviewView(webviewView);
+      mockEnv.clipboard.writeText.mockRejectedValueOnce(new Error('clipboard unavailable'));
+      await getMessageHandler(webviewView)({type: 'copy-selection', payload: {text: '日本語'}});
+      expect(mockWindow.showErrorMessage).toHaveBeenCalledWith('Could not copy terminal selection. Please try again.');
+    });
+
     it('should not copy a link with an unsupported scheme', async () => {
       const webviewView = createMockWebviewView();
       provider.resolveWebviewView(webviewView);
@@ -2153,3 +2168,4 @@ describe('AiTerminalViewProvider', () => {
     });
   });
 });
+
