@@ -211,6 +211,17 @@ export function buildWebviewHtml({
             cursor: pointer;
             padding: 0;
           }
+          .terminal-copy-menu {
+            position: fixed;
+            z-index: 1000;
+            padding: 6px 24px;
+            color: var(--vscode-menu-foreground, var(--vscode-foreground));
+            background: var(--vscode-menu-background, var(--vscode-editor-background));
+            border: 1px solid var(--vscode-menu-border, var(--vscode-focusBorder));
+            border-radius: 4px;
+            cursor: pointer;
+          }
+          .terminal-copy-menu:hover { background: var(--vscode-menu-selectionBackground); }
           .icon-button:hover:enabled {
             background: var(--qn-hover);
           }
@@ -778,3 +789,4 @@ export function buildWebviewHtml({
       </body>
     </html>`;
 }
+

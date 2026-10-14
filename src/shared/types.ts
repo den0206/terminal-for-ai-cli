@@ -177,6 +177,7 @@ export type OutboundMessage =
   | {type: 'theme-select'; payload: {presetKey: string; slot?: number}}
   | {type: 'open-link'; payload: {uri: string}}
   | {type: 'copy-link'; payload: {uri: string}}
+  | {type: 'copy-selection'; payload: {text: string}}
   | {
       type: 'session-snapshot';
       payload: {slot: TerminalSlot; data: string; cols: number; rows: number};
@@ -192,3 +193,4 @@ export type OutboundMessage =
         sessionId: string;
       };
     };
+

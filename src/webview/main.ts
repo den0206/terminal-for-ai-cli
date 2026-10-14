@@ -18,6 +18,7 @@ import {
 } from './lib/link-popover';
 import {RendererController} from './lib/renderer-controller';
 import {ResizeController} from './lib/resize-controller';
+import {installSelectionCopy} from './lib/selection-copy';
 import {formatRestoredScrollback} from './lib/scrollback-restore';
 import {SearchController, hexColorOr} from './lib/search-controller';
 import {
@@ -88,6 +89,7 @@ class TerminalManager {
   readonly paneContexts: Record<Pane, PaneContext>;
   private readonly rendererController: RendererController;
   private selectionPastePane?: Pane;
+  private readonly copyDisposers: Partial<Record<Pane, () => void>> = {};
 
   constructor(
     private readonly dom: DOMElements,
@@ -141,6 +143,7 @@ class TerminalManager {
       // Option+B / Option+F word movement, as in Ghostty and iTerm2. The cost
       // is that Option no longer composes accented characters on macOS.
       macOptionIsMeta: true,
+      macOptionClickForcesSelection: true,
       scrollback: SHARED_CONSTANTS.TERMINAL_SCROLLBACK_LINES,
       fontFamily: getComputedVar(
         '--vscode-editor-font-family',
@@ -238,6 +241,11 @@ class TerminalManager {
     const root = this.dom.paneRoots[pane];
     if (root) {
       terminal.open(root);
+      this.copyDisposers[pane] = installSelectionCopy(
+        root, terminal,
+        (text) => this.postMessage({type: 'copy-selection', payload: {text}}),
+        IS_MAC,
+      );
     }
     // xterm.js の CompositionHelper は compositionend の setTimeout(0) で
     // helper textarea の内容を substring(start) で読んで PTY に送るが、
@@ -381,6 +389,8 @@ class TerminalManager {
    * @param pane The pane to dispose
    */
   disposePane(pane: Pane): void {
+    this.copyDisposers[pane]?.();
+    delete this.copyDisposers[pane];
     const context = this.paneContexts[pane];
     if (context) {
       try {
@@ -1684,3 +1694,4 @@ class AppController {
 // ============================================================================
 
 new AppController();
+

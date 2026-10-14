@@ -1,4 +1,5 @@
 {
+  "Could not copy terminal selection. Please try again.": "ターミナルの選択範囲をコピーできませんでした。もう一度お試しください。",
   "Select code in the editor first.": "先にエディターでコードを選択してください。",
   "Open the AI terminal before sending selected code.": "選択したコードを送る前に AI ターミナルを開いてください。",
   "Select an active Codex or Claude Code terminal before sending code.": "送信先として Codex または Claude Code が動作中のターミナルを選択してください。",
@@ -34,3 +35,4 @@
   "Total size this extension keeps on disk (saved images and stored scrollback) / resident memory of the whole extension host process (RSS), which is shared with every other extension. Turn it off with aiTerminal.showResourceStats.": "この拡張機能がディスクに置いている合計サイズ（保存画像と保存スクロールバック）/ 拡張機能ホストのプロセス全体の実メモリ (RSS)。RSS は他の拡張機能と共有されたプロセス全体の値です。aiTerminal.showResourceStats で非表示にできます。",
   "Saved images have reached {0}MB. Run \"Terminal For AI CLI: Delete saved images\" to free space.": "保存済みの画像が {0}MB に達しました。「Terminal For AI CLI: 保存した画像を削除」を実行すると空きを作れます。"
 }
+
