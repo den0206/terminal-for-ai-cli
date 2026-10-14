@@ -1,7 +1,8 @@
 # 日本語変換中の重複入力の調査
 
 対象: main `13a13ed0f4889bf79df5072473077fc5a0148bfb` / xterm.js 6.0.0。
-実際の OS / IME / エディタでの再現は未確認。以下はソース確認とタイマー順序を
+申告された環境: macOS 標準の日本語入力 / Cursor / Codex・Claude Code。発生タイミングは変換中。
+この作業環境から macOS 上での実機再現は未確認。以下はソース確認とタイマー順序を
 制御した検証の結果であり、ユーザーの症状の原因を確定したものではない。
 
 ## 確認できた問題経路
@@ -33,14 +34,25 @@ xterm.js 6.0.0 の CompositionHelper.ts 本体を esbuild で変換し、setTime
 単に同じ送信文字列を除外すると、意図的に同じ言葉を入力した場合も失われるため、
 送信データの重複排除による修正は行っていない。
 
-## 次の切り分けと修正方針
+## 今回の修正
+
+- compositionstart/end を捕捉して変換中を追跡し、変換中の keydown/keypress を
+  xterm に渡さない。preventDefault は呼ばず、OS の変換候補操作は継続する。
+  isComposing が false のイベントでも変換開始・終了の状態で保護する。
+- 無条件のクリアを ImeController に置き換え、xterm の確定送信後にだけ空にする。
+  次の変換開始、追加入力、内容の変更、textarea の選択があればクリアしない。
+- xterm.js 6 の CompositionHelper 本体を読み込む回帰テストで、修正前は
+  「前の文」が変換中に送信され、修正後は確定時に「新」だけが送られることを確認。
+- 入力文字列の重複排除は使用していない。
+
+## 実機での確認事項
 
 - OS、IME、エディタ、拡張バージョン、起動中の CLI を揃えて再現する。
 - compositionstart/update/end、keydown、input とタイマー実行の順序を記録する。
   記録するのはイベント種別、isComposing、keyCode、textarea の文字数、送信文字数
   と時刻のみとし、入力本文は記録しない。
-- 既存の無条件クリアを、次の変換開始や入力・右クリック用の選択があれば
-  キャンセルする世代管理付きの処理へ置き換える案を検証する。
+- 変換候補の変更、Enter 確定、連続変換、確定後の Shift+Enter、
+  候補選択の中止と意図的な同じ文の繰り返し入力を確認する。
 - xterm 内部の位置更新待ちに対する Enter / Shift+Enter の割り込みも確認する。
   本拡張の isShiftEnter は isComposing / keyCode 229 を確認しているが、
   compositionend 後の xterm の確定送信待ち状態は確認していない。

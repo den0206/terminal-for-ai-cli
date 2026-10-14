@@ -19,6 +19,7 @@ import {
 import {RendererController} from './lib/renderer-controller';
 import {ResizeController} from './lib/resize-controller';
 import {installSelectionCopy} from './lib/selection-copy';
+import {ImeController} from './lib/ime-controller';
 import {formatRestoredScrollback} from './lib/scrollback-restore';
 import {SearchController, hexColorOr} from './lib/search-controller';
 import {
@@ -90,6 +91,7 @@ class TerminalManager {
   private readonly rendererController: RendererController;
   private selectionPastePane?: Pane;
   private readonly copyDisposers: Partial<Record<Pane, () => void>> = {};
+  private readonly imeControllers: Partial<Record<Pane, ImeController>> = {};
 
   constructor(
     private readonly dom: DOMElements,
@@ -201,6 +203,9 @@ class TerminalManager {
     // AI CLIs take ESC + CR as a newline inside the prompt; xterm.js would
     // send a bare CR, which submits the prompt instead.
     terminal.attachCustomKeyEventHandler((event) => {
+      // Return false without preventDefault: native IME candidate navigation
+      // must continue, but xterm must not flush an unfinished composition.
+      if (this.imeControllers[pane]?.ownsKey(event)) return false;
       // Ctrl+F は端末では 0x06 として PTY に流れるので、ここで止める。
       // xterm.js は false を返しても伝播を止めないので、ここで止めないと
       // document 側の同じショートカットにも届いて二重に開いてしまう。
@@ -247,21 +252,8 @@ class TerminalManager {
         IS_MAC,
       );
     }
-    // xterm.js の CompositionHelper は compositionend の setTimeout(0) で
-    // helper textarea の内容を substring(start) で読んで PTY に送るが、
-    // textarea 自体は CR を受けたときの `_keyDown` でしかクリアされない。
-    // IME 中心の入力（Claude Code / Codex のプロンプトなど）で確定 Enter が
-    // xterm 側では CR にならないケースが続くと textarea が伸び続け、
-    // `_isSendingComposition` と `_handleAnyTextareaChanges` の setTimeout が
-    // 競合したときに古い start オフセットから読まれて既送信文字列が丸ごと
-    // 再送される。xterm がその tick で読み終えた後にクリアしておけば蓄積しない。
     if (terminal.textarea) {
-      const textarea = terminal.textarea;
-      textarea.addEventListener('compositionend', () => {
-        setTimeout(() => {
-          textarea.value = '';
-        }, 0);
-      });
+      this.imeControllers[pane] = new ImeController(terminal.textarea);
     }
     // Note: terminal.onData() returns IDisposable, but Terminal.dispose()
     // automatically cleans up all event listeners, so we don't need to track it
@@ -389,6 +381,8 @@ class TerminalManager {
    * @param pane The pane to dispose
    */
   disposePane(pane: Pane): void {
+    this.imeControllers[pane]?.dispose();
+    delete this.imeControllers[pane];
     this.copyDisposers[pane]?.();
     delete this.copyDisposers[pane];
     const context = this.paneContexts[pane];
