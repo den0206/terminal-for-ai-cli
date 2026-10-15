@@ -25,7 +25,7 @@
 
 <p align="center">
   <!-- BEGIN:release -->
-  Latest release: <a href="https://github.com/den0206/terminal-for-ai-cli/releases/tag/Ver_0.6.1"><strong>Ver_0.6.1</strong></a> (2026-09-29)
+  Latest release: <a href="https://github.com/den0206/terminal-for-ai-cli/releases/tag/Ver_0.7.0"><strong>Ver_0.7.0</strong></a> (2026-10-15)
   <!-- END:release -->
 </p>
 
