@@ -61,3 +61,31 @@ xterm.js 6.0.0 の CompositionHelper.ts 本体を esbuild で変換し、setTime
 - https://github.com/xtermjs/xterm.js/blob/6.0.0/src/browser/input/CompositionHelper.ts
 - https://github.com/den0206/terminal-for-ai-cli/blob/13a13ed0f4889bf79df5072473077fc5a0148bfb/src/webview/main.ts#L244
 - https://github.com/den0206/terminal-for-ai-cli/blob/13a13ed0f4889bf79df5072473077fc5a0148bfb/src/webview/lib/utils.ts#L214
+
+## 0.7.0 の入力停止（2026-10-22）
+
+症状: 変換中の文字が反転表示のまま残り、以後のキー入力を受け付けなくなる。
+新しいセッションを作っても直らず、IDE の再起動が必要になる。
+
+原因:
+- 0.7.0 の `ownsKey` は、自前の変換中フラグが立っている間はすべてのキーを xterm に渡さない。
+  フラグは compositionstart で立ち、compositionend で下りる。
+- compositionend が届かないとフラグが下りず、そのペインのキーがすべて捨てられる。
+- xterm の CompositionHelper には、229 以外のキーで変換を確定して立ち直る経路がある。
+  捨てられたキーは xterm に届かないため、この経路も動かない。反転表示が残るのはこのため。
+- ペインの Terminal は webview の起動時に一度だけ作られ、セッションを切り替えても作り直さない。
+  そのため webview を作り直すまで直らない。
+
+修正:
+- 渡さないキーは、イベント自体が変換中を示すもの（`isComposing` または keyCode 229）だけにした。
+- 変換中フラグが残ったまま変換中でないキーが届いたら、compositionend を取りこぼしたとみなす。
+  フラグを下ろし、直前 12 件のイベント（compositionstart / compositionend / focus / blur と時刻）を
+  `IME compositionend was not received` として warn に出す。入力した文字は記録しない。
+- 前回の「前の文」再送のテストは、変換中のキーが実機と同じく isComposing として届く前提に改めた。
+  compositionend が来ないときに xterm 6 の CompositionHelper が立ち直るテストを追加した。
+
+未確定:
+- compositionend が抜けるきっかけ。Chrome は blur 時に compositionend を出すとされるが、
+  VS Code / Cursor の webview（iframe）で同じか確認できていない。上記 warn のイベント列で確かめる。
+- 外した保護（isComposing が false のキーでも変換中は渡さない）は、実機で起きるか確かめられていない
+  想定への対策だった。warn が「変換中に通常キーが来た」ケースとして出るので、再発の有無もここで分かる。

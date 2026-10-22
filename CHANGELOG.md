@@ -36,6 +36,13 @@ Rules:
 
 ## [Unreleased]
 
+### Fixed
+
+- Typing no longer stops for good after an IME composition ends without a `compositionend`
+  event. Keys are now held back only while the key event itself reports composition, so the
+  next ordinary key lets xterm finish the stale composition. Previously every pane stayed
+  locked until the editor was restarted.
+
 ## [0.7.0] - 2026-10-15
 
 ### Fixed

@@ -18,16 +18,31 @@ function harness() {
   return {textarea, controller, fire, key};
 }
 
+function loadCompositionHelper() {
+  const source = readFileSync('node_modules/@xterm/xterm/src/browser/input/CompositionHelper.ts', 'utf8')
+    .replace(/^import .*;\n/gm, '').replace(/@\w+ /g, '');
+  const code = transformSync(source, {loader: 'ts', format: 'cjs'}).code;
+  const module = {exports: {} as {CompositionHelper: new (...args: unknown[]) => {
+    compositionstart(): void;
+    compositionupdate(event: {data: string}): void;
+    compositionend(): void;
+    keydown(event: {keyCode: number}): boolean;
+    readonly isComposing: boolean;
+  }}};
+  new Function('module', 'exports', 'setTimeout', 'C0', code)(module, module.exports, setTimeout, {DEL: '\x7f'});
+  return module.exports.CompositionHelper;
+}
+
 describe('IME composition ownership', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  it('keeps candidate keys in the IME even when isComposing is false', () => {
+  it('keeps composing keys in the IME', () => {
     const h = harness();
     h.fire('compositionstart');
-    for (const code of [13, 32, 38, 40, 229]) expect(h.controller.ownsKey(h.key(code))).toBe(true);
+    for (const code of [13, 32, 38, 40]) expect(h.controller.ownsKey(h.key(code, true))).toBe(true);
+    expect(h.controller.ownsKey(h.key(229))).toBe(true);
     h.fire('compositionend');
-    expect(h.controller.ownsKey(h.key(13, true))).toBe(true);
     expect(h.controller.ownsKey(h.key(13))).toBe(false);
     h.controller.dispose();
   });
@@ -89,21 +104,12 @@ describe('IME composition ownership', () => {
   });
 
   it('prevents the previous phrase resend in the actual xterm 6 CompositionHelper', () => {
-    const source = readFileSync('node_modules/@xterm/xterm/src/browser/input/CompositionHelper.ts', 'utf8')
-      .replace(/^import .*;\n/gm, '').replace(/@\w+ /g, '');
-    const code = transformSync(source, {loader: 'ts', format: 'cjs'}).code;
-    const module = {exports: {} as {CompositionHelper: new (...args: unknown[]) => {
-      compositionstart(): void;
-      compositionupdate(event: {data: string}): void;
-      compositionend(): void;
-      keydown(event: {keyCode: number}): boolean;
-    }}};
-    new Function('module', 'exports', 'setTimeout', 'C0', code)(module, module.exports, setTimeout, {DEL: '\x7f'});
+    const CompositionHelper = loadCompositionHelper();
     const run = (guard: boolean) => {
       const h = harness();
       const sent: string[] = [];
       h.textarea.value = '前の文';
-      const helper = new module.exports.CompositionHelper(h.textarea,
+      const helper = new CompositionHelper(h.textarea,
         {textContent: '', classList: {add() {}, remove() {}}},
         {buffer: {isCursorInViewport: false}}, {},
         {triggerDataEvent(text: string) {sent.push(text);}}, {});
@@ -112,7 +118,7 @@ describe('IME composition ownership', () => {
       h.textarea.value = '前の文新';
       helper.compositionupdate({data: '新'});
       // Candidate Enter arrives before the deferred end-position update.
-      if (!guard || !h.controller.ownsKey(h.key(13))) helper.keydown({keyCode: 13});
+      if (!guard || !h.controller.ownsKey(h.key(13, true))) helper.keydown({keyCode: 13});
       const duringConversion = [...sent];
       vi.runAllTimers();
       if (guard) {
@@ -125,5 +131,26 @@ describe('IME composition ownership', () => {
     };
     expect(run(false).duringConversion).toEqual(['前の文']);
     expect(run(true)).toEqual({duringConversion: [], sent: ['新']});
+  });
+
+  it('lets xterm 6 recover when compositionend never arrives', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const h = harness();
+    const view = {textContent: '', active: false,
+      classList: {add() {view.active = true;}, remove() {view.active = false;}}};
+    const helper = new (loadCompositionHelper())(h.textarea, view,
+      {buffer: {isCursorInViewport: false}}, {}, {triggerDataEvent() {}}, {});
+    h.fire('compositionstart');
+    helper.compositionstart();
+    // The IME session is gone; the next key is an ordinary one.
+    const key = h.key(65);
+    if (!h.controller.ownsKey(key)) expect(helper.keydown(key)).toBe(true);
+    expect(view.active).toBe(false);
+    expect(helper.isComposing).toBe(false);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(h.controller.ownsKey(h.key(66))).toBe(false);
+    expect(warn).toHaveBeenCalledOnce();
+    h.controller.dispose();
+    warn.mockRestore();
   });
 });
