@@ -36,6 +36,8 @@ Rules:
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-22
+
 ### Fixed
 
 - Typing no longer stops for good after an IME composition ends without a `compositionend`
@@ -238,7 +240,8 @@ Covers 0.0.3 through 0.1.0 (0.0.3 and 0.0.4 were never tagged; 0.0.5 shipped the
 - Input validation on everything crossing a trust boundary.
 - Centralized logging.
 
-[Unreleased]: https://github.com/den0206/terminal-for-ai-cli/compare/Ver_0.7.0...HEAD
+[Unreleased]: https://github.com/den0206/terminal-for-ai-cli/compare/Ver_0.7.1...HEAD
+[0.7.1]: https://github.com/den0206/terminal-for-ai-cli/compare/Ver_0.7.0...Ver_0.7.1
 [0.7.0]: https://github.com/den0206/terminal-for-ai-cli/compare/Ver_0.4.0...Ver_0.7.0
 [0.4.0]: https://github.com/den0206/terminal-for-ai-cli/compare/Ver_0.3.0...Ver_0.4.0
 [0.3.0]: https://github.com/den0206/terminal-for-ai-cli/compare/Ver_0.2.1...Ver_0.3.0
