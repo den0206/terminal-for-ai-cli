@@ -83,7 +83,7 @@ function createHarness(
         return addon as unknown as RendererAddon;
       },
     },
-    options.rendererType ?? 'auto'
+    options.rendererType ?? 'webgl'
   );
   return {controller, terminals, addons, createdCount: () => created};
 }
@@ -93,7 +93,15 @@ function applyAll(controller: RendererController): void {
 }
 
 describe('RendererController', () => {
-  it('attaches the WebGL addon to every pane in auto mode', () => {
+  it('uses the DOM renderer in auto mode', () => {
+    const {controller, createdCount} = createHarness({rendererType: 'auto'});
+    applyAll(controller);
+
+    expect(createdCount()).toBe(0);
+    expect(controller.isWebglActive('primary')).toBe(false);
+  });
+
+  it('attaches the WebGL addon to every pane in webgl mode', () => {
     const {controller, terminals, addons} = createHarness();
     applyAll(controller);
 
@@ -168,6 +176,7 @@ describe('RendererController', () => {
 
     // 設定を変えたときだけ再挑戦する。再挑戦も最初のペインで失敗するので、
     // 2 つめのペインではまた試さない（合計 2 回）。
+    failing.controller.setRendererType('dom');
     failing.controller.setRendererType('webgl');
     expect(failing.createdCount()).toBe(2);
   });
@@ -175,7 +184,7 @@ describe('RendererController', () => {
   it('ignores a no-op setting change', () => {
     const {controller, createdCount} = createHarness();
     applyAll(controller);
-    controller.setRendererType('auto');
+    controller.setRendererType('webgl');
 
     expect(createdCount()).toBe(2);
   });
