@@ -20,8 +20,8 @@ jobs:
         include:
           # container は非 Linux でもキーを空文字で明示する。省略すると
           # macOS/Windows で container 初期化が走りジョブが落ちることがある。
-          - {os: macos-14, target: darwin-arm64, container: ''}
-          - {os: macos-14, target: darwin-x64, arch: x64, container: ''}
+          - {os: macos-latest, target: darwin-arm64, container: ''}
+          - {os: macos-latest, target: darwin-x64, arch: x64, container: ''}
           # VS Code の glibc 下限 (2.28) に合わせて bullseye (2.31) でビルドする
           - {os: ubuntu-latest, target: linux-x64, container: 'node:24-bullseye'}
           - {os: ubuntu-24.04-arm, target: linux-arm64, container: 'node:24-bullseye'}
