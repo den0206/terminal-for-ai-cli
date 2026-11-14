@@ -92,7 +92,9 @@ export class RendererController {
   }
 
   private wantsWebgl(): boolean {
-    return this.rendererType !== 'dom' && !this.webglUnavailable;
+    // auto は DOM。Cursor 3.30（Electron 43）の Webview では WebGL のグリフが
+    // 1/devicePixelRatio に縮んで字間が開くため、WebGL は明示指定のときだけ使う。
+    return this.rendererType === 'webgl' && !this.webglUnavailable;
   }
 
   private enableWebgl(pane: Pane): void {
