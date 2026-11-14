@@ -225,8 +225,8 @@ nothing on disk.
 
 ### Rendering
 
-The terminal is drawn with a **WebGL renderer** when the GPU is available. Two things change
-compared with the DOM renderer xterm.js uses by default:
+The terminal is drawn with xterm.js's **DOM renderer** by default. Set `aiTerminal.rendererType`
+to `webgl` to use the **WebGL renderer** instead; two things change compared with the DOM renderer:
 
 - **Box-drawing and block characters are drawn by the terminal itself**, not taken from the font,
   so the borders that AI CLI TUIs paint stay connected even at the line height used here.
@@ -237,14 +237,17 @@ compared with the DOM renderer xterm.js uses by default:
 
 | Value | Behaviour |
 |-------|-----------|
-| `auto` (default) | Try WebGL; fall back to the DOM renderer if it cannot start |
-| `webgl` | Same attempt, stated explicitly — it still falls back rather than failing |
+| `auto` (default) | Use the DOM renderer |
+| `webgl` | Try WebGL; fall back to the DOM renderer if it cannot start |
 | `dom` | Never use WebGL |
 
 The fallback is not only for machines without a GPU. A WebGL context can be lost at runtime (driver
 resets, too many live contexts in one window), and this view keeps its contexts alive even while
 hidden. When that happens the addon is detached and both panes continue on the DOM renderer for the
 rest of the session, rather than being retried into a flicker.
+
+`auto` does not pick WebGL because in Cursor 3.30 (Electron 43) WebGL draws glyphs inside the
+webview at 1/devicePixelRatio of their size, which spreads the letters apart.
 
 ### Closing everything
 
@@ -273,7 +276,7 @@ escalating to `SIGKILL` after 2s) and deletes every saved image.
 | Working directory | Workspace root, falling back to the home directory; validated before use |
 | Process cleanup | Whole process tree is killed on close; `SIGTERM` → `SIGKILL` after 2s |
 | Logging | VS Code `LogOutputChannel` ("Terminal For AI CLI" in the Output panel) |
-| GPU rendering | WebGL renderer when the GPU is available, with an automatic fallback to the DOM renderer |
+| GPU rendering | Opt-in WebGL renderer (`rendererType: webgl`), with an automatic fallback to the DOM renderer |
 
 ## Settings
 
